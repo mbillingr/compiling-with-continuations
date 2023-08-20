@@ -39,6 +39,7 @@ fn function_closure_capture() {
 #[test]
 fn primitive_application() {
     unsafe {
-        assert_eq!(exec(&expr!(neg int 1)).as_int(), -1);
+        assert_eq!(exec(&expr!(ineg int 1)).as_int(), -1);
+        assert_eq!(exec(&expr!(isub [(int 1) (int 3)])).as_int(), -2);
     }
 }

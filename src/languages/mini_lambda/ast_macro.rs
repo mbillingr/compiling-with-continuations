@@ -17,8 +17,12 @@ macro_rules! expr {
 
     (($($x:tt)+)) => { expr!($($x)+) };
 
-    (neg) => {
-        $crate::languages::mini_lambda::ast::Expr::Prim($crate::languages::mini_lambda::ast::PrimOp::Neg)
+    (ineg) => {
+        $crate::languages::mini_lambda::ast::Expr::Prim($crate::languages::mini_lambda::ast::PrimOp::INeg)
+    };
+
+    (isub) => {
+        $crate::languages::mini_lambda::ast::Expr::Prim($crate::languages::mini_lambda::ast::PrimOp::ISub)
     };
 
     ($var:ident) => { $crate::languages::mini_lambda::ast::Expr::Var(stringify!($var).into()) };

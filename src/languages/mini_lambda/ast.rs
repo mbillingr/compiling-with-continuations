@@ -41,5 +41,6 @@ pub enum Con {
 
 #[derive(Debug)]
 pub enum PrimOp {
-    Neg,
+    INeg,
+    ISub,
 }
