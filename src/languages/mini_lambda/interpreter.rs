@@ -1,5 +1,6 @@
 use crate::core::reference::Ref;
 use crate::languages::mini_lambda::ast;
+use crate::languages::mini_lambda::ast::PrimOp;
 
 type Expr = ast::Expr<Ref<str>>;
 
@@ -82,13 +83,17 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
                 }))
             }
 
-            Expr::App(rator, rand) => {
-                let f = eval(&**rator, env);
-                let a = eval(&**rand, env);
-                let cls = f.as_ref::<Closure>();
-                env = cls.captured_env.extend(cls.var, a);
-                expr = &cls.body;
-            }
+            Expr::App(rator, rand) => match &**rator {
+                Expr::Prim(PrimOp::Neg) => return Value::from_int(-eval(&**rand, env).as_int()),
+                Expr::Prim(op) => todo!("{:?}", op),
+                _ => {
+                    let f = eval(&**rator, env);
+                    let a = eval(&**rand, env);
+                    let cls = f.as_ref::<Closure>();
+                    env = cls.captured_env.extend(cls.var, a);
+                    expr = &cls.body;
+                }
+            },
 
             Expr::Int(i) => return Value::from_int(*i),
 

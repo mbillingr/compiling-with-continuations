@@ -8,7 +8,7 @@ fn constants() {
 }
 
 #[test]
-fn function_records() {
+fn record_creation_and_selection() {
     unsafe {
         assert_eq!(exec(&expr!(select [(int 1) (int 2)] 0)).as_int(), 1);
         assert_eq!(exec(&expr!(select [(int 1) (int 2)] 1)).as_int(), 2);
@@ -33,5 +33,12 @@ fn function_argument_referencing() {
 fn function_closure_capture() {
     unsafe {
         assert_eq!(exec(&expr!(((fun x = fun y = x) int 3) int 4)).as_int(), 3);
+    }
+}
+
+#[test]
+fn primitive_application() {
+    unsafe {
+        assert_eq!(exec(&expr!(neg int 1)).as_int(), -1);
     }
 }
