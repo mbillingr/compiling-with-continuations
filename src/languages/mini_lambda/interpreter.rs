@@ -1,6 +1,6 @@
 use crate::core::reference::Ref;
 use crate::languages::mini_lambda::ast;
-use crate::languages::mini_lambda::ast::PrimOp;
+use crate::languages::mini_lambda::ast::{Con, PrimOp};
 
 type Expr = ast::Expr<Ref<str>>;
 
@@ -104,6 +104,22 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
 
             Expr::Int(i) => return Value::from_int(*i),
 
+            Expr::Switch(x, _conrep, branches, default) => {
+                let val = eval(x, env);
+                let mut cont = None;
+                for (cnd, branch) in &**branches {
+                    if matches(val, cnd) {
+                        cont = Some(branch);
+                        break;
+                    }
+                }
+                if let Some(c) = cont {
+                    expr = c;
+                } else {
+                    expr = default.as_ref().unwrap();
+                }
+            }
+
             Expr::Record(fields) => {
                 let mut data = Vec::with_capacity(fields.len());
                 for f in &**fields {
@@ -116,5 +132,12 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
 
             _ => todo!("{:?}", expr),
         }
+    }
+}
+
+fn matches(val: Value, con: &Con) -> bool {
+    match con {
+        Con::Int(c) => val.as_int() == *c,
+        _ => todo!("{:?}", con),
     }
 }

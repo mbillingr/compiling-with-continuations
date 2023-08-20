@@ -15,7 +15,7 @@ impl<T> Ref<T> {
 }
 
 impl<T> Ref<[T]> {
-    pub fn tuple(obj: Vec<T>) -> Self {
+    pub fn array(obj: Vec<T>) -> Self {
         Ref(Box::leak(obj.into_boxed_slice()))
     }
 }

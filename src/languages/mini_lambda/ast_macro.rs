@@ -1,14 +1,35 @@
 macro_rules! expr {
+
     (int $x:expr) => { $crate::languages::mini_lambda::ast::Expr::Int($x) };
 
     (fun $v:ident = $($bdy:tt)+) => {
         $crate::languages::mini_lambda::ast::Expr::Fn(stringify!($v).into(), expr!($($bdy)+).into())
     };
 
-    ([$($x:tt)*]) => { $crate::languages::mini_lambda::ast::Expr::Record($crate::core::reference::Ref::tuple(vec![$(expr!($x)),*])) };
+    ([$($x:tt)*]) => { $crate::languages::mini_lambda::ast::Expr::Record($crate::core::reference::Ref::array(vec![$(expr!($x)),*])) };
 
     (select $rec:tt $idx:expr) => {
         $crate::languages::mini_lambda::ast::Expr::Select($idx, expr!($rec).into())
+    };
+
+    (switch $x:tt $possible_conreps:tt $branches:tt) => {
+        expr!(@switch_raw $x $possible_conreps $branches None)
+    };
+
+    (switch $x:tt $possible_conreps:tt $branches:tt $default:tt) => {
+        expr!(@switch_raw $x $possible_conreps $branches Some(expr!($default).into()))
+    };
+
+    (@switch_raw $x:tt [$($possible_conreps:path)*] $branches:tt $default:expr) => {
+        $crate::languages::mini_lambda::ast::Expr::Switch(
+            expr!($x).into(),
+            $crate::core::reference::Ref::array(vec![$($possible_conreps)*]),
+            $crate::core::reference::Ref::array(expr!(@switch_branches $branches)),
+            $default)
+    };
+
+    (@switch_branches [$((int $val:expr) => $body:tt)*]) => {
+        vec![$(($crate::languages::mini_lambda::ast::Con::Int($val), expr!($body))),*]
     };
 
     ($rator:tt $($rand:tt)+) => {
