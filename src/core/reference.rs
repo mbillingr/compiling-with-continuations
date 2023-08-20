@@ -14,6 +14,12 @@ impl<T> Ref<T> {
     }
 }
 
+impl<T> Ref<[T]> {
+    pub fn tuple(obj: Vec<T>) -> Self {
+        Ref(Box::leak(obj.into_boxed_slice()))
+    }
+}
+
 impl<T: ?Sized> Copy for Ref<T> {}
 
 impl<T: ?Sized> Clone for Ref<T> {
