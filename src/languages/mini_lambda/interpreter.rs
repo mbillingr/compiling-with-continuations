@@ -15,6 +15,12 @@ impl Value {
         unsafe { Value(std::mem::transmute(r.as_ptr())) }
     }
 
+    pub fn tuple(fields: Vec<Value>) -> Self {
+        let obj = Box::leak(fields.into_boxed_slice());
+        let fst = &obj[0] as *const _;
+        unsafe { Value(std::mem::transmute(fst)) }
+    }
+
     pub fn as_int(&self) -> i64 {
         unsafe { std::mem::transmute(self.0) }
     }
@@ -22,6 +28,11 @@ impl Value {
     pub unsafe fn as_ref<T>(self) -> &'static T {
         let ptr: *const T = std::mem::transmute(self.0);
         &*ptr
+    }
+
+    pub unsafe fn get_item(self, idx: isize) -> Value {
+        let fst: *const Value = std::mem::transmute(self.0);
+        *fst.offset(idx)
     }
 }
 
@@ -80,6 +91,17 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
             }
 
             Expr::Int(i) => return Value::from_int(*i),
+
+            Expr::Record(fields) => {
+                let mut data = Vec::with_capacity(fields.len());
+                for f in &**fields {
+                    data.push(eval(f, env));
+                }
+                return Value::tuple(data);
+            }
+
+            Expr::Select(idx, rec) => return eval(rec, env).get_item(*idx),
+
             _ => todo!("{:?}", expr),
         }
     }

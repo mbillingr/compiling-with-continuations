@@ -18,7 +18,7 @@ pub enum Expr<V: 'static> {
     Con(ConRep, Ref<Expr<V>>),
     DeCon(ConRep, Ref<Expr<V>>),
     Record(Ref<[Expr<V>]>),
-    Select(usize, Ref<Expr<V>>),
+    Select(isize, Ref<Expr<V>>),
     Prim(PrimOp),
 }
 
