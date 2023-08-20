@@ -11,7 +11,7 @@ fn constants() {
 fn function_records() {
     unsafe {
         assert_eq!(exec(&expr!(select [(int 1) (int 2)] 0)).as_int(), 1);
-        //assert_eq!(exec(&expr!(select [(int 1) (int 2)] 1)).as_int(), 2);
+        assert_eq!(exec(&expr!(select [(int 1) (int 2)] 1)).as_int(), 2);
     }
 }
 
