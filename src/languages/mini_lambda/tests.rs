@@ -53,17 +53,17 @@ fn switch_over_integers() {
             1
         );
         assert_eq!(
-            exec(&expr!(switch (int 0) [] [(int 0) => (int 1) (int 1) => (int 10)] (int -1)))
+            exec(&expr!(switch (int 0) [] [(int 0) => (int 1); (int 1) => (int 10)] (int -1)))
                 .as_int(),
             1
         );
         assert_eq!(
-            exec(&expr!(switch (int 1) [] [(int 0) => (int 1) (int 1) => (int 10)] (int -1)))
+            exec(&expr!(switch (int 1) [] [(int 0) => (int 1); (int 1) => (int 10)] (int -1)))
                 .as_int(),
             10
         );
         assert_eq!(
-            exec(&expr!(switch (int 2) [] [(int 0) => (int 1) (int 1) => (int 10)] (int -1)))
+            exec(&expr!(switch (int 2) [] [(int 0) => (int 1); (int 1) => (int 10)] (int -1)))
                 .as_int(),
             -1
         );
@@ -82,5 +82,19 @@ fn datatypes() {
 
         assert_eq!(exec(&expr!((con transparent int 5))).as_int(), 5);
         assert_eq!(exec(&expr!((decon transparent int 3))).as_int(), 3);
+    }
+}
+
+#[test]
+fn switch_over_datatypes() {
+    unsafe {
+        assert_eq!(
+            exec(&expr!(switch (con (tag 0) (int 9)) [] [] (int 1))).as_int(),
+            1
+        ); // only the default branch
+        assert_eq!(exec(&expr!(switch (con (tag 1) (int 9)) [(tag 0) (tag 1)] [(tag 0) => (int 10)] (int 1))).as_int(), 1);
+        assert_eq!(exec(&expr!(switch (con (tag 0) (int 9)) [(tag 0) (tag 1)] [(tag 0) => (int 10)] (int 1))).as_int(), 10);
+        assert_eq!(exec(&expr!(switch (con (tag 0) (int 9)) [(tag 0) (const 0)] [(tag 0) => (int 10); (const 0) => (int 100)] (int 1))).as_int(), 10);
+        assert_eq!(exec(&expr!(switch (con (const 0)) [(tag 0) (const 0)] [(tag 0) => (int 10); (const 0) => (int 100)] (int 1))).as_int(), 100);
     }
 }

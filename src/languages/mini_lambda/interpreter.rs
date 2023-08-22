@@ -17,7 +17,7 @@ impl Value {
     }
 
     pub fn tag(t: usize) -> Self {
-        Value(t) // todo: encode so that it is different from pointers?
+        Value(t * 2 + 1)
     }
 
     pub fn tuple(fields: Vec<Value>) -> Self {
@@ -26,12 +26,20 @@ impl Value {
         unsafe { Value(std::mem::transmute(fst)) }
     }
 
+    pub fn maybe_tag(&self) -> bool {
+        (self.0 & 0x1) == 1
+    }
+
+    pub fn maybe_pointer(&self) -> bool {
+        (self.0 & 0x1) == 0
+    }
+
     pub fn as_int(&self) -> i64 {
         unsafe { std::mem::transmute(self.0) }
     }
 
     pub fn as_tag(&self) -> usize {
-        self.0 // todo: encode so that it is different from pointers?
+        self.0 / 2
     }
 
     pub unsafe fn as_ref<T>(self) -> &'static T {
@@ -146,7 +154,7 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
 
             Expr::Con(ConRep::Constant(tag), _) => {
                 // the value is ignored
-                return Value::tag(*tag)
+                return Value::tag(*tag);
             }
 
             Expr::DeCon(ConRep::Constant(_), _) => {
@@ -176,8 +184,10 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
     }
 }
 
-fn matches(val: Value, con: &Con) -> bool {
+unsafe fn matches(val: Value, con: &Con) -> bool {
     match con {
+        Con::Data(ConRep::Constant(tag)) => val.maybe_tag() && (val.as_tag() == *tag),
+        Con::Data(ConRep::Tagged(tag)) => val.maybe_pointer() && (val.get_item(0).as_tag() == *tag),
         Con::Int(c) => val.as_int() == *c,
         _ => todo!("{:?}", con),
     }
