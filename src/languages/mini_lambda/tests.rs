@@ -4,6 +4,7 @@ use crate::languages::mini_lambda::interpreter::{exec, Value};
 fn constants() {
     unsafe {
         assert_eq!(exec(&expr!(int 0)).as_int(), 0);
+        assert_eq!(exec(&expr!(real 1.2)).as_float(), 1.2);
     }
 }
 
@@ -64,6 +65,32 @@ fn switch_over_integers() {
         );
         assert_eq!(
             exec(&expr!(switch (int 2) [] [(int 0) => (int 1); (int 1) => (int 10)] (int -1)))
+                .as_int(),
+            -1
+        );
+    }
+}
+
+#[test]
+fn switch_over_real() {
+    unsafe {
+        assert_eq!(exec(&expr!(switch (real 0.0) [] [] (int 1))).as_int(), 1); // only the default branch
+        assert_eq!(
+            exec(&expr!(switch (real 0.0) [] [(real 0.0) => (int 1)] )).as_int(),
+            1
+        );
+        assert_eq!(
+            exec(&expr!(switch (real 0.0) [] [(real 0.0) => (int 1); (real 1.0) => (int 10)] (int -1)))
+                .as_int(),
+            1
+        );
+        assert_eq!(
+            exec(&expr!(switch (real 1.0) [] [(real 0.0) => (int 1); (real 1.0) => (int 10)] (int -1)))
+                .as_int(),
+            10
+        );
+        assert_eq!(
+            exec(&expr!(switch (real 2.0) [] [(real 0.0) => (int 1); (real 1.0) => (int 10)] (int -1)))
                 .as_int(),
             -1
         );
