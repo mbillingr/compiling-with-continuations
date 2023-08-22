@@ -27,7 +27,6 @@ pub enum ConRep {
     Tagged(usize),
     Constant(usize),
     Transparent,
-    Cell,
 }
 
 #[derive(Debug)]

@@ -149,7 +149,7 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
                 return Value::tag(*tag)
             }
 
-            Expr::DeCon(ConRep::Constant(tag), _) => {
+            Expr::DeCon(ConRep::Constant(_), _) => {
                 panic!("Cannot deconstruct a constant")
             }
 
