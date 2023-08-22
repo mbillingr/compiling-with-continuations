@@ -124,7 +124,11 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
                         eval(&args[0], env).as_int() - eval(&args[1], env).as_int(),
                     )
                 }
-                (Expr::Prim(op), _) => todo!("{:?}", op),
+                (Expr::Prim(PrimOp::ISub), _) => {
+                    let arg = eval(rand, env);
+                    return Value::from_int(arg.get_item(0).as_int() - arg.get_item(1).as_int());
+                }
+
                 _ => {
                     let f = eval(&**rator, env);
                     let a = eval(&**rand, env);
@@ -198,6 +202,15 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
             }
 
             Expr::Select(idx, rec) => return eval(rec, env).get_item(*idx),
+
+            Expr::Prim(_) => {
+                let var: Ref<str> = "_x_".into();
+                return Value::from_ref(Ref::new(Closure {
+                    captured_env: Env::Empty,
+                    var,
+                    body: Ref::new(Expr::App(expr.clone().into(), Expr::Var(var).into())),
+                }));
+            }
 
             _ => todo!("{:?}", expr),
         }

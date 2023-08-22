@@ -47,6 +47,17 @@ fn primitive_application() {
 }
 
 #[test]
+fn primitive_reification() {
+    unsafe {
+        assert_eq!(
+            exec(&expr!(((fun f = fun x = f x) ineg) int 1)).as_int(),
+            -1
+        );
+        assert_eq!(exec(&expr!(((fun f = fun x = f x) isub) [(int 1) (int 3)])).as_int(), -2);
+    }
+}
+
+#[test]
 fn switch_over_integers() {
     unsafe {
         assert_eq!(exec(&expr!(switch (int 0) [] [] (int 1))).as_int(), 1); // only the default branch

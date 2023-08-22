@@ -1,6 +1,6 @@
 use crate::core::reference::Ref;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr<V: 'static> {
     Var(V),
     Fn(V, Ref<Expr<V>>),
@@ -22,14 +22,14 @@ pub enum Expr<V: 'static> {
     Prim(PrimOp),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum ConRep {
     Tagged(usize),
     Constant(usize),
     Transparent,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Con {
     Data(ConRep),
     Int(i64),
@@ -37,7 +37,7 @@ pub enum Con {
     String(Ref<str>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum PrimOp {
     INeg,
     ISub,
