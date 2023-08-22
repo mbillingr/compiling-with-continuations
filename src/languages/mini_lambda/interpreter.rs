@@ -1,6 +1,6 @@
 use crate::core::reference::Ref;
 use crate::languages::mini_lambda::ast;
-use crate::languages::mini_lambda::ast::{Con, PrimOp};
+use crate::languages::mini_lambda::ast::{Con, ConRep, PrimOp};
 
 type Expr = ast::Expr<Ref<str>>;
 
@@ -16,6 +16,10 @@ impl Value {
         unsafe { Value(std::mem::transmute(r.as_ptr())) }
     }
 
+    pub fn tag(t:usize) -> Self {
+        Value(t)  // todo: encode so that it is different from pointers?
+    }
+
     pub fn tuple(fields: Vec<Value>) -> Self {
         let obj = Box::leak(fields.into_boxed_slice());
         let fst = &obj[0] as *const _;
@@ -24,6 +28,10 @@ impl Value {
 
     pub fn as_int(&self) -> i64 {
         unsafe { std::mem::transmute(self.0) }
+    }
+
+    pub fn as_tag(&self) -> usize {
+        self.0  // todo: encode so that it is different from pointers?
     }
 
     pub unsafe fn as_ref<T>(self) -> &'static T {
@@ -118,6 +126,18 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
                 } else {
                     expr = default.as_ref().unwrap();
                 }
+            }
+
+            Expr::Con(ConRep::Tagged(tag), val) => {
+                return Value::tuple(vec![Value::tag(*tag), eval(val, env)] )
+            }
+
+            Expr::DeCon(ConRep::Tagged(tag), val) => {
+                let value = eval(val, env);
+                if value.get_item(0).as_tag() != *tag {
+                    panic!("expected tag {}, but got {}", tag, value.get_item(0).as_tag())
+                }
+                return value.get_item(1)
             }
 
             Expr::Record(fields) => {

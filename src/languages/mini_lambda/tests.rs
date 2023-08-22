@@ -69,3 +69,10 @@ fn switch_over_integers() {
         );
     }
 }
+
+#[test]
+fn tagged_datatypes() {
+    unsafe {
+        assert_eq!(exec(&expr!(decon (tag 42) (con (tag 42) int 7))).as_int(), 7)
+    }
+}

@@ -32,6 +32,20 @@ macro_rules! expr {
         vec![$(($crate::languages::mini_lambda::ast::Con::Int($val), expr!($body))),*]
     };
 
+    (con (tag $t:expr) $($v:tt)+) => {
+        $crate::languages::mini_lambda::ast::Expr::Con(
+            $crate::languages::mini_lambda::ast::ConRep::Tagged($t),
+            expr!($($v)+).into()
+        )
+    };
+
+    (decon (tag $t:expr) $($v:tt)+) => {
+        $crate::languages::mini_lambda::ast::Expr::DeCon(
+            $crate::languages::mini_lambda::ast::ConRep::Tagged($t),
+            expr!($($v)+).into()
+        )
+    };
+
     ($rator:tt $($rand:tt)+) => {
         $crate::languages::mini_lambda::ast::Expr::App(expr!($rator).into(), expr!($($rand)+).into())
     };
