@@ -25,7 +25,7 @@ pub enum Expr<V: 'static> {
 #[derive(Debug)]
 pub enum ConRep {
     Tagged(usize),
-    Constant(i64),
+    Constant(usize),
     Transparent,
     Cell,
 }

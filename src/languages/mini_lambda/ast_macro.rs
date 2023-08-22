@@ -46,6 +46,13 @@ macro_rules! expr {
         )
     };
 
+    (con (const $t:expr)) => {
+        $crate::languages::mini_lambda::ast::Expr::Con(
+            $crate::languages::mini_lambda::ast::ConRep::Constant($t),
+            $crate::languages::mini_lambda::ast::Expr::Int(0).into()
+        )
+    };
+
     (con transparent $($v:tt)+) => {
         $crate::languages::mini_lambda::ast::Expr::Con(
             $crate::languages::mini_lambda::ast::ConRep::Transparent,

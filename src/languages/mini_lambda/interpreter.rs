@@ -4,7 +4,7 @@ use crate::languages::mini_lambda::ast::{Con, ConRep, PrimOp};
 
 type Expr = ast::Expr<Ref<str>>;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Value(usize);
 
 impl Value {
@@ -142,6 +142,15 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
                     )
                 }
                 return value.get_item(1);
+            }
+
+            Expr::Con(ConRep::Constant(tag), _) => {
+                // the value is ignored
+                return Value::tag(*tag)
+            }
+
+            Expr::DeCon(ConRep::Constant(tag), _) => {
+                panic!("Cannot deconstruct a constant")
             }
 
             Expr::Con(ConRep::Transparent, val) => {
