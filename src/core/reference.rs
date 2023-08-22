@@ -12,6 +12,11 @@ impl<T> Ref<T> {
     pub fn as_ptr(&self) -> *const T {
         self.0
     }
+
+    pub unsafe fn unsafe_mutate(&self, f: impl Fn(&mut T)) {
+        let mut_ref = &mut *(self.0 as *const _ as *mut _);
+        f(mut_ref)
+    }
 }
 
 impl<T> Ref<[T]> {

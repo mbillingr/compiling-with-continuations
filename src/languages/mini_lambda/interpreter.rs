@@ -115,6 +115,36 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
                 }))
             }
 
+            Expr::Fix(fnames, funcs, body) => {
+                let closures: Vec<_> = funcs
+                    .iter()
+                    .map(|f| {
+                        if let Expr::Fn(var, body) = *f {
+                            Closure {
+                                captured_env: Env::Empty, //placeholder
+                                var,
+                                body,
+                            }
+                        } else {
+                            panic!("not a function")
+                        }
+                    })
+                    .map(Ref::new)
+                    .collect();
+
+                let mut common_env = env.clone();
+                for (name, cls) in fnames.iter().zip(&closures) {
+                    common_env = common_env.extend(*name, Value::from_ref(*cls));
+                }
+
+                for cls in closures.into_iter() {
+                    cls.unsafe_mutate(|cls| cls.captured_env = common_env);
+                }
+
+                expr = body;
+                env = common_env;
+            }
+
             Expr::App(rator, rand) => match (&**rator, &**rand) {
                 (Expr::Prim(PrimOp::INeg), _) => {
                     return Value::from_int(-eval(&**rand, env).as_int())
@@ -211,8 +241,6 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
                     body: Ref::new(Expr::App(expr.clone().into(), Expr::Var(var).into())),
                 }));
             }
-
-            _ => todo!("{:?}", expr),
         }
     }
 }

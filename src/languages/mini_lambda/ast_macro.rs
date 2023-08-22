@@ -10,6 +10,16 @@ macro_rules! expr {
         $crate::languages::mini_lambda::ast::Expr::Fn(stringify!($v).into(), expr!($($bdy)+).into())
     };
 
+    (fix $(fun $fname:ident $farg:ident = $fbody:tt)* in $($body:tt)+ ) => {
+        $crate::languages::mini_lambda::ast::Expr::Fix(
+            $crate::core::reference::Ref::array(vec![$(stringify!($fname).into()),*]),
+            $crate::core::reference::Ref::array(vec![$(
+                expr!(fun $farg = $fbody)
+            ),*]),
+            expr!($($body)+).into()
+        )
+    };
+
     ([$($x:tt)*]) => { $crate::languages::mini_lambda::ast::Expr::Record($crate::core::reference::Ref::array(vec![$(expr!($x)),*])) };
 
     (select $rec:tt $idx:expr) => {

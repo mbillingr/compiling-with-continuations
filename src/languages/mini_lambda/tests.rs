@@ -39,6 +39,17 @@ fn function_closure_capture() {
 }
 
 #[test]
+fn mutual_recursion() {
+    unsafe {
+        assert_eq!(exec(&expr!(
+            fix fun foo x = (bar x)
+                fun bar x = (isub [x (int -2)])
+            in foo (int 5)
+        )).as_int(), 7);
+    }
+}
+
+#[test]
 fn primitive_application() {
     unsafe {
         assert_eq!(exec(&expr!(ineg int 1)).as_int(), -1);
