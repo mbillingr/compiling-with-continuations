@@ -46,6 +46,20 @@ macro_rules! expr {
         )
     };
 
+    (con transparent $($v:tt)+) => {
+        $crate::languages::mini_lambda::ast::Expr::Con(
+            $crate::languages::mini_lambda::ast::ConRep::Transparent,
+            expr!($($v)+).into()
+        )
+    };
+
+    (decon transparent $($v:tt)+) => {
+        $crate::languages::mini_lambda::ast::Expr::DeCon(
+            $crate::languages::mini_lambda::ast::ConRep::Transparent,
+            expr!($($v)+).into()
+        )
+    };
+
     ($rator:tt $($rand:tt)+) => {
         $crate::languages::mini_lambda::ast::Expr::App(expr!($rator).into(), expr!($($rand)+).into())
     };

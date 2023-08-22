@@ -16,8 +16,8 @@ impl Value {
         unsafe { Value(std::mem::transmute(r.as_ptr())) }
     }
 
-    pub fn tag(t:usize) -> Self {
-        Value(t)  // todo: encode so that it is different from pointers?
+    pub fn tag(t: usize) -> Self {
+        Value(t) // todo: encode so that it is different from pointers?
     }
 
     pub fn tuple(fields: Vec<Value>) -> Self {
@@ -31,7 +31,7 @@ impl Value {
     }
 
     pub fn as_tag(&self) -> usize {
-        self.0  // todo: encode so that it is different from pointers?
+        self.0 // todo: encode so that it is different from pointers?
     }
 
     pub unsafe fn as_ref<T>(self) -> &'static T {
@@ -129,15 +129,27 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
             }
 
             Expr::Con(ConRep::Tagged(tag), val) => {
-                return Value::tuple(vec![Value::tag(*tag), eval(val, env)] )
+                return Value::tuple(vec![Value::tag(*tag), eval(val, env)])
             }
 
             Expr::DeCon(ConRep::Tagged(tag), val) => {
                 let value = eval(val, env);
                 if value.get_item(0).as_tag() != *tag {
-                    panic!("expected tag {}, but got {}", tag, value.get_item(0).as_tag())
+                    panic!(
+                        "expected tag {}, but got {}",
+                        tag,
+                        value.get_item(0).as_tag()
+                    )
                 }
-                return value.get_item(1)
+                return value.get_item(1);
+            }
+
+            Expr::Con(ConRep::Transparent, val) => {
+                expr = val;
+            }
+
+            Expr::DeCon(ConRep::Transparent, val) => {
+                expr = val;
             }
 
             Expr::Record(fields) => {

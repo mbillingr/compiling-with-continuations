@@ -73,6 +73,17 @@ fn switch_over_integers() {
 #[test]
 fn tagged_datatypes() {
     unsafe {
-        assert_eq!(exec(&expr!(decon (tag 42) (con (tag 42) int 7))).as_int(), 7)
+        assert_eq!(
+            exec(&expr!(decon (tag 42) (con (tag 42) int 7))).as_int(),
+            7
+        )
+    }
+}
+
+#[test]
+fn transparent_datatypes() {
+    unsafe {
+        assert_eq!(exec(&expr!((con transparent int 5))).as_int(), 5);
+        assert_eq!(exec(&expr!((decon transparent int 3))).as_int(), 3);
     }
 }
