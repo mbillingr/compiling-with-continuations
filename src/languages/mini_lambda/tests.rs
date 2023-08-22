@@ -5,6 +5,7 @@ fn constants() {
     unsafe {
         assert_eq!(exec(&expr!(int 0)).as_int(), 0);
         assert_eq!(exec(&expr!(real 1.2)).as_float(), 1.2);
+        assert_eq!(exec(&expr!(str "abc")).as_str(), "abc");
     }
 }
 
@@ -98,6 +99,38 @@ fn switch_over_real() {
 }
 
 #[test]
+fn switch_over_strings() {
+    unsafe {
+        assert_eq!(exec(&expr!(switch (str "x") [] [] (int 1))).as_int(), 1); // only the default branch
+        assert_eq!(
+            exec(&expr!(switch (str "x") [] [(str "x") => (int 1)] )).as_int(),
+            1
+        );
+        assert_eq!(
+            exec(
+                &expr!(switch (str "x") [] [(str "x") => (int 1); (str "y") => (int 10)] (int -1))
+            )
+            .as_int(),
+            1
+        );
+        assert_eq!(
+            exec(
+                &expr!(switch (str "y") [] [(str "x") => (int 1); (str "y") => (int 10)] (int -1))
+            )
+            .as_int(),
+            10
+        );
+        assert_eq!(
+            exec(
+                &expr!(switch (str "z") [] [(str "x") => (int 1); (str "y") => (int 10)] (int -1))
+            )
+            .as_int(),
+            -1
+        );
+    }
+}
+
+#[test]
 fn datatypes() {
     unsafe {
         assert_eq!(
@@ -123,6 +156,10 @@ fn switch_over_datatypes() {
         assert_eq!(exec(&expr!(switch (con (tag 0) (int 9)) [(tag 0) (tag 1)] [(tag 0) => (int 10)] (int 1))).as_int(), 10);
         assert_eq!(exec(&expr!(switch (con (tag 0) (int 9)) [(tag 0) (const 0)] [(tag 0) => (int 10); (const 0) => (int 100)] (int 1))).as_int(), 10);
         assert_eq!(exec(&expr!(switch (con (const 0)) [(tag 0) (const 0)] [(tag 0) => (int 10); (const 0) => (int 100)] (int 1))).as_int(), 100);
-        assert_eq!(exec(&expr!(switch (con transparent (int 9)) [transparent] [transparent => (int 5)])).as_int(), 5);
+        assert_eq!(
+            exec(&expr!(switch (con transparent (int 9)) [transparent] [transparent => (int 5)]))
+                .as_int(),
+            5
+        );
     }
 }

@@ -4,6 +4,8 @@ macro_rules! expr {
 
     (real $x:expr) => { $crate::languages::mini_lambda::ast::Expr::Real($x) };
 
+    (str $x:expr) => { $crate::languages::mini_lambda::ast::Expr::String($x.to_string().into()) };
+
     (fun $v:ident = $($bdy:tt)+) => {
         $crate::languages::mini_lambda::ast::Expr::Fn(stringify!($v).into(), expr!($($bdy)+).into())
     };
@@ -48,6 +50,10 @@ macro_rules! expr {
 
     (@concase (real $val:expr)) => {
         $crate::languages::mini_lambda::ast::Con::Real($val)
+    };
+
+    (@concase (str $val:expr)) => {
+        $crate::languages::mini_lambda::ast::Con::String($val.into())
     };
 
     (@concase $conrep:tt) => {

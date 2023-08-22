@@ -16,6 +16,10 @@ impl Value {
         unsafe { Value(std::mem::transmute(f)) }
     }
 
+    pub fn from_str(s: Ref<String>) -> Self {
+        unsafe { Value(std::mem::transmute(s)) }
+    }
+
     pub fn from_ref<T>(r: Ref<T>) -> Self {
         unsafe { Value(std::mem::transmute(r.as_ptr())) }
     }
@@ -43,6 +47,10 @@ impl Value {
     }
 
     pub fn as_float(&self) -> f64 {
+        unsafe { std::mem::transmute(self.0) }
+    }
+
+    pub fn as_str(&self) -> &String {
         unsafe { std::mem::transmute(self.0) }
     }
 
@@ -130,6 +138,8 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Value {
 
             Expr::Real(r) => return Value::from_float(*r),
 
+            Expr::String(s) => return Value::from_str(*s),
+
             Expr::Switch(x, _conrep, branches, default) => {
                 let val = eval(x, env);
                 let mut cont = None;
@@ -201,6 +211,6 @@ unsafe fn matches(val: Value, con: &Con) -> bool {
         Con::Data(ConRep::Transparent) => true,
         Con::Int(c) => val.as_int() == *c,
         Con::Real(c) => val.as_float() == *c,
-        _ => todo!("{:?}", con),
+        Con::String(s) => val.as_str().as_str() == &**s,
     }
 }

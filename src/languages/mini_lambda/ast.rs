@@ -8,7 +8,7 @@ pub enum Expr<V: 'static> {
     App(Ref<Expr<V>>, Ref<Expr<V>>),
     Int(i64),
     Real(f64),
-    String(Ref<str>),
+    String(Ref<String>),
     Switch(
         Ref<Expr<V>>,
         Ref<[ConRep]>,
