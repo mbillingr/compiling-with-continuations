@@ -1,4 +1,5 @@
-use crate::languages::mini_lambda::interpreter::{exec, Value};
+use crate::core::answer::Answer;
+use crate::languages::mini_lambda::interpreter::exec;
 
 #[test]
 fn constants() {
@@ -160,7 +161,7 @@ fn datatypes() {
             7
         );
 
-        assert_eq!(exec(&expr!(con (const 42))), Value::tag(42));
+        assert_eq!(exec(&expr!(con (const 42))), Answer::tag(42));
 
         assert_eq!(exec(&expr!((con transparent int 5))).as_int(), 5);
         assert_eq!(exec(&expr!((decon transparent int 3))).as_int(), 3);
