@@ -1,32 +1,10 @@
 use crate::core::answer::Answer;
+use crate::core::env::Env;
 use crate::core::reference::Ref;
 use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep, PrimOp};
 
 type Expr = ast::Expr<Ref<str>>;
-
-#[derive(Debug, Copy, Clone)]
-pub enum Env {
-    Empty,
-    Entry(Ref<str>, Answer, Ref<Env>),
-}
-
-impl Env {
-    fn extend(&self, var: Ref<str>, val: Answer) -> Self {
-        Env::Entry(var, val, Ref::new(self.clone()))
-    }
-
-    fn lookup(&self, var: &str) -> Answer {
-        let mut env = self;
-        loop {
-            match env {
-                Env::Empty => panic!("Unbound variable: {var}"),
-                Env::Entry(v, val, _) if &**v == var => return *val,
-                Env::Entry(_, _, next) => env = next,
-            }
-        }
-    }
-}
 
 pub struct Closure {
     captured_env: Env,
