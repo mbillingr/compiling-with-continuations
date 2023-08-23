@@ -57,3 +57,10 @@ fn test_mutual_recursion() {
         );
     }
 }
+
+#[test]
+fn test_primops() {
+    unsafe {
+        assert_eq!(exec(&expr!(- [(int 7) (int 2)] [r] [(halt r)])).as_int(), 5);
+    }
+}

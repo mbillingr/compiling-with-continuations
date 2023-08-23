@@ -19,9 +19,11 @@ pub enum Expr<V: 'static> {
     Offset(isize, Value<V>, V, Ref<Expr<V>>),
     App(Value<V>, List<Value<V>>),
     Fix(List<(V, List<V>, Ref<Expr<V>>)>, Ref<Expr<V>>),
-    Switch(Value<V>, List<Expr<V>>),
-    PrimOp(PrimOp, List<Value<V>>, List<V>, List<Expr<V>>),
+    Switch(Value<V>, List<Ref<Expr<V>>>),
+    PrimOp(PrimOp, List<Value<V>>, List<V>, List<Ref<Expr<V>>>),
 }
 
 #[derive(Debug)]
-pub enum PrimOp {}
+pub enum PrimOp {
+    ISub
+}

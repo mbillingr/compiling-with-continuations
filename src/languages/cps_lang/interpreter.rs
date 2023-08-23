@@ -2,6 +2,7 @@ use crate::core::answer::Answer;
 use crate::core::env::Env;
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast;
+use crate::languages::cps_lang::ast::PrimOp;
 
 type Expr = ast::Expr<Ref<str>>;
 type Value = ast::Value<Ref<str>>;
@@ -67,6 +68,13 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
 
                 env = common_env;
                 expr = cnt;
+            }
+
+            Expr::PrimOp(PrimOp::ISub, args, vars, cnts) => {
+                let a = eval_val(&args[0], env).as_int();
+                let b = eval_val(&args[1], env).as_int();
+                env = env.extend(vars[0], Answer::from_int(a - b));
+                expr = &cnts[0];
             }
 
             _ => todo!("{:?}", expr),

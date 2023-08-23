@@ -22,7 +22,24 @@ macro_rules! value_list {
     };
 }
 
+macro_rules! ident_list {
+    ($($item:ident)*) => {
+        $crate::core::reference::Ref::array(vec![$(stringify!($item).into()),*])
+    };
+}
+
+macro_rules! expr_list {
+    ($($item:tt)*) => {
+        $crate::core::reference::Ref::array(vec![$(expr!($item).into()),*])
+    };
+}
+
 macro_rules! expr {
+
+    (($($parts:tt)*)) => {
+        expr!($($parts)*)
+    };
+
     (record [$($values:tt)*] $var:ident $cnt:tt) => {
         $crate::languages::cps_lang::ast::Expr::Record(
             value_list!($($values)*),
@@ -48,15 +65,20 @@ macro_rules! expr {
         $crate::languages::cps_lang::ast::Expr::Fix(
             $crate::core::reference::Ref::array(vec![$((
                 stringify!($name).into(),
-                $crate::core::reference::Ref::array(vec![$(stringify!($arg).into()),*]),
+                ident_list!($($arg)*),
                 expr!($body).into()
             )),*]),
             expr!($cnt).into()
         )
     };
 
-    (($($parts:tt)*)) => {
-        expr!($($parts)*)
+    (- [$($values:tt)*] [$($var:ident)*] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::cps_lang::ast::PrimOp::ISub,
+            value_list!($($values)*),
+            ident_list!($($var)*),
+            expr_list!($($cnt)*),
+        )
     };
 
     ($fun:tt $($arg:tt)*) => {
