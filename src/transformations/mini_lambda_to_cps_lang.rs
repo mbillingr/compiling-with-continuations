@@ -1,53 +1,67 @@
 use crate::core::reference::Ref;
-use crate::cps_expr;
-use crate::languages::mini_lambda::ast;
 use crate::languages::cps_lang::ast as cps;
+use crate::languages::mini_lambda::ast;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 type LExpr = ast::Expr<Ref<str>>;
 type CExpr = cps::Expr<Ref<str>>;
 type CVal = cps::Value<Ref<str>>;
 
-pub fn convert_program(expr: LExpr) -> CExpr {
-    Context::new().convert(expr, |x| CExpr::App(CVal::Halt, Ref::array(vec![x])))
-}
-
 struct Context {
-    sym_ctr: usize,
+    sym_ctr: AtomicUsize,
+    sym_delim: &'static str,
 }
 
 impl Context {
-
-    pub fn new() -> Self {
+    pub fn new(sym_delim: &'static str) -> Self {
         Context {
-            sym_ctr: 0
+            sym_ctr: AtomicUsize::new(0),
+            sym_delim,
         }
     }
-    pub fn convert(&mut self, expr: LExpr, c: impl Fn(CVal) -> CExpr) -> CExpr {
+    pub fn convert(&'static self, expr: &LExpr, c: impl 'static + FnOnce(CVal) -> CExpr) -> CExpr {
         match expr {
-            LExpr::Var(v) => c(CVal::Var(v)),
-            LExpr::Int(i) => c(CVal::Int(i)),
-            LExpr::Real(r) => c(CVal::Real(r)),
+            LExpr::Var(v) => c(CVal::Var(*v)),
+            LExpr::Int(i) => c(CVal::Int(*i)),
+            LExpr::Real(r) => c(CVal::Real(*r)),
             LExpr::Record(fields) if fields.len() == 0 => c(CVal::Int(0)),
             LExpr::Record(fields) => {
                 let x = self.gensym("r");
-                self.convert_(fields, |a| CExpr::Record(a, x, Ref::new(c(CVal::Var(x)))))
+                self.convert_sequence(*fields, move |a| {
+                    CExpr::Record(a, x, Ref::new(c(CVal::Var(x))))
+                })
             }
-            _ => todo!("{:?}", expr)
+            _ => todo!("{:?}", expr),
         }
     }
 
-    fn convert_(&mut self, items: Ref<[LExpr]>, c: impl Fn(Ref<[CVal]>) -> CExpr) -> CExpr {
-        let mut w = vec![];
-
-        //self.convert(item, |v|))
-        todo!();
-
-        c(Ref::array(w))
+    fn convert_sequence(
+        &'static self,
+        items: Ref<[LExpr]>,
+        c: impl 'static + FnOnce(Ref<[CVal]>) -> CExpr,
+    ) -> CExpr {
+        self.convert_sequence_recursion(items, Vec::with_capacity(items.len()), Box::new(c))
     }
 
-    fn gensym(&mut self, name: &str) -> Ref<str> {
-        self.sym_ctr += 1;
-        Ref::from(format!("{name}__{}", self.sym_ctr))
+    fn convert_sequence_recursion(
+        &'static self,
+        items: Ref<[LExpr]>,
+        mut w: Vec<CVal>,
+        c: Box<dyn FnOnce(Ref<[CVal]>) -> CExpr>,
+    ) -> CExpr {
+        if items.is_empty() {
+            c(Ref::array(w))
+        } else {
+            self.convert(&items[0], move |v| {
+                w.push(v);
+                self.convert_sequence_recursion(Ref::slice(&items.as_ref()[1..]), w, c)
+            })
+        }
+    }
+
+    fn gensym(&self, name: &str) -> Ref<str> {
+        let n = self.sym_ctr.fetch_add(1, Ordering::Relaxed);
+        Ref::from(format!("{name}{}{}", self.sym_delim, n))
     }
 }
 
@@ -57,6 +71,12 @@ mod tests {
 
     use crate::{cps_expr, cps_value, cps_value_list, mini_expr};
 
+    pub fn convert_program(expr: LExpr) -> CExpr {
+        // for testing we need to generate symbols that are valid rust identifiers
+        let ctx = Box::leak(Box::new(Context::new("__")));
+        ctx.convert(&expr, |x| CExpr::App(CVal::Halt, Ref::array(vec![x])))
+    }
+
     #[test]
     fn convert_variable() {
         assert_eq!(convert_program(mini_expr!(foo)), cps_expr!(halt foo));
@@ -64,14 +84,26 @@ mod tests {
 
     #[test]
     fn convert_constants() {
-        assert_eq!(convert_program(mini_expr!((int 0))), cps_expr!(halt (int 0)));
-        assert_eq!(convert_program(mini_expr!((real 0.0))), cps_expr!(halt (real 0.0)));
+        assert_eq!(
+            convert_program(mini_expr!((int 0))),
+            cps_expr!(halt (int 0))
+        );
+        assert_eq!(
+            convert_program(mini_expr!((real 0.0))),
+            cps_expr!(halt (real 0.0))
+        );
     }
 
     #[test]
     fn convert_records() {
         assert_eq!(convert_program(mini_expr!([])), cps_expr!(halt (int 0)));
-        assert_eq!(convert_program(mini_expr!([(int 1)])), cps_expr!(record [(int 1)] r (halt r)));
-        //assert_eq!(convert_program(mini_expr!((real 0.0))), cps_expr!(halt (real 0.0)));
+        assert_eq!(
+            convert_program(mini_expr!([(int 1)])),
+            cps_expr!(record [(int 1)] r__0 (halt r__0))
+        );
+        assert_eq!(
+            convert_program(mini_expr!([(int 1) x (int 3)])),
+            cps_expr!(record [(int 1) x (int 3)] r__0 (halt r__0))
+        );
     }
 }

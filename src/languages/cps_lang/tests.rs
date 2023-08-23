@@ -43,14 +43,26 @@ fn test_offset() {
     unsafe {
         let env = Env::Empty.extend(
             "rec".into(),
-            Answer::tuple(vec![Answer::from_int(11), Answer::from_int(22), Answer::from_int(33)]),
+            Answer::tuple(vec![
+                Answer::from_int(11),
+                Answer::from_int(22),
+                Answer::from_int(33),
+            ]),
         );
         assert_eq!(
-            eval_expr(&cps_expr!(offset 2 rec sub (select 0 sub out (halt out))), env).as_int(),
+            eval_expr(
+                &cps_expr!(offset 2 rec sub (select 0 sub out (halt out))),
+                env
+            )
+            .as_int(),
             33
         );
         assert_eq!(
-            eval_expr(&cps_expr!(offset 2 rec sub (offset (-1) sub sub (select 0 sub out (halt out)))), env).as_int(),
+            eval_expr(
+                &cps_expr!(offset 2 rec sub (offset (-1) sub sub (select 0 sub out (halt out)))),
+                env
+            )
+            .as_int(),
             22
         );
     }
@@ -81,15 +93,18 @@ fn test_mutual_recursion() {
 fn test_switch() {
     unsafe {
         assert_eq!(
-            exec(&cps_expr!(switch (int 0) [(halt (int 11)) (halt (int 22)) (halt (int 33))])).as_int(),
+            exec(&cps_expr!(switch (int 0) [(halt (int 11)) (halt (int 22)) (halt (int 33))]))
+                .as_int(),
             11
         );
         assert_eq!(
-            exec(&cps_expr!(switch (int 1) [(halt (int 11)) (halt (int 22)) (halt (int 33))])).as_int(),
+            exec(&cps_expr!(switch (int 1) [(halt (int 11)) (halt (int 22)) (halt (int 33))]))
+                .as_int(),
             22
         );
         assert_eq!(
-            exec(&cps_expr!(switch (int 2) [(halt (int 11)) (halt (int 22)) (halt (int 33))])).as_int(),
+            exec(&cps_expr!(switch (int 2) [(halt (int 11)) (halt (int 22)) (halt (int 33))]))
+                .as_int(),
             33
         );
     }
@@ -98,6 +113,9 @@ fn test_switch() {
 #[test]
 fn test_primops() {
     unsafe {
-        assert_eq!(exec(&cps_expr!(- [(int 7) (int 2)] [r] [(halt r)])).as_int(), 5);
+        assert_eq!(
+            exec(&cps_expr!(- [(int 7) (int 2)] [r] [(halt r)])).as_int(),
+            5
+        );
     }
 }

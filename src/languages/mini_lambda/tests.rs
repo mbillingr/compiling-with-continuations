@@ -35,7 +35,10 @@ fn function_argument_referencing() {
 #[test]
 fn function_closure_capture() {
     unsafe {
-        assert_eq!(exec(&mini_expr!(((fun x = fun y = x) int 3) int 4)).as_int(), 3);
+        assert_eq!(
+            exec(&mini_expr!(((fun x = fun y = x) int 3) int 4)).as_int(),
+            3
+        );
     }
 }
 
@@ -98,7 +101,10 @@ fn switch_over_integers() {
 #[test]
 fn switch_over_real() {
     unsafe {
-        assert_eq!(exec(&mini_expr!(switch (real 0.0) [] [] (int 1))).as_int(), 1); // only the default branch
+        assert_eq!(
+            exec(&mini_expr!(switch (real 0.0) [] [] (int 1))).as_int(),
+            1
+        ); // only the default branch
         assert_eq!(
             exec(&mini_expr!(switch (real 0.0) [] [(real 0.0) => (int 1)] )).as_int(),
             1
@@ -124,7 +130,10 @@ fn switch_over_real() {
 #[test]
 fn switch_over_strings() {
     unsafe {
-        assert_eq!(exec(&mini_expr!(switch (str "x") [] [] (int 1))).as_int(), 1); // only the default branch
+        assert_eq!(
+            exec(&mini_expr!(switch (str "x") [] [] (int 1))).as_int(),
+            1
+        ); // only the default branch
         assert_eq!(
             exec(&mini_expr!(switch (str "x") [] [(str "x") => (int 1)] )).as_int(),
             1

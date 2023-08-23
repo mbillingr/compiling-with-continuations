@@ -8,9 +8,14 @@ impl<T> Ref<T> {
     pub fn new(obj: T) -> Self {
         Ref(Box::leak(Box::new(obj)))
     }
-
+}
+impl<T: ?Sized> Ref<T> {
     pub fn as_ptr(&self) -> *const T {
         self.0
+    }
+
+    pub fn as_ref(&self) -> &'static T {
+        &self.0
     }
 
     pub unsafe fn unsafe_mutate(&self, f: impl Fn(&mut T)) {
@@ -22,6 +27,9 @@ impl<T> Ref<T> {
 impl<T> Ref<[T]> {
     pub fn array(obj: Vec<T>) -> Self {
         Ref(Box::leak(obj.into_boxed_slice()))
+    }
+    pub fn slice(obj: &'static [T]) -> Self {
+        Ref(obj)
     }
 }
 
