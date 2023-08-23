@@ -63,4 +63,9 @@ impl Answer {
         let fst: *const Answer = std::mem::transmute(self.0);
         *fst.offset(idx)
     }
+
+    pub unsafe fn ptr_offset(self, idx: isize) -> Answer {
+        let ptr: *const Answer = std::mem::transmute(self.0);
+        Answer(std::mem::transmute(ptr.offset(idx)))
+    }
 }

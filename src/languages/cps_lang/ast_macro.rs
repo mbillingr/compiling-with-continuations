@@ -57,6 +57,15 @@ macro_rules! expr {
         )
     };
 
+    (offset $idx:tt $recval:tt $var:ident $cnt:tt) => {
+        $crate::languages::cps_lang::ast::Expr::Offset(
+            $idx,
+            value!($recval),
+            stringify!($var).into(),
+            expr!($cnt).into(),
+        )
+    };
+
     (fix in $cnt:tt) => {
         expr!($cnt)
     };

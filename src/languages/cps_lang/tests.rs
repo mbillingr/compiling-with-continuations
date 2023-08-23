@@ -38,6 +38,24 @@ fn test_select() {
 }
 
 #[test]
+fn test_offset() {
+    unsafe {
+        let env = Env::Empty.extend(
+            "rec".into(),
+            Answer::tuple(vec![Answer::from_int(11), Answer::from_int(22), Answer::from_int(33)]),
+        );
+        assert_eq!(
+            eval_expr(&expr!(offset 2 rec sub (select 0 sub out (halt out))), env).as_int(),
+            33
+        );
+        assert_eq!(
+            eval_expr(&expr!(offset 2 rec sub (offset (-1) sub sub (select 0 sub out (halt out)))), env).as_int(),
+            22
+        );
+    }
+}
+
+#[test]
 fn test_functions() {
     unsafe {
         assert_eq!(exec(&expr!(fix in (halt (int 0)))).as_int(), 0);

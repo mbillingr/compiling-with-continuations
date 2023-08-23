@@ -23,6 +23,12 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
                 expr = cnt;
             }
 
+            Expr::Offset(idx, recval, outvar, cnt) => {
+                let rec = eval_val(recval, env);
+                env = env.extend(*outvar, rec.ptr_offset(*idx));
+                expr = cnt;
+            }
+
             Expr::Select(idx, recval, outvar, cnt) => {
                 let rec = eval_val(recval, env);
                 env = env.extend(*outvar, rec.get_item(*idx));
@@ -81,8 +87,6 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
                 env = env.extend(vars[0], Answer::from_int(a - b));
                 expr = &cnts[0];
             }
-
-            _ => todo!("{:?}", expr),
         }
     }
 }
