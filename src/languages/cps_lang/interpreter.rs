@@ -95,6 +95,7 @@ pub fn eval_val(val: &Value, env: Env) -> Answer {
     match val {
         Value::Var(v) => env.lookup(v),
         Value::Int(x) => Answer::from_int(*x),
+        Value::Real(x) => Answer::from_float(*x),
         Value::Halt => Answer::from_ref(Ref::new(Closure {
             captured_env: Env::Empty,
             params: Ref::array(vec!["x".into()]),

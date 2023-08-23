@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 // may contain a &'static T in the future
 pub struct Ref<T: ?Sized + 'static>(&'static T);
 
@@ -36,6 +36,12 @@ impl<T: ?Sized> Clone for Ref<T> {
 impl From<&'static str> for Ref<str> {
     fn from(value: &'static str) -> Self {
         Ref(value.into())
+    }
+}
+
+impl From<String> for Ref<str> {
+    fn from(value: String) -> Self {
+        Ref(Box::leak(value.into_boxed_str()))
     }
 }
 

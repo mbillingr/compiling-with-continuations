@@ -8,6 +8,10 @@ macro_rules! cps_value {
         $crate::languages::cps_lang::ast::Value::Int($x)
     };
 
+    (real $x:expr) => {
+        $crate::languages::cps_lang::ast::Value::Real($x)
+    };
+
     ($var:ident) => {
         $crate::languages::cps_lang::ast::Value::Var(stringify!($var).into())
     };
@@ -17,18 +21,21 @@ macro_rules! cps_value {
     };
 }
 
+#[macro_export]
 macro_rules! cps_value_list {
     ($($item:tt)*) => {
         $crate::core::reference::Ref::array(vec![$(cps_value!($item)),*])
     };
 }
 
+#[macro_export]
 macro_rules! cps_ident_list {
     ($($item:ident)*) => {
         $crate::core::reference::Ref::array(vec![$(stringify!($item).into()),*])
     };
 }
 
+#[macro_export]
 macro_rules! cps_expr_list {
     ($($item:tt)*) => {
         $crate::core::reference::Ref::array(vec![$(cps_expr!($item).into()),*])

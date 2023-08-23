@@ -6,6 +6,7 @@ use crate::languages::cps_lang::interpreter::{eval_expr, exec};
 fn test_halt() {
     unsafe {
         assert_eq!(exec(&cps_expr!(halt (int 42))).as_int(), 42);
+        assert_eq!(exec(&cps_expr!(halt (real 4.2))).as_float(), 4.2);
     }
 }
 

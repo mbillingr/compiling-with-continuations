@@ -1,6 +1,6 @@
 use crate::core::reference::Ref;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Value<V: 'static> {
     Var(V),
     Label(V),
@@ -12,7 +12,7 @@ pub enum Value<V: 'static> {
 
 type List<T> = Ref<[T]>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expr<V: 'static> {
     Record(List<Value<V>>, V, Ref<Expr<V>>),
     Select(isize, Value<V>, V, Ref<Expr<V>>),
@@ -23,7 +23,7 @@ pub enum Expr<V: 'static> {
     PrimOp(PrimOp, List<Value<V>>, List<V>, List<Ref<Expr<V>>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum PrimOp {
     ISub,
 }
