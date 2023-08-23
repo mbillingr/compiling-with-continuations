@@ -105,5 +105,13 @@ mod tests {
             convert_program(mini_expr!([(int 1) x (int 3)])),
             cps_expr!(record [(int 1) x (int 3)] r__0 (halt r__0))
         );
+        assert_eq!(
+            convert_program(mini_expr!([[(int 1)]])),
+            cps_expr!(record [(int 1)] r__1 (record [r__1] r__0 (halt r__0)))
+        );
+        assert_eq!(
+            convert_program(mini_expr!([[(int 1)] [(int 2)]])),
+            cps_expr!(record [(int 1)] r__1 (record [(int 2)] r__2 (record [r__1 r__2] r__0 (halt r__0))))
+        );
     }
 }
