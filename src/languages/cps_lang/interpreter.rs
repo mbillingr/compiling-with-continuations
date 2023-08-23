@@ -30,6 +30,45 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
 
             Expr::App(Value::Halt, args) => return eval_val(&args[0], env),
 
+            Expr::App(fval, argvals) => {
+                let f = eval_val(fval, env);
+                let args = argvals.iter().map(move |a| eval_val(a, env));
+
+                let cls = f.as_ref::<Closure>();
+
+                env = cls.captured_env;
+                for (a, v) in args.zip(&*cls.params) {
+                    env = env.extend(*v, a);
+                }
+                expr = &cls.body;
+            }
+
+            Expr::Fix(defs, cnt) => {
+                let closures: Vec<_> = defs
+                    .iter()
+                    .map(|(_, params, body)| {
+                        Closure {
+                            captured_env: Env::Empty, //placeholder
+                            params: *params,
+                            body: *body,
+                        }
+                    })
+                    .map(Ref::new)
+                    .collect();
+
+                let mut common_env = env.clone();
+                for (name, cls) in defs.iter().map(|(name, _, _)| name).zip(&closures) {
+                    common_env = common_env.extend(*name, Answer::from_ref(*cls));
+                }
+
+                for cls in closures.into_iter() {
+                    cls.unsafe_mutate(|cls| cls.captured_env = common_env);
+                }
+
+                env = common_env;
+                expr = cnt;
+            }
+
             _ => todo!("{:?}", expr),
         }
     }
@@ -39,6 +78,17 @@ pub fn eval_val(val: &Value, env: Env) -> Answer {
     match val {
         Value::Var(v) => env.lookup(v),
         Value::Int(x) => Answer::from_int(*x),
+        Value::Halt => Answer::from_ref(Ref::new(Closure {
+            captured_env: Env::Empty,
+            params: Ref::array(vec!["x".into()]),
+            body: Expr::App(Value::Halt, Ref::array(vec![Value::Var("x".into())])).into(),
+        })),
         _ => todo!("{:?}", val),
     }
+}
+
+struct Closure {
+    captured_env: Env,
+    params: Ref<[Ref<str>]>,
+    body: Ref<Expr>,
 }

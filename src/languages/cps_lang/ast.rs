@@ -18,7 +18,7 @@ pub enum Expr<V: 'static> {
     Select(isize, Value<V>, V, Ref<Expr<V>>),
     Offset(isize, Value<V>, V, Ref<Expr<V>>),
     App(Value<V>, List<Value<V>>),
-    Fix(List<(V, List<V>, Expr<V>)>, Ref<Expr<V>>),
+    Fix(List<(V, List<V>, Ref<Expr<V>>)>, Ref<Expr<V>>),
     Switch(Value<V>, List<Expr<V>>),
     PrimOp(PrimOp, List<Value<V>>, List<V>, List<Expr<V>>),
 }

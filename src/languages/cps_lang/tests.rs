@@ -36,3 +36,14 @@ fn test_select() {
         );
     }
 }
+
+#[test]
+fn test_functions() {
+    unsafe {
+        assert_eq!(exec(&expr!(fix in (halt (int 0)))).as_int(), 0);
+        assert_eq!(
+            exec(&expr!(fix foo(c)=(c (int 42)) in (foo halt))).as_int(),
+            42
+        );
+    }
+}
