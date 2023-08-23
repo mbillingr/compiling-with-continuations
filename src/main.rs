@@ -3,6 +3,7 @@ use crate::languages::mini_lambda::interpreter::exec;
 
 pub mod core;
 pub mod languages;
+pub mod transformations;
 
 fn main() {
     println!("{:?}", unsafe {
