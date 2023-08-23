@@ -11,14 +11,25 @@ pub unsafe fn exec(expr: &Expr) -> Answer {
 }
 
 pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
-    match expr {
-        Expr::App(Value::Halt, args) => eval_val(&args[0], env),
-        _ => todo!("{:?}", expr),
+    loop {
+        match expr {
+            Expr::Record(items, var, cnt) => {
+                let mut data = Vec::with_capacity(items.len());
+                for item in &**items {
+                    data.push(eval_val(item, env));
+                }
+                env  = env.extend(*var, Answer::tuple(data));
+                expr = cnt;
+            }
+            Expr::App(Value::Halt, args) => return eval_val(&args[0], env),
+            _ => todo!("{:?}", expr),
+        }
     }
 }
 
 pub fn eval_val(val: &Value, env: Env) -> Answer {
     match val {
+        Value::Var(v) => env.lookup(v),
         Value::Int(x) => Answer::from_int(*x),
         _ => todo!("{:?}", val),
     }
