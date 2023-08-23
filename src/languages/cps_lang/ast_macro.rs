@@ -48,9 +48,9 @@ macro_rules! expr {
         $crate::languages::cps_lang::ast::Expr::Fix(
             $crate::core::reference::Ref::array(vec![$((
                 stringify!($name).into(),
-                $crate::core::reference::Ref::array(vec![$(stringify!($arg).into())*]),
+                $crate::core::reference::Ref::array(vec![$(stringify!($arg).into()),*]),
                 expr!($body).into()
-            ))*]),
+            )),*]),
             expr!($cnt).into()
         )
     };

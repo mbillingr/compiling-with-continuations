@@ -47,3 +47,13 @@ fn test_functions() {
         );
     }
 }
+
+#[test]
+fn test_mutual_recursion() {
+    unsafe {
+        assert_eq!(
+            exec(&expr!(fix foo(c)=(bar (int 42) c); bar(x c)=(c x) in (foo halt))).as_int(),
+            42
+        );
+    }
+}
