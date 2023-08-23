@@ -1,4 +1,6 @@
-use crate::languages::cps_lang::interpreter::exec;
+use crate::core::answer::Answer;
+use crate::core::env::Env;
+use crate::languages::cps_lang::interpreter::{eval_expr, exec};
 
 #[test]
 fn test_halt() {
@@ -14,5 +16,23 @@ fn test_record() {
         assert_eq!(rec.get_item(0).as_int(), 1);
         assert_eq!(rec.get_item(1).as_int(), 20);
         assert_eq!(rec.get_item(2).as_int(), 300);
+    }
+}
+
+#[test]
+fn test_select() {
+    unsafe {
+        let env = Env::Empty.extend(
+            "rec".into(),
+            Answer::tuple(vec![Answer::from_int(11), Answer::from_int(33)]),
+        );
+        assert_eq!(
+            eval_expr(&expr!(select 0 rec out (halt out)), env).as_int(),
+            11
+        );
+        assert_eq!(
+            eval_expr(&expr!(select 1 rec out (halt out)), env).as_int(),
+            33
+        );
     }
 }

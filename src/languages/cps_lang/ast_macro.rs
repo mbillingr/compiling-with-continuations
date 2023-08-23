@@ -31,6 +31,15 @@ macro_rules! expr {
         )
     };
 
+    (select $idx:tt $recval:tt $var:ident $cnt:tt) => {
+        $crate::languages::cps_lang::ast::Expr::Select(
+            $idx,
+            value!($recval),
+            stringify!($var).into(),
+            expr!($cnt).into(),
+        )
+    };
+
     (($($parts:tt)*)) => {
         expr!($($parts)*)
     };
