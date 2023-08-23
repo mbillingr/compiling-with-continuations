@@ -70,6 +70,11 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
                 expr = cnt;
             }
 
+            Expr::Switch(val, cnts) => {
+                let idx = eval_val(val, env).as_int();
+                expr = &cnts[idx as usize];
+            }
+
             Expr::PrimOp(PrimOp::ISub, args, vars, cnts) => {
                 let a = eval_val(&args[0], env).as_int();
                 let b = eval_val(&args[1], env).as_int();

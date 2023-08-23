@@ -25,5 +25,5 @@ pub enum Expr<V: 'static> {
 
 #[derive(Debug)]
 pub enum PrimOp {
-    ISub
+    ISub,
 }

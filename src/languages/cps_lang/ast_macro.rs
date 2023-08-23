@@ -72,6 +72,13 @@ macro_rules! expr {
         )
     };
 
+    (switch $val:tt [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::Switch(
+            value!($val),
+            expr_list!($($cnt)*),
+        )
+    };
+
     (- [$($values:tt)*] [$($var:ident)*] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(
             $crate::languages::cps_lang::ast::PrimOp::ISub,

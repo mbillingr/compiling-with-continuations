@@ -59,6 +59,24 @@ fn test_mutual_recursion() {
 }
 
 #[test]
+fn test_switch() {
+    unsafe {
+        assert_eq!(
+            exec(&expr!(switch (int 0) [(halt (int 11)) (halt (int 22)) (halt (int 33))])).as_int(),
+            11
+        );
+        assert_eq!(
+            exec(&expr!(switch (int 1) [(halt (int 11)) (halt (int 22)) (halt (int 33))])).as_int(),
+            22
+        );
+        assert_eq!(
+            exec(&expr!(switch (int 2) [(halt (int 11)) (halt (int 22)) (halt (int 33))])).as_int(),
+            33
+        );
+    }
+}
+
+#[test]
 fn test_primops() {
     unsafe {
         assert_eq!(exec(&expr!(- [(int 7) (int 2)] [r] [(halt r)])).as_int(), 5);
