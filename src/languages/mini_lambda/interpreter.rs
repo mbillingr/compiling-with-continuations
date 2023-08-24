@@ -68,6 +68,7 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
                     let arg = eval(rand, env);
                     return op.apply(arg.get_item(0), arg.get_item(1));
                 }
+                (Expr::Prim(op), _) => todo!("{:?}", expr),
                 _ => {
                     let f = eval(&**rator, env);
                     let a = eval(&**rand, env);

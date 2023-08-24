@@ -119,6 +119,17 @@ macro_rules! cps_expr {
         )
     };
 
+    // binary add
+    (+ [$($values:tt)*] [$($var:ident)*] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::cps_lang::ast::PrimOp::Binary(
+                $crate::languages::common_primops::Binary::IAdd),
+            cps_value_list!($($values)*),
+            cps_ident_list!($($var)*),
+            cps_expr_list!($($cnt)*),
+        )
+    };
+
     ($fun:tt $($arg:tt)*) => {
         $crate::languages::cps_lang::ast::Expr::App(
             cps_value!($fun),

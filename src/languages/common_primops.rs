@@ -7,6 +7,7 @@ pub enum Unary {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Binary {
+    IAdd,
     ISub,
 }
 
@@ -21,6 +22,7 @@ impl Unary {
 impl Binary {
     pub fn apply(&self, a: Answer, b: Answer) -> Answer {
         match self {
+            Binary::IAdd => Answer::from_int(a.as_int() + b.as_int()),
             Binary::ISub => Answer::from_int(a.as_int() - b.as_int()),
         }
     }

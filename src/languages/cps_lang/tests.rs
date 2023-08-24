@@ -118,5 +118,9 @@ fn test_primops() {
             exec(&cps_expr!(- [(int 7) (int 2)] [r] [(halt r)])).as_int(),
             5
         );
+        assert_eq!(
+            exec(&cps_expr!(+ [(int 7) (int 2)] [r] [(halt r)])).as_int(),
+            9
+        );
     }
 }

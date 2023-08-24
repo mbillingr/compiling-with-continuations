@@ -47,7 +47,7 @@ fn mutual_recursion() {
     unsafe {
         assert_eq!(exec(&mini_expr!(
             fix fun foo x = (bar x)
-                fun bar x = (isub [x (int -2)])
+                fun bar x = (- [x (int -2)])
             in foo (int 5)
         )).as_int(), 7);
     }
@@ -57,7 +57,8 @@ fn mutual_recursion() {
 fn primitive_application() {
     unsafe {
         assert_eq!(exec(&mini_expr!(ineg int 1)).as_int(), -1);
-        assert_eq!(exec(&mini_expr!(isub [(int 1) (int 3)])).as_int(), -2);
+        assert_eq!(exec(&mini_expr!(- [(int 1) (int 3)])).as_int(), -2);
+        assert_eq!(exec(&mini_expr!(+ [(int 1) (int 2)])).as_int(), 3);
     }
 }
 
@@ -68,7 +69,7 @@ fn primitive_reification() {
             exec(&mini_expr!(((fun f = fun x = f x) ineg) int 1)).as_int(),
             -1
         );
-        assert_eq!(exec(&mini_expr!(((fun f = fun x = f x) isub) [(int 1) (int 3)])).as_int(), -2);
+        assert_eq!(exec(&mini_expr!(((fun f = fun x = f x) -) [(int 1) (int 3)])).as_int(), -2);
     }
 }
 

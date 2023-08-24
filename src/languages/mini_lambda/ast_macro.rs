@@ -113,10 +113,16 @@ macro_rules! mini_expr {
                 $crate::languages::common_primops::Unary::INeg))
     };
 
-    (isub) => {
+    (-) => {
         $crate::languages::mini_lambda::ast::Expr::Prim(
             $crate::languages::mini_lambda::ast::PrimOp::Binary(
                 $crate::languages::common_primops::Binary::ISub))
+    };
+
+    (+) => {
+        $crate::languages::mini_lambda::ast::Expr::Prim(
+            $crate::languages::mini_lambda::ast::PrimOp::Binary(
+                $crate::languages::common_primops::Binary::IAdd))
     };
 
     ($var:ident) => { $crate::languages::mini_lambda::ast::Expr::Var(stringify!($var).into()) };
