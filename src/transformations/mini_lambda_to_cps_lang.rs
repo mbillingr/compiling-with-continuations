@@ -19,7 +19,7 @@ impl Context {
             sym_delim,
         }
     }
-    pub fn convert(&'static self, expr: &LExpr, c: impl 'static + FnOnce(CVal) -> CExpr) -> CExpr {
+    pub fn convert(&'static self, expr: &LExpr, c: Box<dyn FnOnce(CVal) -> CExpr>) -> CExpr {
         match expr {
             LExpr::Var(v) => c(CVal::Var(*v)),
             LExpr::Int(i) => c(CVal::Int(*i)),
@@ -30,6 +30,11 @@ impl Context {
                 self.convert_sequence(*fields, move |a| {
                     CExpr::Record(a, x, Ref::new(c(CVal::Var(x))))
                 })
+            }
+            LExpr::Select(idx, rec) => {
+                let idx = *idx;
+                let w = self.gensym("w");
+                self.convert(rec, Box::new(move |v| CExpr::Select(idx, v, w, Ref::new(c(CVal::Var(w))))))
             }
             _ => todo!("{:?}", expr),
         }
@@ -52,10 +57,10 @@ impl Context {
         if items.is_empty() {
             c(Ref::array(w))
         } else {
-            self.convert(&items[0], move |v| {
+            self.convert(&items[0], Box::new(move |v| {
                 w.push(v);
                 self.convert_sequence_recursion(Ref::slice(&items.as_ref()[1..]), w, c)
-            })
+            }))
         }
     }
 
@@ -74,7 +79,7 @@ mod tests {
     pub fn convert_program(expr: LExpr) -> CExpr {
         // for testing we need to generate symbols that are valid rust identifiers
         let ctx = Box::leak(Box::new(Context::new("__")));
-        ctx.convert(&expr, |x| CExpr::App(CVal::Halt, Ref::array(vec![x])))
+        ctx.convert(&expr, Box::new(|x| CExpr::App(CVal::Halt, Ref::array(vec![x]))))
     }
 
     #[test]
@@ -112,6 +117,14 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!([[(int 1)] [(int 2)]])),
             cps_expr!(record [(int 1)] r__1 (record [(int 2)] r__2 (record [r__1 r__2] r__0 (halt r__0))))
+        );
+    }
+
+    #[test]
+    fn convert_select() {
+        assert_eq!(
+            convert_program(mini_expr!(select [(int 1)] 0)),
+            cps_expr!(record [(int 1)] r__1 (select 0 r__1 w__0 (halt w__0)))
         );
     }
 }
