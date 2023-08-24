@@ -58,6 +58,19 @@ impl Context {
                 }
                 _ => todo!("{:?}", expr),
             },
+            LExpr::Prim(LPrim::INeg) => {
+                let x = self.gensym("x");
+                self.convert(
+                    &LExpr::Fn(
+                        x,
+                        Ref::new(LExpr::App(
+                            LExpr::Prim(LPrim::INeg).into(),
+                            LExpr::Var(x).into(),
+                        )),
+                    ),
+                    c,
+                )
+            }
             _ => todo!("{:?}", expr),
         }
     }
@@ -161,6 +174,11 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(ineg int 1)),
             cps_expr!(- (int 1) [w__0] [(halt w__0)])
+        );
+        assert_eq!(
+            convert_program(mini_expr!(ineg)),
+            //cps_expr!(- (int 1) [w__0] [(halt w__0)])
+            todo!()
         );
     }
 }
