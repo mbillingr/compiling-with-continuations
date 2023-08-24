@@ -1,4 +1,6 @@
+use crate::core::answer::Answer;
 use crate::core::reference::Ref;
+use crate::languages::common_primops;
 
 #[derive(Debug, Clone)]
 pub enum Expr<V: 'static> {
@@ -39,6 +41,6 @@ pub enum Con {
 
 #[derive(Debug, Copy, Clone)]
 pub enum PrimOp {
-    INeg,
-    ISub,
+    Unary(common_primops::Unary),
+    Binary(common_primops::Binary),
 }

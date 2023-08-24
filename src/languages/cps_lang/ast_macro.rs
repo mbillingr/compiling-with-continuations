@@ -100,7 +100,8 @@ macro_rules! cps_expr {
     // binary sub
     (- [$($values:tt)*] [$($var:ident)*] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(
-            $crate::languages::cps_lang::ast::PrimOp::ISub,
+            $crate::languages::cps_lang::ast::PrimOp::Binary(
+                $crate::languages::common_primops::Binary::ISub),
             cps_value_list!($($values)*),
             cps_ident_list!($($var)*),
             cps_expr_list!($($cnt)*),
@@ -110,7 +111,8 @@ macro_rules! cps_expr {
     // unary neg
     (- $value:tt [$($var:ident)*] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(
-            $crate::languages::cps_lang::ast::PrimOp::INeg,
+            $crate::languages::cps_lang::ast::PrimOp::Unary(
+                $crate::languages::common_primops::Unary::INeg),
             cps_value_list!($value),
             cps_ident_list!($($var)*),
             cps_expr_list!($($cnt)*),

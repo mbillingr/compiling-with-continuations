@@ -60,19 +60,14 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
             }
 
             Expr::App(rator, rand) => match (&**rator, &**rand) {
-                (Expr::Prim(PrimOp::INeg), _) => {
-                    return Answer::from_int(-eval(&**rand, env).as_int())
+                (Expr::Prim(PrimOp::Unary(op)), _) => return op.apply(eval(&**rand, env)),
+                (Expr::Prim(PrimOp::Binary(op)), Expr::Record(args)) => {
+                    return op.apply(eval(&args[0], env), eval(&args[1], env))
                 }
-                (Expr::Prim(PrimOp::ISub), Expr::Record(args)) => {
-                    return Answer::from_int(
-                        eval(&args[0], env).as_int() - eval(&args[1], env).as_int(),
-                    )
-                }
-                (Expr::Prim(PrimOp::ISub), _) => {
+                (Expr::Prim(PrimOp::Binary(op)), _) => {
                     let arg = eval(rand, env);
-                    return Answer::from_int(arg.get_item(0).as_int() - arg.get_item(1).as_int());
+                    return op.apply(arg.get_item(0), arg.get_item(1));
                 }
-
                 _ => {
                     let f = eval(&**rator, env);
                     let a = eval(&**rand, env);

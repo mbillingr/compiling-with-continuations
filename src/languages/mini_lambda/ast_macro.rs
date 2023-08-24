@@ -108,11 +108,15 @@ macro_rules! mini_expr {
     (($($x:tt)+)) => { mini_expr!($($x)+) };
 
     (ineg) => {
-        $crate::languages::mini_lambda::ast::Expr::Prim($crate::languages::mini_lambda::ast::PrimOp::INeg)
+        $crate::languages::mini_lambda::ast::Expr::Prim(
+            $crate::languages::mini_lambda::ast::PrimOp::Unary(
+                $crate::languages::common_primops::Unary::INeg))
     };
 
     (isub) => {
-        $crate::languages::mini_lambda::ast::Expr::Prim($crate::languages::mini_lambda::ast::PrimOp::ISub)
+        $crate::languages::mini_lambda::ast::Expr::Prim(
+            $crate::languages::mini_lambda::ast::PrimOp::Binary(
+                $crate::languages::common_primops::Binary::ISub))
     };
 
     ($var:ident) => { $crate::languages::mini_lambda::ast::Expr::Var(stringify!($var).into()) };

@@ -42,13 +42,13 @@ impl Context {
                 )
             }
             LExpr::App(func, arg) => match **func {
-                LExpr::Prim(LPrim::INeg) => {
+                LExpr::Prim(LPrim::Unary(op)) => {
                     let w = self.gensym("w");
                     self.convert(
                         arg,
                         Box::new(move |v| {
                             CExpr::PrimOp(
-                                CPrim::INeg,
+                                CPrim::Unary(op),
                                 Ref::array(vec![v]),
                                 Ref::array(vec![w]),
                                 Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
@@ -58,13 +58,13 @@ impl Context {
                 }
                 _ => todo!("{:?}", expr),
             },
-            LExpr::Prim(LPrim::INeg) => {
+            LExpr::Prim(LPrim::Unary(op)) => {
                 let x = self.gensym("x");
                 self.convert(
                     &LExpr::Fn(
                         x,
                         Ref::new(LExpr::App(
-                            LExpr::Prim(LPrim::INeg).into(),
+                            LExpr::Prim(LPrim::Unary(*op)).into(),
                             LExpr::Var(x).into(),
                         )),
                     ),

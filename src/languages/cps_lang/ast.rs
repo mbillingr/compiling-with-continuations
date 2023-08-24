@@ -1,4 +1,5 @@
 use crate::core::reference::Ref;
+use crate::languages::common_primops;
 
 #[derive(Debug, PartialEq)]
 pub enum Value<V: 'static> {
@@ -23,8 +24,8 @@ pub enum Expr<V: 'static> {
     PrimOp(PrimOp, List<Value<V>>, List<V>, List<Ref<Expr<V>>>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PrimOp {
-    INeg,
-    ISub,
+    Unary(common_primops::Unary),
+    Binary(common_primops::Binary),
 }

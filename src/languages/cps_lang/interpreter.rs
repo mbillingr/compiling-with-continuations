@@ -81,16 +81,16 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
                 expr = &cnts[idx as usize];
             }
 
-            Expr::PrimOp(PrimOp::INeg, args, vars, cnts) => {
-                let x = eval_val(&args[0], env).as_int();
-                env = env.extend(vars[0], Answer::from_int(-x));
+            Expr::PrimOp(PrimOp::Unary(op), args, vars, cnts) => {
+                let x = eval_val(&args[0], env);
+                env = env.extend(vars[0], op.apply(x));
                 expr = &cnts[0];
             }
 
-            Expr::PrimOp(PrimOp::ISub, args, vars, cnts) => {
-                let a = eval_val(&args[0], env).as_int();
-                let b = eval_val(&args[1], env).as_int();
-                env = env.extend(vars[0], Answer::from_int(a - b));
+            Expr::PrimOp(PrimOp::Binary(op), args, vars, cnts) => {
+                let a = eval_val(&args[0], env);
+                let b = eval_val(&args[1], env);
+                env = env.extend(vars[0], op.apply(a, b));
                 expr = &cnts[0];
             }
         }
