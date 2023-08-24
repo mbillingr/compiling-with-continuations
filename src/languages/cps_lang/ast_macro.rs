@@ -97,10 +97,21 @@ macro_rules! cps_expr {
         )
     };
 
+    // binary sub
     (- [$($values:tt)*] [$($var:ident)*] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(
             $crate::languages::cps_lang::ast::PrimOp::ISub,
             cps_value_list!($($values)*),
+            cps_ident_list!($($var)*),
+            cps_expr_list!($($cnt)*),
+        )
+    };
+
+    // unary neg
+    (- $value:tt [$($var:ident)*] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::cps_lang::ast::PrimOp::INeg,
+            cps_value_list!($value),
             cps_ident_list!($($var)*),
             cps_expr_list!($($cnt)*),
         )

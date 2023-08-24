@@ -4,8 +4,10 @@ use crate::languages::mini_lambda::ast;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 type LExpr = ast::Expr<Ref<str>>;
+type LPrim = ast::PrimOp;
 type CExpr = cps::Expr<Ref<str>>;
 type CVal = cps::Value<Ref<str>>;
+type CPrim = cps::PrimOp;
 
 struct Context {
     sym_ctr: AtomicUsize,
@@ -34,8 +36,28 @@ impl Context {
             LExpr::Select(idx, rec) => {
                 let idx = *idx;
                 let w = self.gensym("w");
-                self.convert(rec, Box::new(move |v| CExpr::Select(idx, v, w, Ref::new(c(CVal::Var(w))))))
+                self.convert(
+                    rec,
+                    Box::new(move |v| CExpr::Select(idx, v, w, Ref::new(c(CVal::Var(w))))),
+                )
             }
+            LExpr::App(func, arg) => match **func {
+                LExpr::Prim(LPrim::INeg) => {
+                    let w = self.gensym("w");
+                    self.convert(
+                        arg,
+                        Box::new(move |v| {
+                            CExpr::PrimOp(
+                                CPrim::INeg,
+                                Ref::array(vec![v]),
+                                Ref::array(vec![w]),
+                                Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
+                            )
+                        }),
+                    )
+                }
+                _ => todo!("{:?}", expr),
+            },
             _ => todo!("{:?}", expr),
         }
     }
@@ -57,10 +79,13 @@ impl Context {
         if items.is_empty() {
             c(Ref::array(w))
         } else {
-            self.convert(&items[0], Box::new(move |v| {
-                w.push(v);
-                self.convert_sequence_recursion(Ref::slice(&items.as_ref()[1..]), w, c)
-            }))
+            self.convert(
+                &items[0],
+                Box::new(move |v| {
+                    w.push(v);
+                    self.convert_sequence_recursion(Ref::slice(&items.as_ref()[1..]), w, c)
+                }),
+            )
         }
     }
 
@@ -74,12 +99,15 @@ impl Context {
 mod tests {
     use super::*;
 
-    use crate::{cps_expr, cps_value, cps_value_list, mini_expr};
+    use crate::{cps_expr, cps_expr_list, cps_ident_list, cps_value, cps_value_list, mini_expr};
 
     pub fn convert_program(expr: LExpr) -> CExpr {
         // for testing we need to generate symbols that are valid rust identifiers
         let ctx = Box::leak(Box::new(Context::new("__")));
-        ctx.convert(&expr, Box::new(|x| CExpr::App(CVal::Halt, Ref::array(vec![x]))))
+        ctx.convert(
+            &expr,
+            Box::new(|x| CExpr::App(CVal::Halt, Ref::array(vec![x]))),
+        )
     }
 
     #[test]
@@ -125,6 +153,14 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(select [(int 1)] 0)),
             cps_expr!(record [(int 1)] r__1 (select 0 r__1 w__0 (halt w__0)))
+        );
+    }
+
+    #[test]
+    fn convert_primops() {
+        assert_eq!(
+            convert_program(mini_expr!(ineg int 1)),
+            cps_expr!(- (int 1) [w__0] [(halt w__0)])
         );
     }
 }
