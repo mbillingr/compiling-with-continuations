@@ -122,6 +122,11 @@ macro_rules! mini_expr {
             $crate::languages::common_primops::PrimOp::BoxSet)
     };
 
+    (=) => {
+        $crate::languages::mini_lambda::ast::Expr::Prim(
+            $crate::languages::common_primops::PrimOp::ISame)
+    };
+
     (ineg) => {
         $crate::languages::mini_lambda::ast::Expr::Prim(
             $crate::languages::common_primops::PrimOp::INeg)

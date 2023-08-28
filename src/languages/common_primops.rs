@@ -7,6 +7,7 @@ pub enum PrimOp {
     MkBox,
     BoxSet,
     BoxGet,
+    ISame,
     INeg,
     IAdd,
     ISub,
@@ -16,13 +17,7 @@ impl PrimOp {
     pub unsafe fn apply(&self, mut args: impl Iterator<Item = Answer>) -> Answer {
         use PrimOp::*;
         match self {
-            IsZero => {
-                if args.next().unwrap().repr() == 0 {
-                    Answer::from_bool(true)
-                } else {
-                    Answer::from_bool(false)
-                }
-            }
+            IsZero => Answer::from_bool(args.next().unwrap().repr() == 0),
             MkBox => Answer::from_ref(Ref::new(args.next().unwrap())),
             BoxGet => *args.next().unwrap().as_ref(),
             BoxSet => {
@@ -30,6 +25,9 @@ impl PrimOp {
                 let value = args.next().unwrap();
                 *the_box = value;
                 Answer::from_int(0)
+            }
+            ISame => {
+                Answer::from_bool(args.next().unwrap().as_int() == args.next().unwrap().as_int())
             }
             INeg => Answer::from_int(-args.next().unwrap().as_int()),
             IAdd => Answer::from_int(args.next().unwrap().as_int() + args.next().unwrap().as_int()),
@@ -44,6 +42,7 @@ impl PrimOp {
             MkBox => 1,
             BoxGet => 1,
             BoxSet => 2,
+            ISame => 2,
             INeg => 1,
             IAdd | ISub => 2,
         }
@@ -52,10 +51,11 @@ impl PrimOp {
     pub fn n_results(&self) -> usize {
         use PrimOp::*;
         match self {
-            IsZero => 1,
+            IsZero => 0,
             MkBox => 1,
             BoxGet => 1,
             BoxSet => 0,
+            ISame => 0,
             INeg => 1,
             IAdd | ISub => 1,
         }
@@ -64,7 +64,7 @@ impl PrimOp {
     pub fn is_branching(&self) -> bool {
         use PrimOp::*;
         match self {
-            IsZero => true,
+            IsZero | ISame => true,
             _ => false,
         }
     }

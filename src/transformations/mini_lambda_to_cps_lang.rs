@@ -43,20 +43,6 @@ impl Context {
                 )
             }
 
-            LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 && op.n_results() == 0 => {
-                self.convert(
-                    arg,
-                    Box::new(move |v| {
-                        CExpr::PrimOp(
-                            *op,
-                            Ref::array(vec![v]),
-                            Ref::array(vec![]),
-                            Ref::array(vec![Ref::new(c(CVal::Int(0)))]),
-                        )
-                    }),
-                )
-            }
-
             LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 && op.is_branching() => {
                 let k = self.gensym("k");
                 let x = self.gensym("x");
@@ -85,6 +71,20 @@ impl Context {
                 )
             }
 
+            LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 && op.n_results() == 0 => {
+                self.convert(
+                    arg,
+                    Box::new(move |v| {
+                        CExpr::PrimOp(
+                            *op,
+                            Ref::array(vec![v]),
+                            Ref::array(vec![]),
+                            Ref::array(vec![Ref::new(c(CVal::Int(0)))]),
+                        )
+                    }),
+                )
+            }
+
             LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 => {
                 let w = self.gensym("w");
                 self.convert(
@@ -98,6 +98,33 @@ impl Context {
                         )
                     }),
                 )
+            }
+
+            LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg)))
+                if op.n_args() > 1 && op.is_branching() =>
+            {
+                let k = self.gensym("k");
+                let x = self.gensym("x");
+                self.convert_sequence(*arg, move |a| {
+                    CExpr::Fix(
+                            Ref::array(vec![(k, Ref::array(vec![x]), Ref::new(c(CVal::Var(x))))]),
+                            Ref::new(CExpr::PrimOp(
+                                *op,
+                                a,
+                                Ref::array(vec![]),
+                                Ref::array(vec![
+                                    Ref::new(CExpr::App(
+                                        CVal::Var(k),
+                                        Ref::array(vec![CVal::Int(0)]),
+                                    )),
+                                    Ref::new(CExpr::App(
+                                        CVal::Var(k),
+                                        Ref::array(vec![CVal::Int(1)]),
+                                    )),
+                                ]),
+                            )),
+                        )
+                })
             }
 
             LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg)))
@@ -275,6 +302,10 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(is_zero int 2)),
             cps_expr!(fix k__0(x__1)=(halt x__1) in (is_zero (int 2) [] [(k__0 (int 0)) (k__0 (int 1))]))
+        );
+        assert_eq!(
+            convert_program(mini_expr!(= [(int 2) (int 3)])),
+            cps_expr!(fix k__0(x__1)=(halt x__1) in (= [(int 2) (int 3)] [] [(k__0 (int 0)) (k__0 (int 1))]))
         );
     }
 }

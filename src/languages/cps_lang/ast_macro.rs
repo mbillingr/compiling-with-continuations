@@ -98,11 +98,11 @@ macro_rules! cps_expr {
     };
 
     // unary neg
-    (is_zero $value:tt [$($var:ident)*] [$($cnt:tt)*]) => {
+    (is_zero $value:tt [] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(
             $crate::languages::common_primops::PrimOp::IsZero,
             cps_value_list!($value),
-            cps_ident_list!($($var)*),
+            cps_ident_list!(),
             cps_expr_list!($($cnt)*),
         )
     };
@@ -123,6 +123,17 @@ macro_rules! cps_expr {
             $crate::languages::common_primops::PrimOp::BoxSet,
             cps_value_list!($($values)*),
             cps_ident_list!($($var)*),
+            cps_expr_list!($($cnt)*),
+        )
+    };
+
+
+    // integer comparison
+    (= [$($values:tt)*] [] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::common_primops::PrimOp::ISame,
+            cps_value_list!($($values)*),
+            cps_ident_list!(),
             cps_expr_list!($($cnt)*),
         )
     };
