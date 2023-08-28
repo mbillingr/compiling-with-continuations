@@ -26,13 +26,16 @@ impl Context {
             LExpr::Var(v) => c(CVal::Var(*v)),
             LExpr::Int(i) => c(CVal::Int(*i)),
             LExpr::Real(r) => c(CVal::Real(*r)),
+
             LExpr::Record(fields) if fields.len() == 0 => c(CVal::Int(0)),
+
             LExpr::Record(fields) => {
                 let x = self.gensym("r");
                 self.convert_sequence(*fields, move |a| {
                     CExpr::Record(a, x, Ref::new(c(CVal::Var(x))))
                 })
             }
+
             LExpr::Select(idx, rec) => {
                 let idx = *idx;
                 let w = self.gensym("w");
@@ -41,23 +44,34 @@ impl Context {
                     Box::new(move |v| CExpr::Select(idx, v, w, Ref::new(c(CVal::Var(w))))),
                 )
             }
-            LExpr::App(func, arg) => match **func {
-                LExpr::Prim(LPrim::Unary(op)) => {
-                    let w = self.gensym("w");
-                    self.convert(
-                        arg,
-                        Box::new(move |v| {
-                            CExpr::PrimOp(
-                                CPrim::Unary(op),
-                                Ref::array(vec![v]),
-                                Ref::array(vec![w]),
-                                Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
-                            )
-                        }),
+
+            LExpr::App(Ref(LExpr::Prim(LPrim::Binary(op))), Ref(LExpr::Record(arg))) => {
+                let w = self.gensym("w");
+                self.convert_sequence(*arg, move |a| {
+                    CExpr::PrimOp(
+                        CPrim::Binary(*op),
+                        a,
+                        Ref::array(vec![w]),
+                        Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
                     )
-                }
-                _ => todo!("{:?}", expr),
-            },
+                })
+            }
+
+            LExpr::App(Ref(LExpr::Prim(LPrim::Unary(op))), arg) => {
+                let w = self.gensym("w");
+                self.convert(
+                    arg,
+                    Box::new(move |v| {
+                        CExpr::PrimOp(
+                            CPrim::Unary(*op),
+                            Ref::array(vec![v]),
+                            Ref::array(vec![w]),
+                            Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
+                        )
+                    }),
+                )
+            }
+
             LExpr::Prim(LPrim::Unary(op)) => {
                 let x = self.gensym("x");
                 self.convert(
@@ -71,6 +85,7 @@ impl Context {
                     c,
                 )
             }
+
             _ => todo!("{:?}", expr),
         }
     }
@@ -170,7 +185,7 @@ mod tests {
     }
 
     #[test]
-    fn convert_primops() {
+    fn convert_unary_primops() {
         assert_eq!(
             convert_program(mini_expr!(ineg int 1)),
             cps_expr!(- (int 1) [w__0] [(halt w__0)])
@@ -178,7 +193,15 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(ineg)),
             //cps_expr!(- (int 1) [w__0] [(halt w__0)])
-            todo!()
+            todo!("need to implement functions and calls")
         );
+    }
+
+    #[test]
+    fn convert_nary_primops() {
+        assert_eq!(
+            convert_program(mini_expr!(- [(int 2) (int 3)])),
+            cps_expr!(- [(int 2) (int 3)] [w__0] [(halt w__0)])
+        )
     }
 }

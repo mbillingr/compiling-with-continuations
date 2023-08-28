@@ -1,8 +1,8 @@
 use std::ops::Deref;
 
 #[derive(Debug, PartialEq)]
-// may contain a &'static T in the future
-pub struct Ref<T: ?Sized + 'static>(&'static T);
+// public field for pattern matching
+pub struct Ref<T: ?Sized + 'static>(pub &'static T);
 
 impl<T> Ref<T> {
     pub fn new(obj: T) -> Self {
