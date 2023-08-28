@@ -59,6 +59,11 @@ impl Answer {
         &*ptr
     }
 
+    pub unsafe fn as_mut<T>(self) -> &'static mut T {
+        let ptr: *mut T = std::mem::transmute(self.0);
+        &mut *ptr
+    }
+
     pub unsafe fn get_item(self, idx: isize) -> Answer {
         let fst: *const Answer = std::mem::transmute(self.0);
         *fst.offset(idx)

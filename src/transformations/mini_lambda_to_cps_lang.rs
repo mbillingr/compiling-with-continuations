@@ -43,6 +43,20 @@ impl Context {
                 )
             }
 
+            LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 && op.n_results() == 0 => {
+                self.convert(
+                    arg,
+                    Box::new(move |v| {
+                        CExpr::PrimOp(
+                            *op,
+                            Ref::array(vec![v]),
+                            Ref::array(vec![]),
+                            Ref::array(vec![Ref::new(c(CVal::Int(0)))]),
+                        )
+                    }),
+                )
+            }
+
             LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 => {
                 let w = self.gensym("w");
                 self.convert(
@@ -58,14 +72,15 @@ impl Context {
                 )
             }
 
-            LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg))) if op.n_args() > 1 => {
-                let w = self.gensym("w");
+            LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg)))
+                if op.n_args() > 1 && op.n_results() == 0 =>
+            {
                 self.convert_sequence(*arg, move |a| {
                     CExpr::PrimOp(
                         *op,
                         a,
-                        Ref::array(vec![w]),
-                        Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
+                        Ref::array(vec![]),
+                        Ref::array(vec![Ref::new(c(CVal::Int(0)))]),
                     )
                 })
             }
@@ -216,6 +231,14 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(-)),
             todo!("need to implement functions and calls")
+        );
+    }
+
+    #[test]
+    fn convert_side_effect_primops() {
+        assert_eq!(
+            convert_program(mini_expr!(set [(box (int 2)) (int 3)])),
+            cps_expr!(box (int 2) [w__0] [(set [w__0 (int 3)] [] [(halt (int 0))])])
         );
     }
 }

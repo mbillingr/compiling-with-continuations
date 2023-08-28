@@ -97,6 +97,27 @@ macro_rules! cps_expr {
         )
     };
 
+    // make box
+    (box $value:tt [$($var:ident)*] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::common_primops::PrimOp::MkBox,
+            cps_value_list!($value),
+            cps_ident_list!($($var)*),
+            cps_expr_list!($($cnt)*),
+        )
+    };
+
+    // modify box
+    (set [$($values:tt)*] [$($var:ident)*] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::common_primops::PrimOp::BoxSet,
+            cps_value_list!($($values)*),
+            cps_ident_list!($($var)*),
+            cps_expr_list!($($cnt)*),
+        )
+    };
+
+
     // binary sub
     (- [$($values:tt)*] [$($var:ident)*] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(
