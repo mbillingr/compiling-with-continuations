@@ -1,5 +1,4 @@
 use crate::core::reference::Ref;
-use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast as cps;
 use crate::languages::mini_lambda::ast;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -44,13 +43,13 @@ impl Context {
                 )
             }
 
-            LExpr::App(Ref(LExpr::Prim(PrimOp::Unary(op))), arg) => {
+            LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 => {
                 let w = self.gensym("w");
                 self.convert(
                     arg,
                     Box::new(move |v| {
                         CExpr::PrimOp(
-                            PrimOp::Unary(*op),
+                            *op,
                             Ref::array(vec![v]),
                             Ref::array(vec![w]),
                             Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
@@ -71,11 +70,11 @@ impl Context {
                 })
             }
 
-            LExpr::App(Ref(LExpr::Prim(PrimOp::Binary(op))), Ref(LExpr::Record(arg))) => {
+            LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg))) if op.n_args() > 1 => {
                 let w = self.gensym("w");
                 self.convert_sequence(*arg, move |a| {
                     CExpr::PrimOp(
-                        PrimOp::Binary(*op),
+                        *op,
                         a,
                         Ref::array(vec![w]),
                         Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
@@ -83,21 +82,18 @@ impl Context {
                 })
             }
 
-            LExpr::Prim(PrimOp::Unary(op)) => {
+            LExpr::Prim(op) if op.n_args() == 1 => {
                 let x = self.gensym("x");
                 self.convert(
                     &LExpr::Fn(
                         x,
-                        Ref::new(LExpr::App(
-                            LExpr::Prim(PrimOp::Unary(*op)).into(),
-                            LExpr::Var(x).into(),
-                        )),
+                        Ref::new(LExpr::App(LExpr::Prim(*op).into(), LExpr::Var(x).into())),
                     ),
                     c,
                 )
             }
 
-            LExpr::Prim(PrimOp::Binary(op)) => {
+            LExpr::Prim(op) if op.n_args() > 1 => {
                 todo!()
             }
 

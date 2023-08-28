@@ -1,76 +1,33 @@
 use crate::core::answer::Answer;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Unary {
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum PrimOp {
     INeg,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Binary {
     IAdd,
     ISub,
 }
 
-impl Unary {
-    pub fn apply(&self, x: Answer) -> Answer {
-        match self {
-            Unary::INeg => Answer::from_int(-x.as_int()),
-        }
-    }
-
-    pub fn n_args(&self) -> usize {
-        1
-    }
-    pub fn n_results(&self) -> usize {
-        match self {
-            Unary::INeg => 1,
-        }
-    }
-}
-
-impl Binary {
-    pub fn apply(&self, a: Answer, b: Answer) -> Answer {
-        match self {
-            Binary::IAdd => Answer::from_int(a.as_int() + b.as_int()),
-            Binary::ISub => Answer::from_int(a.as_int() - b.as_int()),
-        }
-    }
-
-    pub fn n_args(&self) -> usize {
-        2
-    }
-    pub fn n_results(&self) -> usize {
-        1
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum PrimOp {
-    Unary(Unary),
-    Binary(Binary),
-}
-
 impl PrimOp {
     pub fn apply(&self, mut args: impl Iterator<Item = Answer>) -> Answer {
+        use PrimOp::*;
         match self {
-            PrimOp::Unary(op) => op.apply(args.next().unwrap()),
-            PrimOp::Binary(op) => {
-                let a = args.next().unwrap();
-                let b = args.next().unwrap();
-                op.apply(a, b)
-            }
+            INeg => Answer::from_int(-args.next().unwrap().as_int()),
+            IAdd => Answer::from_int(args.next().unwrap().as_int() + args.next().unwrap().as_int()),
+            ISub => Answer::from_int(args.next().unwrap().as_int() - args.next().unwrap().as_int()),
         }
     }
     pub fn n_args(&self) -> usize {
+        use PrimOp::*;
         match self {
-            PrimOp::Unary(op) => op.n_args(),
-            PrimOp::Binary(op) => op.n_args(),
+            INeg => 1,
+            IAdd | ISub => 2,
         }
     }
     pub fn n_results(&self) -> usize {
+        use PrimOp::*;
         match self {
-            PrimOp::Unary(op) => op.n_results(),
-            PrimOp::Binary(op) => op.n_results(),
+            INeg => 1,
+            IAdd | ISub => 1,
         }
     }
 }
