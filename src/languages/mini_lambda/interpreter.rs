@@ -2,7 +2,7 @@ use crate::core::answer::Answer;
 use crate::core::env::Env;
 use crate::core::reference::Ref;
 use crate::languages::mini_lambda::ast;
-use crate::languages::mini_lambda::ast::{Con, ConRep, PrimOp};
+use crate::languages::mini_lambda::ast::{Con, ConRep};
 
 type Expr = ast::Expr<Ref<str>>;
 
@@ -60,13 +60,15 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
             }
 
             Expr::App(rator, rand) => match (&**rator, &**rand) {
-                (Expr::Prim(PrimOp::Unary(op)), _) => return op.apply(eval(&**rand, env)),
-                (Expr::Prim(PrimOp::Binary(op)), Expr::Record(args)) => {
-                    return op.apply(eval(&args[0], env), eval(&args[1], env))
+                (Expr::Prim(op), _) if op.n_args() == 1 => {
+                    return op.apply(std::iter::once(eval(&**rand, env)))
                 }
-                (Expr::Prim(PrimOp::Binary(op)), _) => {
+                (Expr::Prim(op), Expr::Record(args)) => {
+                    return op.apply((0..op.n_args()).map(|i| eval(&args[i], env)))
+                }
+                (Expr::Prim(op), _) => {
                     let arg = eval(rand, env);
-                    return op.apply(arg.get_item(0), arg.get_item(1));
+                    return op.apply((0..op.n_args()).map(|i| arg.get_item(i as isize)));
                 }
                 (Expr::Prim(op), _) => todo!("{:?}", expr),
                 _ => {

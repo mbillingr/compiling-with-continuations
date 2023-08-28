@@ -1,13 +1,12 @@
 use crate::core::reference::Ref;
+use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast as cps;
 use crate::languages::mini_lambda::ast;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 type LExpr = ast::Expr<Ref<str>>;
-type LPrim = ast::PrimOp;
 type CExpr = cps::Expr<Ref<str>>;
 type CVal = cps::Value<Ref<str>>;
-type CPrim = cps::PrimOp;
 
 struct Context {
     sym_ctr: AtomicUsize,
@@ -45,25 +44,13 @@ impl Context {
                 )
             }
 
-            LExpr::App(Ref(LExpr::Prim(LPrim::Binary(op))), Ref(LExpr::Record(arg))) => {
-                let w = self.gensym("w");
-                self.convert_sequence(*arg, move |a| {
-                    CExpr::PrimOp(
-                        CPrim::Binary(*op),
-                        a,
-                        Ref::array(vec![w]),
-                        Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
-                    )
-                })
-            }
-
-            LExpr::App(Ref(LExpr::Prim(LPrim::Unary(op))), arg) => {
+            LExpr::App(Ref(LExpr::Prim(PrimOp::Unary(op))), arg) => {
                 let w = self.gensym("w");
                 self.convert(
                     arg,
                     Box::new(move |v| {
                         CExpr::PrimOp(
-                            CPrim::Unary(*op),
+                            PrimOp::Unary(*op),
                             Ref::array(vec![v]),
                             Ref::array(vec![w]),
                             Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
@@ -72,18 +59,46 @@ impl Context {
                 )
             }
 
-            LExpr::Prim(LPrim::Unary(op)) => {
+            LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg))) if op.n_args() > 1 => {
+                let w = self.gensym("w");
+                self.convert_sequence(*arg, move |a| {
+                    CExpr::PrimOp(
+                        *op,
+                        a,
+                        Ref::array(vec![w]),
+                        Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
+                    )
+                })
+            }
+
+            LExpr::App(Ref(LExpr::Prim(PrimOp::Binary(op))), Ref(LExpr::Record(arg))) => {
+                let w = self.gensym("w");
+                self.convert_sequence(*arg, move |a| {
+                    CExpr::PrimOp(
+                        PrimOp::Binary(*op),
+                        a,
+                        Ref::array(vec![w]),
+                        Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
+                    )
+                })
+            }
+
+            LExpr::Prim(PrimOp::Unary(op)) => {
                 let x = self.gensym("x");
                 self.convert(
                     &LExpr::Fn(
                         x,
                         Ref::new(LExpr::App(
-                            LExpr::Prim(LPrim::Unary(*op)).into(),
+                            LExpr::Prim(PrimOp::Unary(*op)).into(),
                             LExpr::Var(x).into(),
                         )),
                     ),
                     c,
                 )
+            }
+
+            LExpr::Prim(PrimOp::Binary(op)) => {
+                todo!()
             }
 
             _ => todo!("{:?}", expr),
@@ -192,7 +207,6 @@ mod tests {
         );
         assert_eq!(
             convert_program(mini_expr!(ineg)),
-            //cps_expr!(- (int 1) [w__0] [(halt w__0)])
             todo!("need to implement functions and calls")
         );
     }
@@ -202,6 +216,10 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(- [(int 2) (int 3)])),
             cps_expr!(- [(int 2) (int 3)] [w__0] [(halt w__0)])
-        )
+        );
+        assert_eq!(
+            convert_program(mini_expr!(-)),
+            todo!("need to implement functions and calls")
+        );
     }
 }

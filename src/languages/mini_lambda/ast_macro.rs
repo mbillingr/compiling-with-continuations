@@ -109,19 +109,19 @@ macro_rules! mini_expr {
 
     (ineg) => {
         $crate::languages::mini_lambda::ast::Expr::Prim(
-            $crate::languages::mini_lambda::ast::PrimOp::Unary(
+            $crate::languages::common_primops::PrimOp::Unary(
                 $crate::languages::common_primops::Unary::INeg))
     };
 
     (-) => {
         $crate::languages::mini_lambda::ast::Expr::Prim(
-            $crate::languages::mini_lambda::ast::PrimOp::Binary(
+            $crate::languages::common_primops::PrimOp::Binary(
                 $crate::languages::common_primops::Binary::ISub))
     };
 
     (+) => {
         $crate::languages::mini_lambda::ast::Expr::Prim(
-            $crate::languages::mini_lambda::ast::PrimOp::Binary(
+            $crate::languages::common_primops::PrimOp::Binary(
                 $crate::languages::common_primops::Binary::IAdd))
     };
 
