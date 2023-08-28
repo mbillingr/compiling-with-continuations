@@ -80,23 +80,17 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
                 expr = &cnts[idx as usize];
             }
 
+            Expr::PrimOp(op, args, vars, cnts) if op.is_branching() => {
+                let x = (0..op.n_args()).map(|i| eval_val(&args[i], env));
+                let p = op.apply(x);
+                expr = &cnts[p.repr()];
+            }
+
             Expr::PrimOp(op, args, vars, cnts) => {
                 let x = (0..op.n_args()).map(|i| eval_val(&args[i], env));
                 env = env.extend(vars[0], op.apply(x));
                 expr = &cnts[0];
-            } /*
-              Expr::PrimOp(PrimOp::Unary(op), args, vars, cnts) => {
-                  let x = eval_val(&args[0], env);
-                  env = env.extend(vars[0], op.apply(x));
-                  expr = &cnts[0];
-              }
-
-              Expr::PrimOp(PrimOp::Binary(op), args, vars, cnts) => {
-                  let a = eval_val(&args[0], env);
-                  let b = eval_val(&args[1], env);
-                  env = env.extend(vars[0], op.apply(a, b));
-                  expr = &cnts[0];
-              }*/
+            }
         }
     }
 }

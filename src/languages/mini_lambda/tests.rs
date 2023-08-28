@@ -56,6 +56,9 @@ fn mutual_recursion() {
 #[test]
 fn primitive_application() {
     unsafe {
+        assert_eq!(exec(&mini_expr!(is_zero int 0)).as_int(), 1);
+        assert_eq!(exec(&mini_expr!(is_zero int 1)).as_int(), 0);
+        assert_eq!(exec(&mini_expr!(is_zero int 2)).as_int(), 0);
         assert_eq!(exec(&mini_expr!(ineg int 1)).as_int(), -1);
         assert_eq!(exec(&mini_expr!(- [(int 1) (int 3)])).as_int(), -2);
         assert_eq!(exec(&mini_expr!(+ [(int 1) (int 2)])).as_int(), 3);

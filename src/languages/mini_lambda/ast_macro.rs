@@ -107,6 +107,11 @@ macro_rules! mini_expr {
 
     (($($x:tt)+)) => { mini_expr!($($x)+) };
 
+    (is_zero) => {
+        $crate::languages::mini_lambda::ast::Expr::Prim(
+            $crate::languages::common_primops::PrimOp::IsZero)
+    };
+
     (box) => {
         $crate::languages::mini_lambda::ast::Expr::Prim(
             $crate::languages::common_primops::PrimOp::MkBox)

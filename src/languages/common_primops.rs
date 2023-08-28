@@ -3,6 +3,7 @@ use crate::core::reference::Ref;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PrimOp {
+    IsZero,
     MkBox,
     BoxSet,
     BoxGet,
@@ -15,6 +16,13 @@ impl PrimOp {
     pub unsafe fn apply(&self, mut args: impl Iterator<Item = Answer>) -> Answer {
         use PrimOp::*;
         match self {
+            IsZero => {
+                if args.next().unwrap().repr() == 0 {
+                    Answer::from_bool(true)
+                } else {
+                    Answer::from_bool(false)
+                }
+            }
             MkBox => Answer::from_ref(Ref::new(args.next().unwrap())),
             BoxGet => *args.next().unwrap().as_ref(),
             BoxSet => {
@@ -28,9 +36,11 @@ impl PrimOp {
             ISub => Answer::from_int(args.next().unwrap().as_int() - args.next().unwrap().as_int()),
         }
     }
+
     pub fn n_args(&self) -> usize {
         use PrimOp::*;
         match self {
+            IsZero => 1,
             MkBox => 1,
             BoxGet => 1,
             BoxSet => 2,
@@ -38,14 +48,24 @@ impl PrimOp {
             IAdd | ISub => 2,
         }
     }
+
     pub fn n_results(&self) -> usize {
         use PrimOp::*;
         match self {
+            IsZero => 1,
             MkBox => 1,
             BoxGet => 1,
             BoxSet => 0,
             INeg => 1,
             IAdd | ISub => 1,
+        }
+    }
+
+    pub fn is_branching(&self) -> bool {
+        use PrimOp::*;
+        match self {
+            IsZero => true,
+            _ => false,
         }
     }
 }

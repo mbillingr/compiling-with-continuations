@@ -97,6 +97,16 @@ macro_rules! cps_expr {
         )
     };
 
+    // unary neg
+    (is_zero $value:tt [$($var:ident)*] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::common_primops::PrimOp::IsZero,
+            cps_value_list!($value),
+            cps_ident_list!($($var)*),
+            cps_expr_list!($($cnt)*),
+        )
+    };
+
     // make box
     (box $value:tt [$($var:ident)*] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(

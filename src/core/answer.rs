@@ -7,6 +7,12 @@ impl Answer {
     pub fn from_int(i: i64) -> Self {
         unsafe { Answer(std::mem::transmute(i)) }
     }
+    pub fn from_bool(b: bool) -> Self {
+        match b {
+            true => Answer(1),
+            false => Answer(0),
+        }
+    }
 
     pub fn from_float(f: f64) -> Self {
         unsafe { Answer(std::mem::transmute(f)) }
@@ -36,6 +42,10 @@ impl Answer {
 
     pub fn maybe_pointer(&self) -> bool {
         (self.0 & 0x1) == 0
+    }
+
+    pub fn repr(&self) -> usize {
+        self.0
     }
 
     pub fn as_int(&self) -> i64 {
