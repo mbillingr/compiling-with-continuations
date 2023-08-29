@@ -36,7 +36,7 @@ impl<T> Ref<[T]> {
 
 #[macro_export]
 macro_rules! list {
-    ($($item:expr),*) => { $crate::core::reference::Ref::array(vec![$($item),*]) };
+    ($($item:expr),*$(,)?) => { $crate::core::reference::Ref::array(vec![$($item),*]) };
 }
 
 impl<T: ?Sized> Copy for Ref<T> {}
@@ -72,7 +72,6 @@ impl<T: ?Sized> Deref for Ref<T> {
         self.0
     }
 }
-
 
 impl<T: ?Sized + std::fmt::Debug> std::fmt::Debug for Ref<T> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {

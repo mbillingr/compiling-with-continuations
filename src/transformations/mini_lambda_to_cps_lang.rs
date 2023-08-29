@@ -74,21 +74,15 @@ impl Context {
                     arg,
                     Box::new(move |v| {
                         CExpr::Fix(
-                            Ref::array(vec![(k, Ref::array(vec![x]), Ref::new(c(CVal::Var(x))))]),
+                            list![(k, list![x], Ref::new(c(CVal::Var(x))))],
                             Ref::new(CExpr::PrimOp(
                                 *op,
-                                Ref::array(vec![v]),
-                                Ref::array(vec![]),
-                                Ref::array(vec![
-                                    Ref::new(CExpr::App(
-                                        CVal::Var(k),
-                                        Ref::array(vec![CVal::Int(0)]),
-                                    )),
-                                    Ref::new(CExpr::App(
-                                        CVal::Var(k),
-                                        Ref::array(vec![CVal::Int(1)]),
-                                    )),
-                                ]),
+                                list![v],
+                                list![],
+                                list![
+                                    Ref::new(CExpr::App(CVal::Var(k), list![CVal::Int(0)],)),
+                                    Ref::new(CExpr::App(CVal::Var(k), list![CVal::Int(1)],)),
+                                ],
                             )),
                         )
                     }),
@@ -99,12 +93,7 @@ impl Context {
                 self.convert(
                     arg,
                     Box::new(move |v| {
-                        CExpr::PrimOp(
-                            *op,
-                            Ref::array(vec![v]),
-                            Ref::array(vec![]),
-                            Ref::array(vec![Ref::new(c(CVal::Int(0)))]),
-                        )
+                        CExpr::PrimOp(*op, list![v], list![], list![Ref::new(c(CVal::Int(0)))])
                     }),
                 )
             }
@@ -114,12 +103,7 @@ impl Context {
                 self.convert(
                     arg,
                     Box::new(move |v| {
-                        CExpr::PrimOp(
-                            *op,
-                            Ref::array(vec![v]),
-                            Ref::array(vec![w]),
-                            Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
-                        )
+                        CExpr::PrimOp(*op, list![v], list![w], list![Ref::new(c(CVal::Var(w)))])
                     }),
                 )
             }
@@ -131,15 +115,15 @@ impl Context {
                 let x = self.gensym("x");
                 self.convert_sequence(*arg, move |a| {
                     CExpr::Fix(
-                        Ref::array(vec![(k, Ref::array(vec![x]), Ref::new(c(CVal::Var(x))))]),
+                        list![(k, list![x], Ref::new(c(CVal::Var(x))))],
                         Ref::new(CExpr::PrimOp(
                             *op,
                             a,
-                            Ref::array(vec![]),
-                            Ref::array(vec![
-                                Ref::new(CExpr::App(CVal::Var(k), Ref::array(vec![CVal::Int(0)]))),
-                                Ref::new(CExpr::App(CVal::Var(k), Ref::array(vec![CVal::Int(1)]))),
-                            ]),
+                            list![],
+                            list![
+                                Ref::new(CExpr::App(CVal::Var(k), list![CVal::Int(0)])),
+                                Ref::new(CExpr::App(CVal::Var(k), list![CVal::Int(1)])),
+                            ],
                         )),
                     )
                 })
@@ -149,24 +133,14 @@ impl Context {
                 if op.n_args() > 1 && op.n_results() == 0 =>
             {
                 self.convert_sequence(*arg, move |a| {
-                    CExpr::PrimOp(
-                        *op,
-                        a,
-                        Ref::array(vec![]),
-                        Ref::array(vec![Ref::new(c(CVal::Int(0)))]),
-                    )
+                    CExpr::PrimOp(*op, a, list![], list![Ref::new(c(CVal::Int(0)))])
                 })
             }
 
             LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg))) if op.n_args() > 1 => {
                 let w = self.gensym("w");
                 self.convert_sequence(*arg, move |a| {
-                    CExpr::PrimOp(
-                        *op,
-                        a,
-                        Ref::array(vec![w]),
-                        Ref::array(vec![Ref::new(c(CVal::Var(w)))]),
-                    )
+                    CExpr::PrimOp(*op, a, list![w], list![Ref::new(c(CVal::Var(w)))])
                 })
             }
 
@@ -213,6 +187,27 @@ impl Context {
             LExpr::DeCon(ConRep::Constant(_), _) => panic!("attempt to decon a constant"),
             LExpr::DeCon(ConRep::Tagged(_), r) => self.convert(&LExpr::Select(0, *r), c),
             LExpr::DeCon(ConRep::Transparent, x) => self.convert(x, c),
+
+            LExpr::Switch(cond, conreps, arms, default) => {
+                let cond = *cond;
+                let default = default.unwrap();
+                let k = self.gensym("k");
+                let x = self.gensym("x");
+                self.convert(
+                    &cond,
+                    Box::new(move |z| {
+                        self.convert(
+                            &default,
+                            Box::new(move |d| {
+                                CExpr::Fix(
+                                    list![(k, list![x], Ref::new(c(d)))],
+                                    Ref::new(CExpr::App(CVal::Var(k), list![z])),
+                                )
+                            }),
+                        )
+                    }),
+                )
+            }
 
             _ => todo!("{:?}", expr),
         }
@@ -289,10 +284,7 @@ mod tests {
     pub fn convert_program(expr: LExpr) -> CExpr {
         // for testing we need to generate symbols that are valid rust identifiers
         let ctx = Box::leak(Box::new(Context::new("__")));
-        ctx.convert(
-            &expr,
-            Box::new(|x| CExpr::App(CVal::Halt, Ref::array(vec![x]))),
-        )
+        ctx.convert(&expr, Box::new(|x| CExpr::App(CVal::Halt, list![x])))
     }
 
     #[test]
@@ -445,5 +437,13 @@ mod tests {
             convert_program(mini_expr!(decon transparent x)),
             cps_expr!(halt x)
         );
+    }
+
+    #[test]
+    fn switch_expressions() {
+        assert_eq!(
+            convert_program(mini_expr!(switch (int 0) [] [] (int 1))),
+            cps_expr!(fix k__0(x__1)=(halt (int 1)) in (k__0 (int 0)))
+        )
     }
 }
