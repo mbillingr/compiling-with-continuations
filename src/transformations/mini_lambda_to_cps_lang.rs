@@ -165,6 +165,24 @@ impl Context {
                 })
             }
 
+            LExpr::App(f, e) => {
+                let e = *e;
+                let r = self.gensym("r");
+                let x = self.gensym("x");
+                CExpr::Fix(
+                    list![(r, list![x], Ref::new(c(CVal::Var(x))))],
+                    Ref::new(self.convert(
+                        f,
+                        Box::new(move |fv| {
+                            self.convert(
+                                &e,
+                                Box::new(move |ev| CExpr::App(fv, list![ev, CVal::Var(r)])),
+                            )
+                        }),
+                    )),
+                )
+            }
+
             LExpr::Prim(op) if op.n_args() == 1 => {
                 let x = self.gensym("x");
                 self.convert(
@@ -327,6 +345,14 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(fun x = x)),
             cps_expr!(fix f__0(x k__1)=(k__1 x) in (halt f__0))
+        )
+    }
+
+    #[test]
+    fn application() {
+        assert_eq!(
+            convert_program(mini_expr!(f e)),
+            cps_expr!(fix r__0(x__1)=(halt x__1) in (f e r__0))
         )
     }
 }
