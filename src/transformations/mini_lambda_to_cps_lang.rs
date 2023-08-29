@@ -341,6 +341,14 @@ mod tests {
             convert_program(mini_expr!(ineg)),
             cps_expr!(fix f__1(x__0 k__2)=(- x__0 [w__3] [(k__2 w__3)]) in (halt f__1))
         );
+
+        assert_eq!(
+            convert_program(mini_expr!(is_zero)),
+            cps_expr!(
+                fix f__1(x__0 k__2)=(fix k__3(x__4)=(k__2 x__4)
+                                     in (is_zero x__0 [] [(k__3 (int 0)) (k__3 (int 1))]))
+                in (halt f__1))
+        );
     }
 
     #[test]

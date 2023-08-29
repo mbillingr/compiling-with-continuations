@@ -97,7 +97,7 @@ macro_rules! cps_expr {
         )
     };
 
-    // unary neg
+    // test for 0
     (is_zero $value:tt [] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(
             $crate::languages::common_primops::PrimOp::IsZero,
