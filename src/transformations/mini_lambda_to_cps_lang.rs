@@ -44,6 +44,10 @@ impl Context {
                 )
             }
 
+            LExpr::Fix(fnames, funcs, body) => {
+                CExpr::Fix(self.g(*fnames, *funcs), Ref::new(self.convert(body, c)))
+            }
+
             LExpr::Record(fields) if fields.len() == 0 => c(CVal::Int(0)),
 
             LExpr::Record(fields) => {
@@ -229,6 +233,35 @@ impl Context {
         }
     }
 
+    fn g(
+        &'static self,
+        fnames: Ref<[Ref<str>]>,
+        funcs: Ref<[LExpr]>,
+    ) -> Ref<[(Ref<str>, Ref<[Ref<str>]>, Ref<CExpr>)]> {
+        Ref::array(
+            fnames
+                .into_iter()
+                .zip(funcs.into_iter())
+                .map(|(h1, f)| match f {
+                    LExpr::Fn(v, b) => {
+                        let w = self.gensym("w");
+                        (
+                            *h1,
+                            list![*v, w],
+                            Ref::new(
+                                self.convert(
+                                    b,
+                                    Box::new(move |z| CExpr::App(CVal::Var(w), list![z])),
+                                ),
+                            ),
+                        )
+                    }
+                    _ => panic!("Invalid function {:?}", f),
+                })
+                .collect(),
+        )
+    }
+
     fn gensym(&self, name: &str) -> Ref<str> {
         let n = self.sym_ctr.fetch_add(1, Ordering::Relaxed);
         Ref::from(format!("{name}{}{}", self.sym_delim, n))
@@ -353,6 +386,18 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(f e)),
             cps_expr!(fix r__0(x__1)=(halt x__1) in (f e r__0))
+        )
+    }
+
+    #[test]
+    fn mutual_recursion() {
+        assert_eq!(
+            convert_program(mini_expr!(fix fun foo x = (bar x) fun bar y = y in z)),
+            cps_expr!(
+                fix foo(x w__0)=(fix r__1(x__2)=(w__0 x__2)
+                                 in (bar x r__1));
+                    bar(y w__3)=(w__3 y)
+                in (halt z))
         )
     }
 }
