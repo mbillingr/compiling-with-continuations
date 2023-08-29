@@ -1,6 +1,7 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast as cps;
 use crate::languages::mini_lambda::ast;
+use crate::list;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 type LExpr = ast::Expr<Ref<str>>;
@@ -24,6 +25,24 @@ impl Context {
             LExpr::Var(v) => c(CVal::Var(*v)),
             LExpr::Int(i) => c(CVal::Int(*i)),
             LExpr::Real(r) => c(CVal::Real(*r)),
+
+            LExpr::Fn(var, body) => {
+                let f = self.gensym("f");
+                let k = self.gensym("k");
+                CExpr::Fix(
+                    list![(
+                        f,
+                        list![*var, k],
+                        Ref::new(
+                            self.convert(
+                                body,
+                                Box::new(move |z| CExpr::App(CVal::Var(k), list![z]))
+                            )
+                        )
+                    )],
+                    Ref::new(c(CVal::Var(f))),
+                )
+            }
 
             LExpr::Record(fields) if fields.len() == 0 => c(CVal::Int(0)),
 
@@ -107,23 +126,17 @@ impl Context {
                 let x = self.gensym("x");
                 self.convert_sequence(*arg, move |a| {
                     CExpr::Fix(
-                            Ref::array(vec![(k, Ref::array(vec![x]), Ref::new(c(CVal::Var(x))))]),
-                            Ref::new(CExpr::PrimOp(
-                                *op,
-                                a,
-                                Ref::array(vec![]),
-                                Ref::array(vec![
-                                    Ref::new(CExpr::App(
-                                        CVal::Var(k),
-                                        Ref::array(vec![CVal::Int(0)]),
-                                    )),
-                                    Ref::new(CExpr::App(
-                                        CVal::Var(k),
-                                        Ref::array(vec![CVal::Int(1)]),
-                                    )),
-                                ]),
-                            )),
-                        )
+                        Ref::array(vec![(k, Ref::array(vec![x]), Ref::new(c(CVal::Var(x))))]),
+                        Ref::new(CExpr::PrimOp(
+                            *op,
+                            a,
+                            Ref::array(vec![]),
+                            Ref::array(vec![
+                                Ref::new(CExpr::App(CVal::Var(k), Ref::array(vec![CVal::Int(0)]))),
+                                Ref::new(CExpr::App(CVal::Var(k), Ref::array(vec![CVal::Int(1)]))),
+                            ]),
+                        )),
+                    )
                 })
             }
 
@@ -307,5 +320,13 @@ mod tests {
             convert_program(mini_expr!(= [(int 2) (int 3)])),
             cps_expr!(fix k__0(x__1)=(halt x__1) in (= [(int 2) (int 3)] [] [(k__0 (int 0)) (k__0 (int 1))]))
         );
+    }
+
+    #[test]
+    fn function_definition() {
+        assert_eq!(
+            convert_program(mini_expr!(fun x = x)),
+            cps_expr!(fix f__0(x k__1)=(k__1 x) in (halt f__0))
+        )
     }
 }

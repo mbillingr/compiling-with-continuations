@@ -33,6 +33,11 @@ impl<T> Ref<[T]> {
     }
 }
 
+#[macro_export]
+macro_rules! list {
+    ($($item:expr),*) => { $crate::core::reference::Ref::array(vec![$($item),*]) };
+}
+
 impl<T: ?Sized> Copy for Ref<T> {}
 
 impl<T: ?Sized> Clone for Ref<T> {
