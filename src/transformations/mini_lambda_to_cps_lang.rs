@@ -1,6 +1,7 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast as cps;
 use crate::languages::mini_lambda::ast;
+use crate::languages::mini_lambda::ast::ConRep;
 use crate::list;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -202,6 +203,13 @@ impl Context {
                 todo!()
             }
 
+            LExpr::Con(ConRep::Constant(i), _) => self.convert(&LExpr::Int(*i as i64), c),
+            LExpr::Con(ConRep::Tagged(i), x) => self.convert(
+                &LExpr::Record(list![(**x).clone(), LExpr::Int(*i as i64)]),
+                c,
+            ),
+            LExpr::Con(ConRep::Transparent, x) => self.convert(&*x, c),
+
             _ => todo!("{:?}", expr),
         }
     }
@@ -357,10 +365,6 @@ mod tests {
             convert_program(mini_expr!(- [(int 2) (int 3)])),
             cps_expr!(- [(int 2) (int 3)] [w__0] [(halt w__0)])
         );
-        assert_eq!(
-            convert_program(mini_expr!(-)),
-            todo!("need to implement functions and calls")
-        );
     }
 
     #[test]
@@ -409,5 +413,21 @@ mod tests {
                     bar(y w__3)=(w__3 y)
                 in (halt z))
         )
+    }
+
+    #[test]
+    fn data_constructors() {
+        assert_eq!(
+            convert_program(mini_expr!(con (const 7))),
+            cps_expr!(halt (int 7))
+        );
+        assert_eq!(
+            convert_program(mini_expr!(con (tag 5) real 99.9)),
+            cps_expr!(record [(real 99.9) (int 5)] r__0 (halt r__0))
+        );
+        assert_eq!(
+            convert_program(mini_expr!(con transparent real 99.9)),
+            cps_expr!(halt (real 99.9))
+        );
     }
 }

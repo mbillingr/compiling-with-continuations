@@ -80,7 +80,7 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
                 expr = &cnts[idx as usize];
             }
 
-            Expr::PrimOp(op, args, vars, cnts) if op.is_branching() => {
+            Expr::PrimOp(op, args, _, cnts) if op.is_branching() => {
                 let x = (0..op.n_args()).map(|i| eval_val(&args[i], env));
                 let p = op.apply(x);
                 expr = &cnts[p.repr()];
