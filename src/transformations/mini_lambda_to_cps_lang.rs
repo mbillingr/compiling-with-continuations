@@ -335,9 +335,11 @@ mod tests {
             convert_program(mini_expr!(ineg int 1)),
             cps_expr!(- (int 1) [w__0] [(halt w__0)])
         );
+
+        // mini_expr!(ineg) --> mini_expr!(fun x__0 = (ineg x__0))
         assert_eq!(
             convert_program(mini_expr!(ineg)),
-            todo!("need to implement functions and calls")
+            cps_expr!(fix f__1(x__0 k__2)=(- x__0 [w__3] [(k__2 w__3)]) in (halt f__1))
         );
     }
 
