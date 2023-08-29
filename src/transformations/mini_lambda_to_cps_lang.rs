@@ -1,7 +1,7 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast as cps;
 use crate::languages::mini_lambda::ast;
-use crate::languages::mini_lambda::ast::ConRep;
+use crate::languages::mini_lambda::ast::{Con, ConRep};
 use crate::list;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -189,28 +189,37 @@ impl Context {
             LExpr::DeCon(ConRep::Transparent, x) => self.convert(x, c),
 
             LExpr::Switch(cond, conreps, arms, default) => {
-                let cond = *cond;
+                let arms = *arms;
                 let default = default.unwrap();
                 let k = self.gensym("k");
                 let x = self.gensym("x");
-                self.convert(
-                    &cond,
-                    Box::new(move |z| {
-                        self.convert(
-                            &default,
-                            Box::new(move |d| {
-                                CExpr::Fix(
-                                    list![(k, list![x], Ref::new(c(d)))],
-                                    Ref::new(CExpr::App(CVal::Var(k), list![z])),
-                                )
-                            }),
-                        )
-                    }),
+                CExpr::Fix(
+                    list![(
+                        k,
+                        list![x],
+                        Ref::new(self.convert_switch(CVal::Var(x), arms, default, c))
+                    )],
+                    Ref::new(
+                        self.convert(cond, Box::new(move |x| CExpr::App(CVal::Var(k), list![x]))),
+                    ),
                 )
             }
 
             _ => todo!("{:?}", expr),
         }
+    }
+
+    fn convert_switch(
+        &'static self,
+        condval: CVal,
+        arms: Ref<[(Con, LExpr)]>,
+        default: Ref<LExpr>,
+        c: Box<dyn FnOnce(CVal) -> CExpr>,
+    ) -> CExpr {
+        if arms.is_empty() {
+            return self.convert(&default, c);
+        }
+        todo!()
     }
 
     fn convert_sequence(
@@ -442,8 +451,18 @@ mod tests {
     #[test]
     fn switch_expressions() {
         assert_eq!(
-            convert_program(mini_expr!(switch (int 0) [] [] (int 1))),
-            cps_expr!(fix k__0(x__1)=(halt (int 1)) in (k__0 (int 0)))
-        )
+            convert_program(mini_expr!(switch foo [] [] (int 1))),
+            cps_expr!(fix k__0(x__1)=(halt (int 1)) in (k__0 foo))
+        );
+        assert_eq!(
+            convert_program(mini_expr!(switch foo [] [(int 0) => (int 2)] (int 1))),
+            // k__0 is the continuation where the result of foo is bound to x__1, so we only evaluate it once.
+            // k__2 is the continuation "after" the switch; all arms pass their results to it.
+            cps_expr!(fix
+                k__0(x__1)=(fix
+                    k__2(x__3)=(halt x__3)
+                in (= [x__1 (int 0)] [] [(k__2 (int 1)) (k__2 (int 2))]))
+            in (k__0 foo))
+        );
     }
 }
