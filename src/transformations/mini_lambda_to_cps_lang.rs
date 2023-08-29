@@ -210,6 +210,10 @@ impl Context {
             ),
             LExpr::Con(ConRep::Transparent, x) => self.convert(&*x, c),
 
+            LExpr::DeCon(ConRep::Constant(_), _) => panic!("attempt to decon a constant"),
+            LExpr::DeCon(ConRep::Tagged(_), r) => self.convert(&LExpr::Select(0, *r), c),
+            LExpr::DeCon(ConRep::Transparent, x) => self.convert(x, c),
+
             _ => todo!("{:?}", expr),
         }
     }
@@ -428,6 +432,18 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(con transparent real 99.9)),
             cps_expr!(halt (real 99.9))
+        );
+    }
+
+    #[test]
+    fn data_deconstrutors() {
+        assert_eq!(
+            convert_program(mini_expr!(decon (tag 3) r)),
+            cps_expr!(select 0 r w__0 (halt w__0))
+        );
+        assert_eq!(
+            convert_program(mini_expr!(decon transparent x)),
+            cps_expr!(halt x)
         );
     }
 }
