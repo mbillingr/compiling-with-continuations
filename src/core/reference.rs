@@ -1,6 +1,7 @@
+use std::fmt::Formatter;
 use std::ops::Deref;
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 // public field for pattern matching
 pub struct Ref<T: ?Sized + 'static>(pub &'static T);
 
@@ -69,5 +70,12 @@ impl<T: ?Sized> Deref for Ref<T> {
 
     fn deref(&self) -> &Self::Target {
         self.0
+    }
+}
+
+
+impl<T: ?Sized + std::fmt::Debug> std::fmt::Debug for Ref<T> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
