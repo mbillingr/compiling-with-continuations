@@ -1,12 +1,18 @@
+use crate::core::ptr_tagging::make_tag;
 use crate::core::reference::Ref;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Answer(usize);
 
 impl Answer {
+    pub fn from_usize(x: usize) -> Self {
+        Answer(x)
+    }
+
     pub fn from_int(i: i64) -> Self {
         unsafe { Answer(std::mem::transmute(i)) }
     }
+
     pub fn from_bool(b: bool) -> Self {
         match b {
             true => Answer(1),
@@ -27,7 +33,7 @@ impl Answer {
     }
 
     pub fn tag(t: usize) -> Self {
-        Answer(t * 2 + 1)
+        Answer(make_tag(t))
     }
 
     pub fn tuple(fields: Vec<Answer>) -> Self {
@@ -45,6 +51,10 @@ impl Answer {
     }
 
     pub fn repr(&self) -> usize {
+        self.0
+    }
+
+    pub fn as_usize(&self) -> usize {
         self.0
     }
 

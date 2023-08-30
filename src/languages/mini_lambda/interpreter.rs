@@ -102,22 +102,22 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
             }
 
             Expr::Con(ConRep::Tagged(tag), val) => {
-                return Answer::tuple(vec![Answer::tag(*tag), eval(val, env)])
+                return Answer::tuple(vec![eval(val, env), Answer::from_usize(*tag)])
             }
 
             Expr::DeCon(ConRep::Tagged(tag), val) => {
                 let value = eval(val, env);
-                if value.get_item(0).as_tag() != *tag {
+                if value.get_item(1).as_usize() != *tag {
                     panic!(
                         "expected tag {}, but got {}",
                         tag,
-                        value.get_item(0).as_tag()
+                        value.get_item(1).as_usize()
                     )
                 }
-                return value.get_item(1);
+                return value.get_item(0);
             }
 
-            Expr::Con(ConRep::Constant(tag), _) => {
+            Expr::Con(ConRep::Constant(tag), _value) => {
                 // the value is ignored
                 return Answer::tag(*tag);
             }
@@ -159,7 +159,7 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
 unsafe fn matches(val: Answer, con: &Con) -> bool {
     match con {
         Con::Data(ConRep::Constant(tag)) => val.maybe_tag() && (val.as_tag() == *tag),
-        Con::Data(ConRep::Tagged(tag)) => val.maybe_pointer() && (val.get_item(0).as_tag() == *tag),
+        Con::Data(ConRep::Tagged(tag)) => val.maybe_pointer() && (val.get_item(1).as_usize() == *tag),
         Con::Data(ConRep::Transparent) => true,
         Con::Int(c) => val.as_int() == *c,
         Con::Real(c) => val.as_float() == *c,
