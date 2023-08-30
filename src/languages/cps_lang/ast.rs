@@ -1,7 +1,7 @@
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value<V: 'static> {
     Var(V),
     Label(V),

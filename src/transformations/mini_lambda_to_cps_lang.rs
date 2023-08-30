@@ -1,4 +1,5 @@
 use crate::core::reference::Ref;
+use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast as cps;
 use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
@@ -188,19 +189,29 @@ impl Context {
             LExpr::DeCon(ConRep::Tagged(_), r) => self.convert(&LExpr::Select(0, *r), c),
             LExpr::DeCon(ConRep::Transparent, x) => self.convert(x, c),
 
-            LExpr::Switch(cond, conreps, arms, default) => {
+            LExpr::Switch(cond, _conreps, arms, default) => {
                 let arms = *arms;
                 let default = default.unwrap();
                 let k = self.gensym("k");
                 let x = self.gensym("x");
+                let f = self.gensym("f");
+                let z = self.gensym("z");
                 CExpr::Fix(
-                    list![(
-                        k,
-                        list![x],
-                        Ref::new(self.convert_switch(CVal::Var(x), arms, default, c))
-                    )],
+                    list![
+                        (k, list![x], Ref::new(c(CVal::Var(x)))),
+                        (
+                            f,
+                            list![z],
+                            Ref::new(self.convert_switch(
+                                CVal::Var(z),
+                                arms,
+                                default,
+                                CVal::Var(k)
+                            ))
+                        )
+                    ],
                     Ref::new(
-                        self.convert(cond, Box::new(move |x| CExpr::App(CVal::Var(k), list![x]))),
+                        self.convert(cond, Box::new(move |z| CExpr::App(CVal::Var(f), list![z]))),
                     ),
                 )
             }
@@ -214,12 +225,35 @@ impl Context {
         condval: CVal,
         arms: Ref<[(Con, LExpr)]>,
         default: Ref<LExpr>,
-        c: Box<dyn FnOnce(CVal) -> CExpr>,
+        return_cont: CVal,
     ) -> CExpr {
         if arms.is_empty() {
-            return self.convert(&default, c);
+            return self.convert(
+                &default,
+                Box::new(move |z| CExpr::App(return_cont, list![z])),
+            );
         }
-        todo!()
+        let (test, branch) = &arms[0];
+
+        let else_cont = Ref::new(self.convert_switch(
+            condval.clone(),
+            Ref::slice(&arms.as_ref()[1..]),
+            default,
+            return_cont.clone(),
+        ));
+
+        let then_cont =
+            Ref::new(self.convert(branch, Box::new(move |z| CExpr::App(return_cont, list![z]))));
+
+        match test {
+            Con::Int(i) => CExpr::PrimOp(
+                PrimOp::ISame,
+                list![condval, CVal::Int(*i)],
+                list![],
+                list![else_cont, then_cont],
+            ),
+            _ => todo!("{:?}", test),
+        }
     }
 
     fn convert_sequence(
@@ -452,17 +486,30 @@ mod tests {
     fn switch_expressions() {
         assert_eq!(
             convert_program(mini_expr!(switch foo [] [] (int 1))),
-            cps_expr!(fix k__0(x__1)=(halt (int 1)) in (k__0 foo))
+            cps_expr!(fix 
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(k__0 (int 1))
+            in (f__2 foo))
         );
+
         assert_eq!(
             convert_program(mini_expr!(switch foo [] [(int 0) => (int 2)] (int 1))),
-            // k__0 is the continuation where the result of foo is bound to x__1, so we only evaluate it once.
-            // k__2 is the continuation "after" the switch; all arms pass their results to it.
+            // k__0 is the continuation "after" the switch; all arms pass their results to it.
+            // f__2 is the continuation where the value of foo is bound to z__3, so we only evaluate it once.
+            cps_expr!(fix 
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(= [z__3 (int 0)] [] [(k__0 (int 1)) (k__0 (int 2))])
+            in (f__2 foo))
+        );
+
+        assert_eq!(
+            convert_program(
+                mini_expr!(switch foo [] [(int 0) => (int 2); (int 7) => (int 3)] (int 1))
+            ),
             cps_expr!(fix
-                k__0(x__1)=(fix
-                    k__2(x__3)=(halt x__3)
-                in (= [x__1 (int 0)] [] [(k__2 (int 1)) (k__2 (int 2))]))
-            in (k__0 foo))
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(= [z__3 (int 0)] [] [(= [z__3 (int 7)] [] [(k__0 (int 1)) (k__0 (int 3))]) (k__0 (int 2))])
+            in (f__2 foo))
         );
     }
 }
