@@ -180,7 +180,9 @@ impl Context {
                 todo!()
             }
 
-            LExpr::Con(ConRep::Constant(ctag), _) => self.convert(&LExpr::Int(make_tag(*ctag) as i64), c),
+            LExpr::Con(ConRep::Constant(ctag), _) => {
+                self.convert(&LExpr::Int(make_tag(*ctag) as i64), c)
+            }
             LExpr::Con(ConRep::Tagged(tag), x) => self.convert(
                 &LExpr::Record(list![(**x).clone(), LExpr::Int(*tag as i64)]),
                 c,
@@ -191,26 +193,88 @@ impl Context {
             LExpr::DeCon(ConRep::Tagged(_), r) => self.convert(&LExpr::Select(0, *r), c),
             LExpr::DeCon(ConRep::Transparent, x) => self.convert(x, c),
 
-            LExpr::Switch(cond, _conreps, arms, default) => {
+            LExpr::Switch(cond, conreps, arms, default) => {
+                let mut matches_transparent = false;
+                let mut matches_constant = false;
+                let mut matches_tagged = false;
+                for arm in arms.iter() {
+                    match arm.0 {
+                        Con::Data(ConRep::Transparent) => matches_transparent = true,
+                        Con::Data(ConRep::Constant(_)) => matches_constant = true,
+                        Con::Data(ConRep::Tagged(_)) => matches_tagged = true,
+                        _ => {}
+                    }
+                }
+
+                if matches_transparent && (matches_constant || matches_tagged) {
+                    panic!("Invalid match: Transparent cannot be combined with other cases.")
+                }
+
                 let arms = *arms;
-                let default = default.unwrap_or_else(||Ref::new(LExpr::Panic("unspecified default case")));
+                let default =
+                    default.unwrap_or_else(|| Ref::new(LExpr::Panic("unspecified default case")));
                 let k = self.gensym("k");
                 let x = self.gensym("x");
                 let f = self.gensym("f");
                 let z = self.gensym("z");
+                let default_cont = self.convert(
+                    &default,
+                    Box::new(move |z| CExpr::App(CVal::Var(k), list![z])),
+                );
+
+                let actual_switch = if matches_constant && matches_tagged {
+                    todo!("pointer check and split")
+                } else if matches_constant {
+                    let max_idx = conreps
+                        .iter()
+                        .map(|cr| {
+                            if let ConRep::Constant(i) = cr {
+                                *i
+                            } else {
+                                unreachable!()
+                            }
+                        })
+                        .max()
+                        .unwrap();
+                    self.convert_switch_table(
+                        CVal::Var(z),
+                        max_idx,
+                        arms,
+                        Ref::new(default_cont),
+                        CVal::Var(k),
+                    )
+                } else if matches_tagged {
+                    let max_idx = conreps
+                        .iter()
+                        .map(|cr| {
+                            if let ConRep::Tagged(i) = cr {
+                                *i
+                            } else {
+                                unreachable!()
+                            }
+                        })
+                        .max()
+                        .unwrap();
+                    let t = self.gensym("t");
+                    CExpr::Select(
+                        1,
+                        CVal::Var(z),
+                        t,
+                        Ref::new(self.convert_switch_table(
+                            CVal::Var(t),
+                            max_idx,
+                            arms,
+                            Ref::new(default_cont),
+                            CVal::Var(k),
+                        )),
+                    )
+                } else {
+                    self.convert_switch_linear(CVal::Var(z), arms, default_cont, CVal::Var(k))
+                };
                 CExpr::Fix(
                     list![
                         (k, list![x], Ref::new(c(CVal::Var(x)))),
-                        (
-                            f,
-                            list![z],
-                            Ref::new(self.convert_switch(
-                                CVal::Var(z),
-                                arms,
-                                default,
-                                CVal::Var(k)
-                            ))
-                        )
+                        (f, list![z], Ref::new(actual_switch))
                     ],
                     Ref::new(
                         self.convert(cond, Box::new(move |z| CExpr::App(CVal::Var(f), list![z]))),
@@ -222,22 +286,43 @@ impl Context {
         }
     }
 
-    fn convert_switch(
+    fn convert_switch_table(
+        &'static self,
+        condval: CVal,
+        max_idx: usize,
+        arms: Ref<[(Con, LExpr)]>,
+        default: Ref<CExpr>,
+        return_cont: CVal,
+    ) -> CExpr {
+        let mut branches = vec![default; max_idx + 1];
+        // Iterating over arms in reverse order so that in case of duplicates the first takes
+        // precedence. This makes the behavior consistent with the interpreter.
+        for (check, br) in arms.iter().rev() {
+            let idx = match check {
+                Con::Int(i) => *i as usize,
+                Con::Data(ConRep::Constant(i)) => *i,
+                Con::Data(ConRep::Tagged(i)) => *i,
+                other => panic!("invalid condition for jump table: {:?}", other),
+            };
+            let rc = return_cont.clone();
+            branches[idx] = Ref::new(self.convert(br, Box::new(move |z| CExpr::App(rc, list![z]))));
+        }
+        CExpr::Switch(condval, Ref::array(branches))
+    }
+
+    fn convert_switch_linear(
         &'static self,
         condval: CVal,
         arms: Ref<[(Con, LExpr)]>,
-        default: Ref<LExpr>,
+        default: CExpr,
         return_cont: CVal,
     ) -> CExpr {
         if arms.is_empty() {
-            return self.convert(
-                &default,
-                Box::new(move |z| CExpr::App(return_cont, list![z])),
-            );
+            return default;
         }
         let (test, branch) = &arms[0];
 
-        let else_cont = self.convert_switch(
+        let else_cont = self.convert_switch_linear(
             condval.clone(),
             Ref::slice(&arms.as_ref()[1..]),
             default,
@@ -254,7 +339,6 @@ impl Context {
                 list![Ref::new(else_cont), Ref::new(then_cont)],
             ),
             Con::Data(ConRep::Tagged(tag)) => {
-                todo!("Need to safeguard against the case where a non-pointer value is checked");
                 let t = self.gensym("t");
                 CExpr::Select(
                     1,
@@ -355,9 +439,12 @@ impl Context {
 mod tests {
     use super::*;
 
-    use crate::{cps_expr, cps_expr_list, cps_ident_list, cps_value, cps_value_list, make_testsuite_for_mini_lambda, mini_expr};
     use crate::core::answer::Answer;
     use crate::languages::cps_lang;
+    use crate::{
+        cps_expr, cps_expr_list, cps_ident_list, cps_value, cps_value_list,
+        make_testsuite_for_mini_lambda, mini_expr,
+    };
 
     pub fn convert_program(expr: LExpr) -> CExpr {
         // for testing we need to generate symbols that are valid rust identifiers
@@ -497,7 +584,7 @@ mod tests {
     fn data_constructors() {
         assert_eq!(
             convert_program(mini_expr!(con (const 7))),
-            cps_expr!(halt (int 15))  // 7 represented to be distinguishable from ptrs
+            cps_expr!(halt (int 15)) // 7 represented to be distinguishable from ptrs
         );
         assert_eq!(
             convert_program(mini_expr!(con (tag 5) real 99.9)),
@@ -575,34 +662,30 @@ mod tests {
     }
 
     #[test]
-    fn switch_over_transparent() {
+    fn switch_over_datatypes() {
         assert_eq!(
-            convert_program(mini_expr!(switch foo [] [transparent => (int 2)] (int 1))),
+            convert_program(mini_expr!(switch foo [transparent] [transparent => (int 2)] (int 1))),
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
                 f__2(z__3)=(k__0 (int 2))
             in (f__2 foo))
         );
-    }
 
-    #[test]
-    fn switch_over_constant() {
         assert_eq!(
-            convert_program(mini_expr!(switch foo [] [(const 7) => (int 2)] (int 1))),
+            convert_program(
+                mini_expr!(switch foo [(const 0) (const 1) (const 2)] [(const 1) => (int 2)] (int 1))
+            ),
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
-                f__2(z__3)=(= [z__3 (int 15)] [] [(k__0 (int 1)) (k__0 (int 2))])  // 15 is the non-pointer tag corresponding to 7
+                f__2(z__3)=(switch z__3 [(k__0 (int 1)) (k__0 (int 2)) (k__0 (int 1))])
             in (f__2 foo))
         );
-    }
 
-    #[test]
-    fn switch_over_tagged() {
         assert_eq!(
-            convert_program(mini_expr!(switch foo [] [(tag 7) => (int 2)] (int 1))),
+            convert_program(mini_expr!(switch foo [(tag 0) (tag 1)] [(tag 0) => (int 2)] (int 1))),
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
-                f__2(z__3)=(select 1 z__3 t__4 (= [t__4 (int 7)] [] [(k__0 (int 1)) (k__0 (int 2))]))
+                f__2(z__3)=(select 1 z__3 t__4 (switch t__4 [(k__0 (int 2)) (k__0 (int 1))]))
             in (f__2 foo))
         );
     }
@@ -613,5 +696,4 @@ mod tests {
     }
 
     make_testsuite_for_mini_lambda!(run_in_cps);
-
 }
