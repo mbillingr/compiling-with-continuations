@@ -235,34 +235,37 @@ impl Context {
         }
         let (test, branch) = &arms[0];
 
-        let else_cont = Ref::new(self.convert_switch(
+        let else_cont = self.convert_switch(
             condval.clone(),
             Ref::slice(&arms.as_ref()[1..]),
             default,
             return_cont.clone(),
-        ));
+        );
 
         let then_cont =
-            Ref::new(self.convert(branch, Box::new(move |z| CExpr::App(return_cont, list![z]))));
+            self.convert(branch, Box::new(move |z| CExpr::App(return_cont, list![z])));
 
         match test {
+            Con::Data(ConRep::Transparent) => {
+                then_cont
+            }
             Con::Int(i) => CExpr::PrimOp(
                 PrimOp::ISame,
                 list![condval, CVal::Int(*i)],
                 list![],
-                list![else_cont, then_cont],
+                list![Ref::new(else_cont), Ref::new(then_cont)],
             ),
             Con::Real(f) => CExpr::PrimOp(
                 PrimOp::FSame,
                 list![condval, CVal::Real(*f)],
                 list![],
-                list![else_cont, then_cont],
+                list![Ref::new(else_cont), Ref::new(then_cont)],
             ),
             Con::String(s) => CExpr::PrimOp(
                 PrimOp::SSame,
                 list![condval, CVal::String(s.to_string().into())],
                 list![],
-                list![else_cont, then_cont],
+                list![Ref::new(else_cont), Ref::new(then_cont)],
             ),
             _ => todo!("{:?}", test),
         }
@@ -543,6 +546,17 @@ mod tests {
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
                 f__2(z__3)=(ssame [z__3 (str "bla")] [] [(k__0 (int 1)) (k__0 (int 2))])
+            in (f__2 foo))
+        );
+    }
+
+    #[test]
+    fn switch_over_transparent() {
+        assert_eq!(
+            convert_program(mini_expr!(switch foo [] [transparent => (int 2)] (int 1))),
+            cps_expr!(fix
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(k__0 (int 2))
             in (f__2 foo))
         );
     }
