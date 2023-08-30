@@ -12,6 +12,7 @@ pub enum PrimOp {
     IAdd,
     ISub,
     FSame,
+    SSame,
 }
 
 impl PrimOp {
@@ -36,6 +37,9 @@ impl PrimOp {
             FSame => Answer::from_bool(
                 args.next().unwrap().as_float() == args.next().unwrap().as_float(),
             ),
+            SSame => {
+                Answer::from_bool(args.next().unwrap().as_str() == args.next().unwrap().as_str())
+            }
         }
     }
 
@@ -50,6 +54,7 @@ impl PrimOp {
             INeg => 1,
             IAdd | ISub => 2,
             FSame => 2,
+            SSame => 2,
         }
     }
 
@@ -64,13 +69,14 @@ impl PrimOp {
             INeg => 1,
             IAdd | ISub => 1,
             FSame => 0,
+            SSame => 0,
         }
     }
 
     pub fn is_branching(&self) -> bool {
         use PrimOp::*;
         match self {
-            IsZero | ISame | FSame => true,
+            IsZero | ISame | FSame | SSame => true,
             _ => false,
         }
     }

@@ -12,6 +12,10 @@ macro_rules! cps_value {
         $crate::languages::cps_lang::ast::Value::Real($x)
     };
 
+    (str $x:expr) => {
+        $crate::languages::cps_lang::ast::Value::String($x.to_string().into())
+    };
+
     ($var:ident) => {
         $crate::languages::cps_lang::ast::Value::Var(stringify!($var).into())
     };
@@ -169,11 +173,20 @@ macro_rules! cps_expr {
         )
     };
 
-
     // float comparison
     (fsame [$($values:tt)*] [] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(
             $crate::languages::common_primops::PrimOp::FSame,
+            cps_value_list!($($values)*),
+            cps_ident_list!(),
+            cps_expr_list!($($cnt)*),
+        )
+    };
+
+    // string comparison
+    (ssame [$($values:tt)*] [] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::common_primops::PrimOp::SSame,
             cps_value_list!($($values)*),
             cps_ident_list!(),
             cps_expr_list!($($cnt)*),

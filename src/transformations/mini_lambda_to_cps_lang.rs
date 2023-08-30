@@ -258,6 +258,12 @@ impl Context {
                 list![],
                 list![else_cont, then_cont],
             ),
+            Con::String(s) => CExpr::PrimOp(
+                PrimOp::SSame,
+                list![condval, CVal::String(s.to_string().into())],
+                list![],
+                list![else_cont, then_cont],
+            ),
             _ => todo!("{:?}", test),
         }
     }
@@ -526,6 +532,17 @@ mod tests {
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
                 f__2(z__3)=(fsame [z__3 (real 0.0)] [] [(k__0 (int 1)) (k__0 (int 2))])
+            in (f__2 foo))
+        );
+    }
+
+    #[test]
+    fn switch_over_strings() {
+        assert_eq!(
+            convert_program(mini_expr!(switch foo [] [(str "bla") => (int 2)] (int 1))),
+            cps_expr!(fix
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(ssame [z__3 (str "bla")] [] [(k__0 (int 1)) (k__0 (int 2))])
             in (f__2 foo))
         );
     }
