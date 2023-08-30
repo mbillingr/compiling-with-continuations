@@ -198,10 +198,6 @@ impl Context {
                 CExpr::Fix(list![(f, list![r, k], exp)], Ref::new(c(CVal::Var(f))))
             }
 
-            LExpr::Prim(op) => {
-                todo!("{:?}", op)
-            }
-
             LExpr::Con(ConRep::Constant(ctag), _) => {
                 self.convert(&LExpr::Int(make_tag(*ctag) as i64), c)
             }
