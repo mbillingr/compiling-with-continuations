@@ -62,6 +62,10 @@ impl Answer {
         unsafe { std::mem::transmute(self.0) }
     }
 
+    pub fn as_bool(&self) -> bool {
+        self.0 != 0
+    }
+
     pub fn as_float(&self) -> f64 {
         unsafe { std::mem::transmute(self.0) }
     }

@@ -78,6 +78,8 @@ macro_rules! make_testsuite_for_mini_lambda {
                         -1
                     );
                     assert_eq!($runner(&mini_expr!(((fun f = fun x = f x) -) [(int 1) (int 3)])).as_int(), -2);
+                    assert_eq!($runner(&mini_expr!(((fun f = fun x = f x) =) [(int 0) (int 0)])).as_bool(), true);
+                    assert_eq!($runner(&mini_expr!(((fun f = fun x = f x) =) [(int 2) (int 3)])).as_bool(), false);
                 }
             }
 

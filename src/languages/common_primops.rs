@@ -1,5 +1,5 @@
 use crate::core::answer::Answer;
-use crate::core::ptr_tagging::{maybe_pointer};
+use crate::core::ptr_tagging::maybe_pointer;
 use crate::core::reference::Ref;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
