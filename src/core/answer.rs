@@ -84,3 +84,13 @@ impl Answer {
         Answer(std::mem::transmute(ptr.offset(idx)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn struct_sizes() {
+        assert_eq!(std::mem::size_of::<Answer>(), 8);
+    }
+}

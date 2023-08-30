@@ -78,3 +78,21 @@ impl<T: ?Sized + std::fmt::Debug> std::fmt::Debug for Ref<T> {
         self.0.fmt(f)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn struct_sizes() {
+        assert_eq!(std::mem::size_of::<Ref<()>>(), 8);
+        assert_eq!(std::mem::size_of::<Ref<i8>>(), 8);
+        assert_eq!(std::mem::size_of::<Ref<i64>>(), 8);
+        assert_eq!(std::mem::size_of::<Ref<i128>>(), 8);
+        assert_eq!(std::mem::size_of::<Ref<Vec<()>>>(), 8);
+        assert_eq!(std::mem::size_of::<Ref<String>>(), 8);
+
+        assert_eq!(std::mem::size_of::<Ref<[()]>>(), 16); // note that Ref now is a fatptr
+        assert_eq!(std::mem::size_of::<Ref<str>>(), 16); // note that Ref now is a fatptr
+    }
+}
