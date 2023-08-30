@@ -101,6 +101,16 @@ macro_rules! cps_expr {
         )
     };
 
+    // test for tagged or constant variant
+    (const_or_ptr $value:tt [] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::common_primops::PrimOp::CorP,
+            cps_value_list!($value),
+            cps_ident_list!(),
+            cps_expr_list!($($cnt)*),
+        )
+    };
+
     // test for 0
     (is_zero $value:tt [] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(

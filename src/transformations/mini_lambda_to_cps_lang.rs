@@ -223,51 +223,22 @@ impl Context {
                 );
 
                 let actual_switch = if matches_constant && matches_tagged {
-                    todo!("pointer check and split")
+                    let default_cont = Ref::new(default_cont);
+                    CExpr::PrimOp(
+                        PrimOp::CorP,
+                        list![CVal::Var(z)],
+                        list![],
+                        list![
+                            self.convert_switch_const_table(conreps, arms, k, z, default_cont)
+                                .into(),
+                            self.convert_switch_tag_table(conreps, arms, k, z, default_cont)
+                                .into()
+                        ],
+                    )
                 } else if matches_constant {
-                    let max_idx = conreps
-                        .iter()
-                        .map(|cr| {
-                            if let ConRep::Constant(i) = cr {
-                                *i
-                            } else {
-                                unreachable!()
-                            }
-                        })
-                        .max()
-                        .unwrap();
-                    self.convert_switch_table(
-                        CVal::Var(z),
-                        max_idx,
-                        arms,
-                        Ref::new(default_cont),
-                        CVal::Var(k),
-                    )
+                    self.convert_switch_const_table(conreps, arms, k, z, Ref::new(default_cont))
                 } else if matches_tagged {
-                    let max_idx = conreps
-                        .iter()
-                        .map(|cr| {
-                            if let ConRep::Tagged(i) = cr {
-                                *i
-                            } else {
-                                unreachable!()
-                            }
-                        })
-                        .max()
-                        .unwrap();
-                    let t = self.gensym("t");
-                    CExpr::Select(
-                        1,
-                        CVal::Var(z),
-                        t,
-                        Ref::new(self.convert_switch_table(
-                            CVal::Var(t),
-                            max_idx,
-                            arms,
-                            Ref::new(default_cont),
-                            CVal::Var(k),
-                        )),
-                    )
+                    self.convert_switch_tag_table(conreps, arms, k, z, Ref::new(default_cont))
                 } else {
                     self.convert_switch_linear(CVal::Var(z), arms, default_cont, CVal::Var(k))
                 };
@@ -286,6 +257,74 @@ impl Context {
         }
     }
 
+    fn convert_switch_const_table(
+        &'static self,
+        conreps: &Ref<[ConRep]>,
+        arms: Ref<[(Con, LExpr)]>,
+        k: Ref<str>,
+        z: Ref<str>,
+        default_cont: Ref<CExpr>,
+    ) -> CExpr {
+        self.convert_switch_table(
+            CVal::Var(z),
+            Self::max_const_idx(conreps),
+            arms,
+            default_cont,
+            CVal::Var(k),
+            true,
+            false,
+        )
+    }
+
+    fn convert_switch_tag_table(
+        &'static self,
+        conreps: &Ref<[ConRep]>,
+        arms: Ref<[(Con, LExpr)]>,
+        k: Ref<str>,
+        z: Ref<str>,
+        default_cont: Ref<CExpr>,
+    ) -> CExpr {
+        let t = self.gensym("t");
+        CExpr::Select(
+            1,
+            CVal::Var(z),
+            t,
+            Ref::new(self.convert_switch_table(
+                CVal::Var(t),
+                Self::max_tag_idx(conreps),
+                arms,
+                default_cont,
+                CVal::Var(k),
+                false,
+                true,
+            )),
+        )
+    }
+
+    fn max_const_idx(conreps: &Ref<[ConRep]>) -> usize {
+        let max_idx = conreps
+            .iter()
+            .filter_map(|cr| match cr {
+                ConRep::Constant(i) => Some(*i),
+                _ => None,
+            })
+            .max()
+            .unwrap();
+        max_idx
+    }
+
+    fn max_tag_idx(conreps: &Ref<[ConRep]>) -> usize {
+        let max_idx = conreps
+            .iter()
+            .filter_map(|cr| match cr {
+                ConRep::Tagged(i) => Some(*i),
+                _ => None,
+            })
+            .max()
+            .unwrap();
+        max_idx
+    }
+
     fn convert_switch_table(
         &'static self,
         condval: CVal,
@@ -293,6 +332,8 @@ impl Context {
         arms: Ref<[(Con, LExpr)]>,
         default: Ref<CExpr>,
         return_cont: CVal,
+        use_const: bool,
+        use_tags: bool,
     ) -> CExpr {
         let mut branches = vec![default; max_idx + 1];
         // Iterating over arms in reverse order so that in case of duplicates the first takes
@@ -300,9 +341,9 @@ impl Context {
         for (check, br) in arms.iter().rev() {
             let idx = match check {
                 Con::Int(i) => *i as usize,
-                Con::Data(ConRep::Constant(i)) => *i,
-                Con::Data(ConRep::Tagged(i)) => *i,
-                other => panic!("invalid condition for jump table: {:?}", other),
+                Con::Data(ConRep::Constant(i)) if use_const => *i,
+                Con::Data(ConRep::Tagged(i)) if use_tags => *i,
+                _ => continue,
             };
             let rc = return_cont.clone();
             branches[idx] = Ref::new(self.convert(br, Box::new(move |z| CExpr::App(rc, list![z]))));
@@ -686,6 +727,19 @@ mod tests {
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
                 f__2(z__3)=(select 1 z__3 t__4 (switch t__4 [(k__0 (int 2)) (k__0 (int 1))]))
+            in (f__2 foo))
+        );
+
+        assert_eq!(
+            convert_program(mini_expr!(switch foo [(const 0) (tag 0) (tag 1) (const 1)]
+                [(tag 0) => (int 2);
+                (const 0) => (int 3)]
+                (int 1))),
+            cps_expr!(fix
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(const_or_ptr z__3 [] [
+                    (switch z__3 [(k__0 (int 3)) (k__0 (int 1))])
+                    (select 1 z__3 t__4 (switch t__4 [(k__0 (int 2)) (k__0 (int 1))]))])
             in (f__2 foo))
         );
     }

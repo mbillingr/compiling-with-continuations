@@ -1,8 +1,10 @@
 use crate::core::answer::Answer;
+use crate::core::ptr_tagging::{maybe_pointer, maybe_tag};
 use crate::core::reference::Ref;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PrimOp {
+    CorP, // test for tagged or const datatype variants
     IsZero,
     MkBox,
     BoxSet,
@@ -19,6 +21,7 @@ impl PrimOp {
     pub unsafe fn apply(&self, mut args: impl Iterator<Item = Answer>) -> Answer {
         use PrimOp::*;
         match self {
+            CorP => Answer::from_bool(maybe_pointer(args.next().unwrap().repr())),
             IsZero => Answer::from_bool(args.next().unwrap().repr() == 0),
             MkBox => Answer::from_ref(Ref::new(args.next().unwrap())),
             BoxGet => *args.next().unwrap().as_ref(),
@@ -46,6 +49,7 @@ impl PrimOp {
     pub fn n_args(&self) -> usize {
         use PrimOp::*;
         match self {
+            CorP => 1,
             IsZero => 1,
             MkBox => 1,
             BoxGet => 1,
@@ -61,6 +65,7 @@ impl PrimOp {
     pub fn n_results(&self) -> usize {
         use PrimOp::*;
         match self {
+            CorP => 0,
             IsZero => 0,
             MkBox => 1,
             BoxGet => 1,
@@ -76,7 +81,7 @@ impl PrimOp {
     pub fn is_branching(&self) -> bool {
         use PrimOp::*;
         match self {
-            IsZero | ISame | FSame | SSame => true,
+            CorP | IsZero | ISame | FSame | SSame => true,
             _ => false,
         }
     }
