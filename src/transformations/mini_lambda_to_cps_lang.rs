@@ -252,6 +252,12 @@ impl Context {
                 list![],
                 list![else_cont, then_cont],
             ),
+            Con::Real(f) => CExpr::PrimOp(
+                PrimOp::FSame,
+                list![condval, CVal::Real(*f)],
+                list![],
+                list![else_cont, then_cont],
+            ),
             _ => todo!("{:?}", test),
         }
     }
@@ -483,7 +489,7 @@ mod tests {
     }
 
     #[test]
-    fn switch_expressions() {
+    fn switch_over_int() {
         assert_eq!(
             convert_program(mini_expr!(switch foo [] [] (int 1))),
             cps_expr!(fix 
@@ -509,6 +515,17 @@ mod tests {
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
                 f__2(z__3)=(= [z__3 (int 0)] [] [(= [z__3 (int 7)] [] [(k__0 (int 1)) (k__0 (int 3))]) (k__0 (int 2))])
+            in (f__2 foo))
+        );
+    }
+
+    #[test]
+    fn switch_over_real() {
+        assert_eq!(
+            convert_program(mini_expr!(switch foo [] [(real 0.0) => (int 2)] (int 1))),
+            cps_expr!(fix
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(fsame [z__3 (real 0.0)] [] [(k__0 (int 1)) (k__0 (int 2))])
             in (f__2 foo))
         );
     }

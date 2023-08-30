@@ -169,6 +169,17 @@ macro_rules! cps_expr {
         )
     };
 
+
+    // float comparison
+    (fsame [$($values:tt)*] [] [$($cnt:tt)*]) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::common_primops::PrimOp::FSame,
+            cps_value_list!($($values)*),
+            cps_ident_list!(),
+            cps_expr_list!($($cnt)*),
+        )
+    };
+
     ($fun:tt $($arg:tt)*) => {
         $crate::languages::cps_lang::ast::Expr::App(
             cps_value!($fun),
