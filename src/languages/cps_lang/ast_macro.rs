@@ -111,6 +111,16 @@ macro_rules! cps_expr {
         )
     };
 
+    // convert constant-tag back to integer
+    (untag $value:tt $var:ident $cnt:tt) => {
+        $crate::languages::cps_lang::ast::Expr::PrimOp(
+            $crate::languages::common_primops::PrimOp::Untag,
+            cps_value_list!($value),
+            cps_ident_list!($var),
+            cps_expr_list!($cnt),
+        )
+    };
+
     // test for 0
     (is_zero $value:tt [] [$($cnt:tt)*]) => {
         $crate::languages::cps_lang::ast::Expr::PrimOp(

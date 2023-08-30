@@ -4,7 +4,8 @@ use crate::core::reference::Ref;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PrimOp {
-    CorP, // test for tagged or const datatype variants
+    CorP,  // test for tagged or const datatype variants
+    Untag, // convert constant-tag back to plain integer
     IsZero,
     MkBox,
     BoxSet,
@@ -22,6 +23,7 @@ impl PrimOp {
         use PrimOp::*;
         match self {
             CorP => Answer::from_bool(maybe_pointer(args.next().unwrap().repr())),
+            Untag => Answer::from_bool(maybe_pointer(args.next().unwrap().repr())),
             IsZero => Answer::from_bool(args.next().unwrap().repr() == 0),
             MkBox => Answer::from_ref(Ref::new(args.next().unwrap())),
             BoxGet => *args.next().unwrap().as_ref(),
@@ -50,6 +52,7 @@ impl PrimOp {
         use PrimOp::*;
         match self {
             CorP => 1,
+            Untag => 1,
             IsZero => 1,
             MkBox => 1,
             BoxGet => 1,
@@ -66,6 +69,7 @@ impl PrimOp {
         use PrimOp::*;
         match self {
             CorP => 0,
+            Untag => 1,
             IsZero => 0,
             MkBox => 1,
             BoxGet => 1,

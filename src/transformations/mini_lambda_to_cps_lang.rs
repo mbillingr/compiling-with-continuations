@@ -265,14 +265,20 @@ impl Context {
         z: Ref<str>,
         default_cont: Ref<CExpr>,
     ) -> CExpr {
-        self.convert_switch_table(
-            CVal::Var(z),
-            Self::max_const_idx(conreps),
-            arms,
-            default_cont,
-            CVal::Var(k),
-            true,
-            false,
+        let t = self.gensym("t");
+        CExpr::PrimOp(
+            PrimOp::Untag,
+            list![CVal::Var(z)],
+            list![t],
+            list![Ref::new(self.convert_switch_table(
+                CVal::Var(t),
+                Self::max_const_idx(conreps),
+                arms,
+                default_cont,
+                CVal::Var(k),
+                true,
+                false,
+            ))],
         )
     }
 
@@ -718,7 +724,7 @@ mod tests {
             ),
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
-                f__2(z__3)=(switch z__3 [(k__0 (int 1)) (k__0 (int 2)) (k__0 (int 1))])
+                f__2(z__3)=(untag z__3 t__4 (switch t__4 [(k__0 (int 1)) (k__0 (int 2)) (k__0 (int 1))]))
             in (f__2 foo))
         );
 
@@ -738,8 +744,8 @@ mod tests {
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
                 f__2(z__3)=(const_or_ptr z__3 [] [
-                    (switch z__3 [(k__0 (int 3)) (k__0 (int 1))])
-                    (select 1 z__3 t__4 (switch t__4 [(k__0 (int 2)) (k__0 (int 1))]))])
+                    (untag z__3 t__4 (switch t__4 [(k__0 (int 3)) (k__0 (int 1))]))
+                    (select 1 z__3 t__5 (switch t__5 [(k__0 (int 2)) (k__0 (int 1))]))])
             in (f__2 foo))
         );
     }
