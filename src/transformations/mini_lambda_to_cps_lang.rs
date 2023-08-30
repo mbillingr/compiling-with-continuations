@@ -5,6 +5,7 @@ use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
 use crate::list;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use crate::core::ptr_tagging::make_tag;
 
 type LExpr = ast::Expr<Ref<str>>;
 type CExpr = cps::Expr<Ref<str>>;
@@ -242,13 +243,15 @@ impl Context {
             return_cont.clone(),
         );
 
-        let then_cont =
-            self.convert(branch, Box::new(move |z| CExpr::App(return_cont, list![z])));
-
+        let then_cont = self.convert(branch, Box::new(move |z| CExpr::App(return_cont, list![z])));
         match test {
-            Con::Data(ConRep::Transparent) => {
-                then_cont
-            }
+            Con::Data(ConRep::Transparent) => then_cont,
+            Con::Data(ConRep::Constant(ctag)) => CExpr::PrimOp(
+                PrimOp::ISame,
+                list![condval, CVal::Int(make_tag(*ctag) as i64)],
+                list![],
+                list![Ref::new(else_cont), Ref::new(then_cont)],
+            ),
             Con::Int(i) => CExpr::PrimOp(
                 PrimOp::ISame,
                 list![condval, CVal::Int(*i)],
@@ -557,6 +560,17 @@ mod tests {
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
                 f__2(z__3)=(k__0 (int 2))
+            in (f__2 foo))
+        );
+    }
+
+    #[test]
+    fn switch_over_constant() {
+        assert_eq!(
+            convert_program(mini_expr!(switch foo [] [(const 7) => (int 2)] (int 1))),
+            cps_expr!(fix
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(= [z__3 (int 15)] [] [(k__0 (int 1)) (k__0 (int 2))])  // 15 is the non-pointer tag corresponding to 7
             in (f__2 foo))
         );
     }
