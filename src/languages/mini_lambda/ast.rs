@@ -21,6 +21,7 @@ pub enum Expr<V: 'static> {
     Record(Ref<[Expr<V>]>),
     Select(isize, Ref<Expr<V>>),
     Prim(PrimOp),
+    Panic(&'static str),
 }
 
 #[derive(Debug, Copy, Clone)]

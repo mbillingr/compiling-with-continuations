@@ -4,7 +4,6 @@ use crate::languages::common_primops::PrimOp;
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value<V: 'static> {
     Var(V),
-    Label(V),
     Int(i64),
     Real(f64),
     String(Ref<String>),
@@ -22,4 +21,5 @@ pub enum Expr<V: 'static> {
     Fix(List<(V, List<V>, Ref<Expr<V>>)>, Ref<Expr<V>>),
     Switch(Value<V>, List<Ref<Expr<V>>>),
     PrimOp(PrimOp, List<Value<V>>, List<V>, List<Ref<Expr<V>>>),
+    Panic(&'static str),
 }

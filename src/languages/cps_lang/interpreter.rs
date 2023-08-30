@@ -91,6 +91,8 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
                 env = env.extend(vars[0], op.apply(x));
                 expr = &cnts[0];
             }
+
+            Expr::Panic(msg) => panic!("{}", msg),
         }
     }
 }
@@ -100,12 +102,12 @@ pub fn eval_val(val: &Value, env: Env) -> Answer {
         Value::Var(v) => env.lookup(v),
         Value::Int(x) => Answer::from_int(*x),
         Value::Real(x) => Answer::from_float(*x),
+        Value::String(s) => Answer::from_str(*s),
         Value::Halt => Answer::from_ref(Ref::new(Closure {
             captured_env: Env::Empty,
             params: Ref::array(vec!["x".into()]),
             body: Expr::App(Value::Halt, Ref::array(vec![Value::Var("x".into())])).into(),
         })),
-        _ => todo!("{:?}", val),
     }
 }
 

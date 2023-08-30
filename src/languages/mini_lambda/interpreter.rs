@@ -152,6 +152,8 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
                     body: Ref::new(Expr::App(expr.clone().into(), Expr::Var(var).into())),
                 }));
             }
+
+            Expr::Panic(msg) => panic!("{}", msg),
         }
     }
 }

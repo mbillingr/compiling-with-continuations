@@ -180,9 +180,9 @@ impl Context {
                 todo!()
             }
 
-            LExpr::Con(ConRep::Constant(i), _) => self.convert(&LExpr::Int(*i as i64), c),
-            LExpr::Con(ConRep::Tagged(i), x) => self.convert(
-                &LExpr::Record(list![(**x).clone(), LExpr::Int(*i as i64)]),
+            LExpr::Con(ConRep::Constant(ctag), _) => self.convert(&LExpr::Int(make_tag(*ctag) as i64), c),
+            LExpr::Con(ConRep::Tagged(tag), x) => self.convert(
+                &LExpr::Record(list![(**x).clone(), LExpr::Int(*tag as i64)]),
                 c,
             ),
             LExpr::Con(ConRep::Transparent, x) => self.convert(&*x, c),
@@ -193,7 +193,7 @@ impl Context {
 
             LExpr::Switch(cond, _conreps, arms, default) => {
                 let arms = *arms;
-                let default = default.unwrap();
+                let default = default.unwrap_or_else(||Ref::new(LExpr::Panic("unspecified default case")));
                 let k = self.gensym("k");
                 let x = self.gensym("x");
                 let f = self.gensym("f");
@@ -217,6 +217,8 @@ impl Context {
                     ),
                 )
             }
+
+            LExpr::Panic(msg) => CExpr::Panic(msg),
         }
     }
 
@@ -252,6 +254,7 @@ impl Context {
                 list![Ref::new(else_cont), Ref::new(then_cont)],
             ),
             Con::Data(ConRep::Tagged(tag)) => {
+                todo!("Need to safeguard against the case where a non-pointer value is checked");
                 let t = self.gensym("t");
                 CExpr::Select(
                     1,
@@ -352,7 +355,9 @@ impl Context {
 mod tests {
     use super::*;
 
-    use crate::{cps_expr, cps_expr_list, cps_ident_list, cps_value, cps_value_list, mini_expr};
+    use crate::{cps_expr, cps_expr_list, cps_ident_list, cps_value, cps_value_list, make_testsuite_for_mini_lambda, mini_expr};
+    use crate::core::answer::Answer;
+    use crate::languages::cps_lang;
 
     pub fn convert_program(expr: LExpr) -> CExpr {
         // for testing we need to generate symbols that are valid rust identifiers
@@ -492,7 +497,7 @@ mod tests {
     fn data_constructors() {
         assert_eq!(
             convert_program(mini_expr!(con (const 7))),
-            cps_expr!(halt (int 7))
+            cps_expr!(halt (int 15))  // 7 represented to be distinguishable from ptrs
         );
         assert_eq!(
             convert_program(mini_expr!(con (tag 5) real 99.9)),
@@ -601,4 +606,12 @@ mod tests {
             in (f__2 foo))
         );
     }
+
+    unsafe fn run_in_cps(mini_lambda_expr: &LExpr) -> Answer {
+        let cps_expr = convert_program(mini_lambda_expr.clone());
+        cps_lang::interpreter::exec(&cps_expr)
+    }
+
+    make_testsuite_for_mini_lambda!(run_in_cps);
+
 }
