@@ -28,6 +28,7 @@ impl Context {
             LExpr::Var(v) => c(CVal::Var(*v)),
             LExpr::Int(i) => c(CVal::Int(*i)),
             LExpr::Real(r) => c(CVal::Real(*r)),
+            LExpr::String(s) => c(CVal::String(*s)),
 
             LExpr::Fn(var, body) => {
                 let f = self.gensym("f");
@@ -175,7 +176,7 @@ impl Context {
                 )
             }
 
-            LExpr::Prim(op) if op.n_args() > 1 => {
+            LExpr::Prim(_op) => {
                 todo!()
             }
 
@@ -216,8 +217,6 @@ impl Context {
                     ),
                 )
             }
-
-            _ => todo!("{:?}", expr),
         }
     }
 
@@ -375,6 +374,10 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!((real 0.0))),
             cps_expr!(halt (real 0.0))
+        );
+        assert_eq!(
+            convert_program(mini_expr!((str "foo"))),
+            cps_expr!(halt (str "foo"))
         );
     }
 
