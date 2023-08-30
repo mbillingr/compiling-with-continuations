@@ -1,3 +1,4 @@
+use crate::core::ptr_tagging::make_tag;
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast as cps;
@@ -5,7 +6,6 @@ use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
 use crate::list;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::core::ptr_tagging::make_tag;
 
 type LExpr = ast::Expr<Ref<str>>;
 type CExpr = cps::Expr<Ref<str>>;
@@ -252,6 +252,20 @@ impl Context {
                 list![],
                 list![Ref::new(else_cont), Ref::new(then_cont)],
             ),
+            Con::Data(ConRep::Tagged(tag)) => {
+                let t = self.gensym("t");
+                CExpr::Select(
+                    1,
+                    condval,
+                    t,
+                    Ref::new(CExpr::PrimOp(
+                        PrimOp::ISame,
+                        list![CVal::Var(t), CVal::Int(*tag as i64)],
+                        list![],
+                        list![Ref::new(else_cont), Ref::new(then_cont)],
+                    )),
+                )
+            }
             Con::Int(i) => CExpr::PrimOp(
                 PrimOp::ISame,
                 list![condval, CVal::Int(*i)],
@@ -270,7 +284,6 @@ impl Context {
                 list![],
                 list![Ref::new(else_cont), Ref::new(then_cont)],
             ),
-            _ => todo!("{:?}", test),
         }
     }
 
@@ -571,6 +584,17 @@ mod tests {
             cps_expr!(fix
                 k__0(x__1)=(halt x__1);
                 f__2(z__3)=(= [z__3 (int 15)] [] [(k__0 (int 1)) (k__0 (int 2))])  // 15 is the non-pointer tag corresponding to 7
+            in (f__2 foo))
+        );
+    }
+
+    #[test]
+    fn switch_over_tagged() {
+        assert_eq!(
+            convert_program(mini_expr!(switch foo [] [(tag 7) => (int 2)] (int 1))),
+            cps_expr!(fix
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(select 1 z__3 t__4 (= [t__4 (int 7)] [] [(k__0 (int 1)) (k__0 (int 2))]))
             in (f__2 foo))
         );
     }

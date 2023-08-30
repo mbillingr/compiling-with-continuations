@@ -159,7 +159,9 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
 unsafe fn matches(val: Answer, con: &Con) -> bool {
     match con {
         Con::Data(ConRep::Constant(tag)) => val.maybe_tag() && (val.as_tag() == *tag),
-        Con::Data(ConRep::Tagged(tag)) => val.maybe_pointer() && (val.get_item(1).as_usize() == *tag),
+        Con::Data(ConRep::Tagged(tag)) => {
+            val.maybe_pointer() && (val.get_item(1).as_usize() == *tag)
+        }
         Con::Data(ConRep::Transparent) => true,
         Con::Int(c) => val.as_int() == *c,
         Con::Real(c) => val.as_float() == *c,
