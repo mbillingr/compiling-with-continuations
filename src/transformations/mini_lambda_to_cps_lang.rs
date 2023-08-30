@@ -176,8 +176,30 @@ impl Context {
                 )
             }
 
-            LExpr::Prim(_op) => {
-                todo!()
+            LExpr::Prim(op) => {
+                let f = self.gensym("f");
+                let r = self.gensym("r");
+                let k = self.gensym("k");
+                let w = self.gensym("w");
+
+                let arg_names: Vec<_> = (0..op.n_args()).map(|_| self.gensym("a")).collect();
+
+                let mut exp = Ref::new(CExpr::PrimOp(
+                    *op,
+                    Ref::array(arg_names.iter().copied().map(CVal::Var).collect()),
+                    list![w],
+                    list![Ref::new(CExpr::App(CVal::Var(k), list![CVal::Var(w)]))],
+                ));
+
+                for i in (0..op.n_args()).rev() {
+                    exp = Ref::new(CExpr::Select(i as isize, CVal::Var(r), arg_names[i], exp));
+                }
+
+                CExpr::Fix(list![(f, list![r, k], exp)], Ref::new(c(CVal::Var(f))))
+            }
+
+            LExpr::Prim(op) => {
+                todo!("{:?}", op)
             }
 
             LExpr::Con(ConRep::Constant(ctag), _) => {
@@ -576,6 +598,15 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(- [(int 2) (int 3)])),
             cps_expr!(- [(int 2) (int 3)] [w__0] [(halt w__0)])
+        );
+
+        assert_eq!(
+            convert_program(mini_expr!(-)),
+            cps_expr!(fix f__0(r__1 k__2)=
+                (select 0 r__1 a__4
+                    (select 1 r__1 a__5
+                        (- [a__4 a__5] [w__3] [(k__2 w__3)])))
+                in (halt f__0))
         );
     }
 
