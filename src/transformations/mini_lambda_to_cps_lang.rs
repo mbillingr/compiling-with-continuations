@@ -70,9 +70,22 @@ impl Context {
                 )
             }
 
-            LExpr::App(Ref(LExpr::Prim(PrimOp::CallCC)), arg) => todo!(),
+            LExpr::App(Ref(LExpr::Prim(PrimOp::CallCC)), arg) => {
+                let k = self.gensym("k");
+                let x = self.gensym("x");
+                CExpr::Fix(
+                    list![(k, list![x], Ref::new(c(CVal::Var(x))))],
+                    Ref::new(self.convert(
+                        arg,
+                        Box::new(move |f| CExpr::App(f, list![CVal::Var(k), CVal::Var(k)])),
+                    )),
+                )
+            }
 
-            LExpr::App(Ref(LExpr::Prim(PrimOp::Throw)), Ref(LExpr::Record(args))) => todo!(),
+            LExpr::App(Ref(LExpr::Prim(PrimOp::Throw)), Ref(LExpr::Record(args))) => self.convert(
+                &args[0],
+                Box::new(|k| self.convert(&args[1], Box::new(|v| CExpr::App(k, list![v])))),
+            ),
 
             LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 && op.is_branching() => {
                 let k = self.gensym("k");
@@ -794,7 +807,7 @@ mod tests {
             cps_expr!(
                 fix k__0(x__1)=(halt x__1)
                 in (fix f__2(k k__3)=(k__3 (int 42))
-                    in (f__2 k__2 k__2)))
+                    in (f__2 k__0 k__0)))
         );
 
         assert_eq!(

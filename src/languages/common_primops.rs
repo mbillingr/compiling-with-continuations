@@ -16,7 +16,7 @@ pub enum PrimOp {
     ISub,
     FSame,
     SSame,
-    CallCC,  // call with current continuation
+    CallCC, // call with current continuation
     Throw,  // throw a value to a continuation
 }
 
@@ -47,7 +47,9 @@ impl PrimOp {
             SSame => {
                 Answer::from_bool(args.next().unwrap().as_str() == args.next().unwrap().as_str())
             }
-            CallCC | Throw => panic!("Cannot apply continuation primitives. They need special CPS transformation.")
+            CallCC | Throw => panic!(
+                "Cannot apply continuation primitives. They need special CPS transformation."
+            ),
         }
     }
 
