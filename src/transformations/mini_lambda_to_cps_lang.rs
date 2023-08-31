@@ -70,6 +70,10 @@ impl Context {
                 )
             }
 
+            LExpr::App(Ref(LExpr::Prim(PrimOp::CallCC)), arg) => todo!(),
+
+            LExpr::App(Ref(LExpr::Prim(PrimOp::Throw)), Ref(LExpr::Record(args))) => todo!(),
+
             LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 && op.is_branching() => {
                 let k = self.gensym("k");
                 let x = self.gensym("x");
@@ -798,7 +802,7 @@ mod tests {
             cps_expr!(
                 (k (int 123))
             )
-        )
+        );
     }
 
     unsafe fn run_in_cps(mini_lambda_expr: &LExpr) -> Answer {
