@@ -142,5 +142,15 @@ macro_rules! mini_expr {
             $crate::languages::common_primops::PrimOp::IAdd)
     };
 
+    (callcc) => {
+        $crate::languages::mini_lambda::ast::Expr::Prim(
+            $crate::languages::common_primops::PrimOp::CallCC)
+    };
+
+    (throw) => {
+        $crate::languages::mini_lambda::ast::Expr::Prim(
+            $crate::languages::common_primops::PrimOp::Throw)
+    };
+
     ($var:ident) => { $crate::languages::mini_lambda::ast::Expr::Var(stringify!($var).into()) };
 }

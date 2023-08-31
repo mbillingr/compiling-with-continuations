@@ -783,6 +783,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn continuation_manipulation() {
+        assert_eq!(
+            convert_program(mini_expr!(callcc (fun k = (int 42)))),
+            cps_expr!(
+                fix k__0(x__1)=(halt x__1)
+                in (fix f__2(k k__3)=(k__3 (int 42))
+                    in (f__2 k__2 k__2)))
+        );
+
+        assert_eq!(
+            convert_program(mini_expr!(throw [k (int 123)])),
+            cps_expr!(
+                (k (int 123))
+            )
+        )
+    }
+
     unsafe fn run_in_cps(mini_lambda_expr: &LExpr) -> Answer {
         let cps_expr = convert_program(mini_lambda_expr.clone());
         cps_lang::interpreter::exec(&cps_expr)
