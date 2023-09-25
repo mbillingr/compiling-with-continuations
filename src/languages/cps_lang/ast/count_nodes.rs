@@ -1,48 +1,6 @@
-use crate::core::reference::Ref;
-use crate::languages::common_primops::PrimOp;
 use std::collections::HashMap;
+use crate::languages::cps_lang::ast::{Expr, Value};
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Value<V: 'static> {
-    Var(V),
-    Int(i64),
-    Real(f64),
-    String(Ref<String>),
-    Halt, // this represents a continuation that stops the program when called
-}
-
-type List<T> = Ref<[T]>;
-
-#[derive(Debug, PartialEq)]
-pub enum Expr<V: 'static> {
-    Record(List<(Value<V>, AccessPath)>, V, Ref<Expr<V>>),
-    Select(isize, Value<V>, V, Ref<Expr<V>>),
-    Offset(isize, Value<V>, V, Ref<Expr<V>>),
-    App(Value<V>, List<Value<V>>),
-    Fix(List<(V, List<V>, Ref<Expr<V>>)>, Ref<Expr<V>>),
-    Switch(Value<V>, List<Ref<Expr<V>>>),
-    PrimOp(PrimOp, List<Value<V>>, List<V>, List<Ref<Expr<V>>>),
-    Panic(&'static str),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum AccessPath {
-    Ref(isize),
-    Sel(isize, Ref<AccessPath>),
-}
-
-impl<V> Value<V> {
-    pub fn count_nodes(&self) -> HashMap<&'static str, usize> {
-        let key = match self {
-            Value::Var(_) => "var",
-            Value::Int(_) => "int",
-            Value::Real(_) => "real",
-            Value::String(_) => "string",
-            Value::Halt => "halt",
-        };
-        inc(key, Default::default())
-    }
-}
 impl<V> Expr<V> {
     pub fn count_nodes(&self) -> HashMap<&'static str, usize> {
         match self {
@@ -103,7 +61,7 @@ impl<V> Expr<V> {
     }
 }
 
-fn inc(
+pub fn inc(
     key: &'static str,
     mut counts: HashMap<&'static str, usize>,
 ) -> HashMap<&'static str, usize> {
@@ -119,4 +77,17 @@ fn add(
         *this.entry(k).or_insert(0) += c;
     }
     this
+}
+
+impl<V> Value<V> {
+    pub fn count_nodes(&self) -> HashMap<&'static str, usize> {
+        let key = match self {
+            Value::Var(_) => "var",
+            Value::Int(_) => "int",
+            Value::Real(_) => "real",
+            Value::String(_) => "string",
+            Value::Halt => "halt",
+        };
+        inc(key, Default::default())
+    }
 }
