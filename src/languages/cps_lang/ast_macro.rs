@@ -110,7 +110,10 @@ macro_rules! cps_expr {
     };
 
     (fix in $cnt:tt) => {
-        cps_expr!($cnt)
+        $crate::languages::cps_lang::ast::Expr::Fix(
+            $crate::core::reference::Ref::array(vec![]),
+            cps_expr!($cnt).into()
+        )
     };
 
     (fix $($name:ident($($arg:ident)*)=$body:tt);+ in $cnt:tt) => {

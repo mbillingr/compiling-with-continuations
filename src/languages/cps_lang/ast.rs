@@ -25,7 +25,7 @@ pub enum Expr<V: 'static> {
     Panic(&'static str),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AccessPath {
     Ref(isize),
     Sel(isize, Ref<AccessPath>),
