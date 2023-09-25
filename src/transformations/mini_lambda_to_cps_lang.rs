@@ -6,24 +6,13 @@ use crate::languages::cps_lang::ast::AccessPath;
 use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
 use crate::list;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use crate::transformations::Context;
 
 type LExpr = ast::Expr<Ref<str>>;
 type CExpr = cps::Expr<Ref<str>>;
 type CVal = cps::Value<Ref<str>>;
 
-struct Context {
-    sym_ctr: AtomicUsize,
-    sym_delim: &'static str,
-}
-
 impl Context {
-    pub fn new(sym_delim: &'static str) -> Self {
-        Context {
-            sym_ctr: AtomicUsize::new(0),
-            sym_delim,
-        }
-    }
     pub fn convert(&'static self, expr: &LExpr, c: Box<dyn FnOnce(CVal) -> CExpr>) -> CExpr {
         match expr {
             LExpr::Var(v) => c(CVal::Var(*v)),
@@ -513,11 +502,6 @@ impl Context {
                 })
                 .collect(),
         )
-    }
-
-    fn gensym(&self, name: &str) -> Ref<str> {
-        let n = self.sym_ctr.fetch_add(1, Ordering::Relaxed);
-        Ref::from(format!("{name}{}{}", self.sym_delim, n))
     }
 }
 
