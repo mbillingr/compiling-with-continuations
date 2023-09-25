@@ -528,8 +528,8 @@ mod tests {
     use crate::core::answer::Answer;
     use crate::languages::cps_lang;
     use crate::{
-        cps_expr, cps_expr_list, cps_field_list, cps_ident_list, cps_value, cps_value_list,
-        make_testsuite_for_mini_lambda, mini_expr,
+        cps_expr, cps_expr_list, cps_field, cps_field_list, cps_ident_list, cps_value,
+        cps_value_list, make_testsuite_for_mini_lambda, mini_expr,
     };
 
     pub fn convert_program(expr: LExpr) -> CExpr {

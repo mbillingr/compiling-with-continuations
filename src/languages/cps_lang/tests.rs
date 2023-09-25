@@ -39,6 +39,17 @@ fn test_record() {
         assert_eq!(rec.get_item(0).as_int(), 1);
         assert_eq!(rec.get_item(1).as_int(), 20);
         assert_eq!(rec.get_item(2).as_int(), 300);
+
+        let rec =
+            exec(&cps_expr!(record [(int 1) (int 20) (int 300)] r (record [(@ 1 r)] s (halt s))));
+        assert_eq!(rec.get_item(0).as_int(), 20);
+
+        let rec = exec(
+            &cps_expr!(record [(int 1) (int 20) (int 300)] r (record [(.. 1 r) (int 99)] s (halt s))),
+        );
+        assert_eq!(rec.get_item(0).get_item(0).as_int(), 20);
+        assert_eq!(rec.get_item(0).get_item(1).as_int(), 300);
+        assert_eq!(rec.get_item(1).as_int(), 99);
     }
 }
 

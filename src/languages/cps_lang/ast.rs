@@ -28,7 +28,7 @@ pub enum Expr<V: 'static> {
 #[derive(Debug, PartialEq)]
 pub enum AccessPath {
     Ref(isize),
-    Sel(isize),
+    Sel(isize, Ref<AccessPath>),
 }
 
 impl<V> Value<V> {

@@ -26,9 +26,32 @@ macro_rules! cps_value {
 }
 
 #[macro_export]
+macro_rules! cps_field {
+    ((@ $idx:tt $item:tt)) => {{
+        let (v, ap) = cps_field!($item);
+        (
+            v,
+            $crate::languages::cps_lang::ast::AccessPath::Sel($idx, ap.into()),
+        )
+    }};
+
+    ((.. $idx:tt $item:tt)) => {{
+        let (v, _) = cps_field!($item);
+        (v, $crate::languages::cps_lang::ast::AccessPath::Ref($idx))
+    }};
+
+    ($item:tt) => {
+        (
+            cps_value!($item),
+            $crate::languages::cps_lang::ast::AccessPath::Ref(0),
+        )
+    };
+}
+
+#[macro_export]
 macro_rules! cps_field_list {
     ($($item:tt)*) => {
-        $crate::core::reference::Ref::array(vec![$((cps_value!($item), $crate::languages::cps_lang::ast::AccessPath::Ref(0))),*])
+        $crate::core::reference::Ref::array(vec![$(cps_field!($item)),*])
     };
 }
 

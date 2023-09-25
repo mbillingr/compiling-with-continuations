@@ -112,11 +112,11 @@ pub fn eval_val(val: &Value, env: Env) -> Answer {
     }
 }
 
-fn resolve_accesspath(val: Answer, ap: &ast::AccessPath) -> Answer {
+unsafe fn resolve_accesspath(val: Answer, ap: &ast::AccessPath) -> Answer {
     match ap {
         ast::AccessPath::Ref(0) => val,
-        ast::AccessPath::Ref(_) => todo!(),
-        ast::AccessPath::Sel(_) => todo!(),
+        ast::AccessPath::Ref(i) => val.ptr_offset(*i),
+        ast::AccessPath::Sel(i, ap) => resolve_accesspath(val.get_item(*i), ap),
     }
 }
 
