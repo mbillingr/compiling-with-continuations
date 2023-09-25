@@ -18,7 +18,7 @@ fn eta_reduce<V: Clone + PartialEq>(exp: &Expr<V>) -> Expr<V> {
                                 Value::Var(x) => x == p,
                                 _ => false,
                             }) {
-                                body = substitute_expr(f, g, &body).into();
+                                body = body.substitute_var(f, g).into();
                                 continue;
                             }
                         }
@@ -32,45 +32,6 @@ fn eta_reduce<V: Clone + PartialEq>(exp: &Expr<V>) -> Expr<V> {
         }
         _ => todo!(),
     }
-}
-
-fn substitute_expr<V: Clone + PartialEq>(var: &V, val: &Value<V>, expr: &Expr<V>) -> Expr<V> {
-    match expr {
-        Expr::Record(fs, r, c) => {
-            let fs = fs
-                .iter()
-                .map(|(v, ap)| (substitute_val(var, val, v), ap.clone()));
-            if r == var {
-                Expr::Record(Ref::array(fs.collect()), r.clone(), *c)
-            } else {
-                Expr::Record(
-                    Ref::array(fs.collect()),
-                    r.clone(),
-                    substitute_expr(var, val, c).into(),
-                )
-            }
-        }
-        Expr::App(rator, rands) => Expr::App(
-            substitute_val(var, val, rator),
-            substitute_vals(var, val, rands.iter()),
-        ),
-        _ => todo!(),
-    }
-}
-
-fn substitute_val<V: Clone + PartialEq>(var: &V, val: &Value<V>, original: &Value<V>) -> Value<V> {
-    match original {
-        Value::Var(v) if v == var => val.clone(),
-        _ => original.clone(),
-    }
-}
-
-fn substitute_vals<'a, V: Clone + PartialEq>(
-    var: &V,
-    val: &Value<V>,
-    vals: impl Iterator<Item = &'a Value<V>>,
-) -> Ref<[Value<V>]> {
-    Ref::array(vals.map(|v| substitute_val(var, val, v)).collect())
 }
 
 #[cfg(test)]
