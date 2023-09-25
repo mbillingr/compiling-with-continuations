@@ -1,6 +1,28 @@
 use crate::core::answer::Answer;
 use crate::core::env::Env;
+use crate::languages::cps_lang::ast::Expr;
 use crate::languages::cps_lang::interpreter::{eval_expr, exec};
+
+#[test]
+fn count_subexprs() {
+    let x: Expr<&'static str> = cps_expr!(fix
+                k__0(x__1)=(halt x__1);
+                f__2(z__3)=(const_or_ptr z__3 [] [
+                    (untag z__3 t__4 (switch t__4 [(k__0 (int 3)) (k__0 (int 1))]))
+                    (select 1 z__3 t__5 (switch t__5 [(k__0 (int 2)) (k__0 (int 1))]))])
+            in (f__2 foo));
+
+    let c = x.count_nodes();
+
+    assert_eq!(c["app"], 6);
+    assert_eq!(c["fix"], 1);
+    assert_eq!(c["halt"], 1);
+    assert_eq!(c["int"], 4);
+    assert_eq!(c["primop"], 2);
+    assert_eq!(c["select"], 1);
+    assert_eq!(c["switch"], 2);
+    assert_eq!(c["var"], 12);
+}
 
 #[test]
 fn test_halt() {
