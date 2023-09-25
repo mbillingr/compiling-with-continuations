@@ -26,6 +26,13 @@ macro_rules! cps_value {
 }
 
 #[macro_export]
+macro_rules! cps_field_list {
+    ($($item:tt)*) => {
+        $crate::core::reference::Ref::array(vec![$((cps_value!($item), $crate::languages::cps_lang::ast::AccessPath::Ref(0))),*])
+    };
+}
+
+#[macro_export]
 macro_rules! cps_value_list {
     ($($item:tt)*) => {
         $crate::core::reference::Ref::array(vec![$(cps_value!($item)),*])
@@ -55,7 +62,7 @@ macro_rules! cps_expr {
 
     (record [$($values:tt)*] $var:ident $cnt:tt) => {
         $crate::languages::cps_lang::ast::Expr::Record(
-            cps_value_list!($($values)*),
+            cps_field_list!($($values)*),
             stringify!($var).into(),
             cps_expr!($cnt).into(),
         )

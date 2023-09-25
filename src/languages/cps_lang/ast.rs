@@ -15,7 +15,7 @@ type List<T> = Ref<[T]>;
 
 #[derive(Debug, PartialEq)]
 pub enum Expr<V: 'static> {
-    Record(List<Value<V>>, V, Ref<Expr<V>>),
+    Record(List<(Value<V>, AccessPath)>, V, Ref<Expr<V>>),
     Select(isize, Value<V>, V, Ref<Expr<V>>),
     Offset(isize, Value<V>, V, Ref<Expr<V>>),
     App(Value<V>, List<Value<V>>),
@@ -23,6 +23,12 @@ pub enum Expr<V: 'static> {
     Switch(Value<V>, List<Ref<Expr<V>>>),
     PrimOp(PrimOp, List<Value<V>>, List<V>, List<Ref<Expr<V>>>),
     Panic(&'static str),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum AccessPath {
+    Ref(isize),
+    Sel(isize),
 }
 
 impl<V> Value<V> {
@@ -45,6 +51,7 @@ impl<V> Expr<V> {
                 add(
                     c.count_nodes(),
                     fs.iter()
+                        .map(|(v, _)| v)
                         .map(Value::count_nodes)
                         .reduce(add)
                         .unwrap_or_default(),

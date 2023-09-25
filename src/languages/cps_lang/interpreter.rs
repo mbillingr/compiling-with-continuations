@@ -15,8 +15,9 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
         match expr {
             Expr::Record(items, outvar, cnt) => {
                 let mut data = Vec::with_capacity(items.len());
-                for item in &**items {
-                    data.push(eval_val(item, env));
+                for (item, ap) in &**items {
+                    let val = eval_val(item, env);
+                    data.push(resolve_accesspath(val, ap));
                 }
                 env = env.extend(*outvar, Answer::tuple(data));
                 expr = cnt;
@@ -108,6 +109,14 @@ pub fn eval_val(val: &Value, env: Env) -> Answer {
             params: Ref::array(vec!["x".into()]),
             body: Expr::App(Value::Halt, Ref::array(vec![Value::Var("x".into())])).into(),
         })),
+    }
+}
+
+fn resolve_accesspath(val: Answer, ap: &ast::AccessPath) -> Answer {
+    match ap {
+        ast::AccessPath::Ref(0) => val,
+        ast::AccessPath::Ref(_) => todo!(),
+        ast::AccessPath::Sel(_) => todo!(),
     }
 }
 

@@ -2,6 +2,7 @@ use crate::core::ptr_tagging::make_tag;
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast as cps;
+use crate::languages::cps_lang::ast::AccessPath;
 use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
 use crate::list;
@@ -57,7 +58,15 @@ impl Context {
             LExpr::Record(fields) => {
                 let x = self.gensym("r");
                 self.convert_sequence(*fields, move |a| {
-                    CExpr::Record(a, x, Ref::new(c(CVal::Var(x))))
+                    CExpr::Record(
+                        Ref::array(
+                            a.into_iter()
+                                .map(|v| (v.clone(), AccessPath::Ref(0)))
+                                .collect(),
+                        ),
+                        x,
+                        Ref::new(c(CVal::Var(x))),
+                    )
                 })
             }
 
@@ -519,7 +528,7 @@ mod tests {
     use crate::core::answer::Answer;
     use crate::languages::cps_lang;
     use crate::{
-        cps_expr, cps_expr_list, cps_ident_list, cps_value, cps_value_list,
+        cps_expr, cps_expr_list, cps_field_list, cps_ident_list, cps_value, cps_value_list,
         make_testsuite_for_mini_lambda, mini_expr,
     };
 
