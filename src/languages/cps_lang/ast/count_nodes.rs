@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::languages::cps_lang::ast::{Expr, Value};
+use std::collections::HashMap;
 
 impl<V> Expr<V> {
     pub fn count_nodes(&self) -> HashMap<&'static str, usize> {
