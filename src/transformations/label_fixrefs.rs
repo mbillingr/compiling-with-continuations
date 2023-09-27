@@ -17,7 +17,7 @@ impl Context {
         Context {}
     }
 
-    fn convert_labels<V: std::fmt::Debug + Clone + Eq + Hash>(
+    pub fn convert_labels<V: std::fmt::Debug + Clone + Eq + Hash>(
         &mut self,
         expr: &Expr<V>,
     ) -> Expr<V> {

@@ -23,3 +23,59 @@ impl GensymContext {
         Ref::from(format!("{name}{}{}", self.sym_delim, n))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::core::answer::Answer;
+    use crate::languages::cps_lang;
+    use crate::languages::cps_lang::ast as cps;
+    use crate::languages::mini_lambda::ast as ml;
+    use crate::{
+        cps_expr, cps_expr_list, cps_field, cps_field_list, cps_ident_list, cps_value,
+        cps_value_list, list, make_testsuite_for_mini_lambda, mini_expr,
+    };
+
+    unsafe fn run_in_optimized_cps(mini_lambda_expr: &ml::Expr<Ref<str>>) -> Answer {
+        let expr = mini_lambda_expr.clone();
+
+        let cps_expr = Box::leak(Box::new(mini_lambda_to_cps_lang::Context::new("__"))).convert(
+            &expr,
+            Box::new(|x| cps::Expr::App(cps::Value::Halt, list![x])),
+        );
+
+        let cps_expr = label_fixrefs::Context::new().convert_labels(&cps_expr);
+
+        println!("{:?}", cps_expr);
+
+        let cps_expr =
+            Box::leak(Box::new(cps_eta_reduction::Context::new("__"))).eta_reduce(&cps_expr);
+
+        println!("{:?}", cps_expr);
+
+        cps_lang::interpreter::exec(&cps_expr)
+    }
+
+    make_testsuite_for_mini_lambda!(run_in_optimized_cps);
+
+    #[test]
+    fn callcc_without_capture() {
+        unsafe {
+            assert_eq!(
+                run_in_optimized_cps(&mini_expr!(callcc (fun k = (int 42)))).as_int(),
+                42
+            );
+        }
+    }
+
+    #[test]
+    fn callcc_without_explicit_return() {
+        unsafe {
+            assert_eq!(
+                run_in_optimized_cps(&mini_expr!(callcc (fun k = (throw [k (int 42)])))).as_int(),
+                42
+            );
+        }
+    }
+}
