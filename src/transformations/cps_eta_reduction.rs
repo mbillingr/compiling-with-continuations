@@ -2,6 +2,7 @@ use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use crate::list;
 use crate::transformations::GensymContext;
+use std::collections::HashMap;
 
 pub struct Context {
     gs: GensymContext,
@@ -35,15 +36,21 @@ impl Context {
             Expr::Fix(defs, body) => {
                 let mut defs_out: Vec<(Ref<str>, Ref<[Ref<str>]>, Ref<Expr<Ref<str>>>)> = vec![];
 
-                let mut substitutions = vec![];
+                let mut substitutions: HashMap<_, &Value<_>> = HashMap::new();
 
                 for (f, params, fbody) in defs.iter() {
                     match &**fbody {
-                        Expr::App(Value::Var(g), _) if f == g => {}
+                        Expr::App(Value::Var(g) | Value::Label(g), _) if f == g => {}
 
                         // eta reduction
                         Expr::App(g, args) if args_equal_params(params, args) => {
-                            substitutions.push((f, g));
+                            for (_, g_) in &mut substitutions {
+                                match g_ {
+                                    Value::Var(v) | Value::Label(v) if v == f => *g_ = g,
+                                    _ => {}
+                                }
+                            }
+                            substitutions.insert(f, g);
                             continue;
                         }
 
@@ -173,6 +180,19 @@ mod tests {
 
         let x = cps_expr!(fix f(x)=(f x) in (f z));
         assert_eq!(ctx.eta_reduce(&x), x);
+    }
+
+    #[test]
+    fn multilevel_reduction() {
+        let ctx = Box::leak(Box::new(Context::new("__")));
+
+        let x = cps_expr!(fix g(x)=(f x); f(x)=(halt x) in (g z));
+        let y = cps_expr!((halt z));
+        assert_eq!(ctx.eta_reduce(&x), y);
+
+        let x = cps_expr!(fix f(x)=(halt x); g(x)=(f x) in (g z));
+        let y = cps_expr!((halt z));
+        assert_eq!(ctx.eta_reduce(&x), y);
     }
 
     #[test]
