@@ -36,7 +36,7 @@ impl Context {
             Expr::Fix(defs, body) => {
                 let mut defs_out: Vec<(Ref<str>, Ref<[Ref<str>]>, Ref<Expr<Ref<str>>>)> = vec![];
 
-                let mut substitutions: HashMap<_, &Value<_>> = HashMap::new();
+                let mut substitutions = Substitution::new();
 
                 for (f, params, fbody) in defs.iter() {
                     match &**fbody {
@@ -44,12 +44,6 @@ impl Context {
 
                         // eta reduction
                         Expr::App(g, args) if args_equal_params(params, args) => {
-                            for (_, g_) in &mut substitutions {
-                                match g_ {
-                                    Value::Var(v) | Value::Label(v) if v == f => *g_ = g,
-                                    _ => {}
-                                }
-                            }
                             substitutions.insert(f, g);
                             continue;
                         }
@@ -106,7 +100,7 @@ impl Context {
                 }
 
                 let mut body = *body;
-                for (f, g) in substitutions {
+                for (f, g) in substitutions.iter() {
                     body = body.substitute_var(f, g).into();
                     for (_, _, fb) in &mut defs_out {
                         *fb = fb.substitute_var(f, g).into();
@@ -145,6 +139,35 @@ fn args_equal_params<V: PartialEq>(params: &Ref<[V]>, args: &Ref<[Value<V>]>) ->
             Value::Var(x) => x == p,
             _ => false,
         })
+}
+
+struct Substitution<'a>(HashMap<&'a Ref<str>, &'a Value<Ref<str>>>);
+
+impl<'a> Substitution<'a> {
+    fn new() -> Self {
+        Substitution(HashMap::new())
+    }
+
+    fn insert(&mut self, key: &'a Ref<str>, value: &'a Value<Ref<str>>) {
+        for (_, g_) in &mut self.0 {
+            match g_ {
+                Value::Var(v) | Value::Label(v) if v == key => *g_ = value,
+                _ => {}
+            }
+        }
+        match value {
+            Value::Var(v) | Value::Label(v)
+                if self.0.contains_key(v) =>
+            {
+                self.0.insert(key, self.0[v])
+            }
+            _ => self.0.insert(key, value),
+        };
+    }
+
+    fn iter(&self) -> impl Iterator<Item=(&&Ref<str>, &&Value<Ref<str>>)> + '_ {
+        self.0.iter()
+    }
 }
 
 #[cfg(test)]
@@ -191,6 +214,10 @@ mod tests {
         assert_eq!(ctx.eta_reduce(&x), y);
 
         let x = cps_expr!(fix f(x)=(halt x); g(x)=(f x) in (g z));
+        let y = cps_expr!((halt z));
+        assert_eq!(ctx.eta_reduce(&x), y);
+
+        let x = cps_expr!(fix f(x)=(halt x) in (fix g(x)=(f x) in (g z)));
         let y = cps_expr!((halt z));
         assert_eq!(ctx.eta_reduce(&x), y);
     }
