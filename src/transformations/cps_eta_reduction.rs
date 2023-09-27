@@ -16,7 +16,7 @@ impl Context {
 }
 
 impl Context {
-    fn eta_reduce(&'static self, exp: &Expr<Ref<str>>) -> Expr<Ref<str>> {
+    pub fn eta_reduce(&'static self, exp: &Expr<Ref<str>>) -> Expr<Ref<str>> {
         match exp {
             Expr::Record(fields, r, cnt) => {
                 Expr::Record(*fields, r.clone(), self.eta_reduce(cnt).into())
@@ -34,7 +34,8 @@ impl Context {
 
             Expr::Fix(defs, body) => {
                 let mut defs_out: Vec<(Ref<str>, Ref<[Ref<str>]>, Ref<Expr<Ref<str>>>)> = vec![];
-                let mut body = *body;
+
+                let mut substitutions = vec![];
 
                 for (f, params, fbody) in defs.iter() {
                     match &**fbody {
@@ -42,14 +43,14 @@ impl Context {
 
                         // eta reduction
                         Expr::App(g, args) if args_equal_params(params, args) => {
-                            body = body.substitute_var(f, g).into();
+                            substitutions.push((f, g));
                             continue;
                         }
 
                         // uncurrying ... this is the transformation on top of page 77
                         Expr::Fix(
                             Ref([(g, Ref([b, k]), gbody)]),
-                            Ref(Expr::App(Value::Var(c), Ref([Value::Var(gg)]))),
+                            Ref(Expr::App(Value::Var(c), Ref([Value::Var(gg) | Value::Label(gg)]))),
                         ) if Some(c) == params.last() && gg == g => {
                             let f_ = self.gs.gensym(f);
                             let fparams: Vec<_> =
@@ -97,6 +98,14 @@ impl Context {
                     defs_out.push((f.clone(), *params, self.eta_reduce(fbody).into()));
                 }
 
+                let mut body = *body;
+                for (f, g) in substitutions {
+                    body = body.substitute_var(f, g).into();
+                    for (_, _, fb) in &mut defs_out {
+                        *fb = fb.substitute_var(f, g).into();
+                    }
+                }
+
                 Expr::Fix(Ref::array(defs_out), self.eta_reduce(&*body).into())
             }
 
@@ -140,6 +149,15 @@ mod tests {
 
         let x = cps_expr!(fix f(a b c)=(g a b c) in (f x y z));
         let y = cps_expr!(fix in (g x y z));
+        assert_eq!(ctx.eta_reduce(&x), y);
+    }
+
+    #[test]
+    fn reduction_also_in_sibling_functions() {
+        let ctx = Box::leak(Box::new(Context::new("__")));
+
+        let x = cps_expr!(fix f(x)=(halt x); g(x)=(f z) in (g z));
+        let y = cps_expr!(fix g(x)=(halt z) in (g z));
         assert_eq!(ctx.eta_reduce(&x), y);
     }
 

@@ -87,7 +87,7 @@ fn substitute_if_not_shadowed<V: Clone + PartialEq>(
 impl<V: Clone + PartialEq> Value<V> {
     pub fn substitute_var(&self, var: &V, val: &Value<V>) -> Self {
         match self {
-            Value::Var(v) if v == var => val.clone(),
+            Value::Var(v) | Value::Label(v) if v == var => val.clone(),
             _ => self.clone(),
         }
     }
@@ -120,6 +120,13 @@ mod tests {
     #[test]
     fn variable_value_substituted() {
         let x = Value::Var("foo");
+        let y = x.substitute_var(&"foo", &Value::Halt);
+        assert_eq!(y, Value::Halt);
+    }
+
+    #[test]
+    fn label_value_substituted() {
+        let x = Value::Label("foo");
         let y = x.substitute_var(&"foo", &Value::Halt);
         assert_eq!(y, Value::Halt);
     }
