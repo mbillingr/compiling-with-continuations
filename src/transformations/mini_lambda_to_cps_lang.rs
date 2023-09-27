@@ -828,25 +828,5 @@ mod tests {
         cps_lang::interpreter::exec(&cps_expr)
     }
 
-    make_testsuite_for_mini_lambda!(run_in_cps);
-
-    #[test]
-    fn callcc_without_capture() {
-        unsafe {
-            assert_eq!(
-                run_in_cps(&mini_expr!(callcc (fun k = (int 42)))).as_int(),
-                42
-            );
-        }
-    }
-
-    #[test]
-    fn callcc_without_explicit_return() {
-        unsafe {
-            assert_eq!(
-                run_in_cps(&mini_expr!(callcc (fun k = (throw [k (int 42)])))).as_int(),
-                42
-            );
-        }
-    }
+    make_testsuite_for_mini_lambda!(run_in_cps continuation_tests);
 }
