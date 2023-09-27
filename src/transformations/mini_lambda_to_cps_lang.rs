@@ -6,11 +6,25 @@ use crate::languages::cps_lang::ast::AccessPath;
 use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
 use crate::list;
-use crate::transformations::Context;
+use crate::transformations::GensymContext;
 
 type LExpr = ast::Expr<Ref<str>>;
 type CExpr = cps::Expr<Ref<str>>;
 type CVal = cps::Value<Ref<str>>;
+
+
+pub struct Context {
+    gs: GensymContext
+}
+
+impl Context {
+    pub fn new(sym_delim: &'static str) -> Self {
+        Context {
+            gs: GensymContext::new(sym_delim)
+        }
+    }
+}
+
 
 impl Context {
     pub fn convert(&'static self, expr: &LExpr, c: Box<dyn FnOnce(CVal) -> CExpr>) -> CExpr {
@@ -21,8 +35,8 @@ impl Context {
             LExpr::String(s) => c(CVal::String(*s)),
 
             LExpr::Fn(var, body) => {
-                let f = self.gensym("f");
-                let k = self.gensym("k");
+                let f = self.gs.gensym("f");
+                let k = self.gs.gensym("k");
                 CExpr::Fix(
                     list![(
                         f,
@@ -45,7 +59,7 @@ impl Context {
             LExpr::Record(fields) if fields.len() == 0 => c(CVal::Int(0)),
 
             LExpr::Record(fields) => {
-                let x = self.gensym("r");
+                let x = self.gs.gensym("r");
                 self.convert_sequence(*fields, move |a| {
                     CExpr::Record(
                         Ref::array(
@@ -61,7 +75,7 @@ impl Context {
 
             LExpr::Select(idx, rec) => {
                 let idx = *idx;
-                let w = self.gensym("w");
+                let w = self.gs.gensym("w");
                 self.convert(
                     rec,
                     Box::new(move |v| CExpr::Select(idx, v, w, Ref::new(c(CVal::Var(w))))),
@@ -69,8 +83,8 @@ impl Context {
             }
 
             LExpr::App(Ref(LExpr::Prim(PrimOp::CallCC)), arg) => {
-                let k = self.gensym("k");
-                let x = self.gensym("x");
+                let k = self.gs.gensym("k");
+                let x = self.gs.gensym("x");
                 CExpr::Fix(
                     list![(k, list![x], Ref::new(c(CVal::Var(x))))],
                     Ref::new(self.convert(
@@ -86,8 +100,8 @@ impl Context {
             ),
 
             LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 && op.is_branching() => {
-                let k = self.gensym("k");
-                let x = self.gensym("x");
+                let k = self.gs.gensym("k");
+                let x = self.gs.gensym("x");
                 self.convert(
                     arg,
                     Box::new(move |v| {
@@ -117,7 +131,7 @@ impl Context {
             }
 
             LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 => {
-                let w = self.gensym("w");
+                let w = self.gs.gensym("w");
                 self.convert(
                     arg,
                     Box::new(move |v| {
@@ -129,8 +143,8 @@ impl Context {
             LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg)))
                 if op.n_args() > 1 && op.is_branching() =>
             {
-                let k = self.gensym("k");
-                let x = self.gensym("x");
+                let k = self.gs.gensym("k");
+                let x = self.gs.gensym("x");
                 self.convert_sequence(*arg, move |a| {
                     CExpr::Fix(
                         list![(k, list![x], Ref::new(c(CVal::Var(x))))],
@@ -156,7 +170,7 @@ impl Context {
             }
 
             LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg))) if op.n_args() > 1 => {
-                let w = self.gensym("w");
+                let w = self.gs.gensym("w");
                 self.convert_sequence(*arg, move |a| {
                     CExpr::PrimOp(*op, a, list![w], list![Ref::new(c(CVal::Var(w)))])
                 })
@@ -164,8 +178,8 @@ impl Context {
 
             LExpr::App(f, e) => {
                 let e = *e;
-                let r = self.gensym("r");
-                let x = self.gensym("x");
+                let r = self.gs.gensym("r");
+                let x = self.gs.gensym("x");
                 CExpr::Fix(
                     list![(r, list![x], Ref::new(c(CVal::Var(x))))],
                     Ref::new(self.convert(
@@ -181,7 +195,7 @@ impl Context {
             }
 
             LExpr::Prim(op) if op.n_args() == 1 => {
-                let x = self.gensym("x");
+                let x = self.gs.gensym("x");
                 self.convert(
                     &LExpr::Fn(
                         x,
@@ -192,7 +206,7 @@ impl Context {
             }
 
             LExpr::Prim(op) => {
-                let r = self.gensym("r");
+                let r = self.gs.gensym("r");
                 let args = (0..op.n_args())
                     .map(|i| LExpr::Select(i as isize, LExpr::Var(r).into()))
                     .collect();
@@ -241,10 +255,10 @@ impl Context {
                 let arms = *arms;
                 let default =
                     default.unwrap_or_else(|| Ref::new(LExpr::Panic("unspecified default case")));
-                let k = self.gensym("k");
-                let x = self.gensym("x");
-                let f = self.gensym("f");
-                let z = self.gensym("z");
+                let k = self.gs.gensym("k");
+                let x = self.gs.gensym("x");
+                let f = self.gs.gensym("f");
+                let z = self.gs.gensym("z");
                 let default_cont = self.convert(
                     &default,
                     Box::new(move |z| CExpr::App(CVal::Var(k), list![z])),
@@ -293,7 +307,7 @@ impl Context {
         z: Ref<str>,
         default_cont: Ref<CExpr>,
     ) -> CExpr {
-        let t = self.gensym("t");
+        let t = self.gs.gensym("t");
         CExpr::PrimOp(
             PrimOp::Untag,
             list![CVal::Var(z)],
@@ -318,7 +332,7 @@ impl Context {
         z: Ref<str>,
         default_cont: Ref<CExpr>,
     ) -> CExpr {
-        let t = self.gensym("t");
+        let t = self.gs.gensym("t");
         CExpr::Select(
             1,
             CVal::Var(z),
@@ -414,7 +428,7 @@ impl Context {
                 list![Ref::new(else_cont), Ref::new(then_cont)],
             ),
             Con::Data(ConRep::Tagged(tag)) => {
-                let t = self.gensym("t");
+                let t = self.gs.gensym("t");
                 CExpr::Select(
                     1,
                     condval,
@@ -486,7 +500,7 @@ impl Context {
                 .zip(funcs.into_iter())
                 .map(|(h1, f)| match f {
                     LExpr::Fn(v, b) => {
-                        let w = self.gensym("w");
+                        let w = self.gs.gensym("w");
                         (
                             *h1,
                             list![*v, w],

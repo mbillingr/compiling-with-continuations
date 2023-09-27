@@ -1,7 +1,19 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use crate::list;
-use crate::transformations::Context;
+use crate::transformations::GensymContext;
+
+pub struct Context {
+    gs: GensymContext
+}
+
+impl Context {
+    pub fn new(sym_delim: &'static str) -> Self {
+        Context {
+            gs: GensymContext::new(sym_delim)
+        }
+    }
+}
 
 impl Context {
     fn eta_reduce(&'static self, exp: &Expr<Ref<str>>) -> Expr<Ref<str>> {
@@ -39,14 +51,14 @@ impl Context {
                             Ref([(g, Ref([b, k]), gbody)]),
                             Ref(Expr::App(Value::Var(c), Ref([Value::Var(gg)]))),
                         ) if Some(c) == params.last() && gg == g => {
-                            let f_ = self.gensym(f);
-                            let fparams: Vec<_> = params.iter().map(|p| self.gensym(p)).collect();
+                            let f_ = self.gs.gensym(f);
+                            let fparams: Vec<_> = params.iter().map(|p| self.gs.gensym(p)).collect();
                             let c_ = *fparams
                                 .last()
                                 .expect("functions need at least one parameter: the continuation");
-                            let g_ = self.gensym(g);
-                            let b_ = self.gensym(b);
-                            let k_ = self.gensym(k);
+                            let g_ = self.gs.gensym(g);
+                            let b_ = self.gs.gensym(b);
+                            let k_ = self.gs.gensym(k);
 
                             let mut f_args: Vec<Value<_>> =
                                 fparams.iter().map(|p| Value::Var(*p)).collect();

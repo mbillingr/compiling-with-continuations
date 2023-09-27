@@ -4,14 +4,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub mod cps_eta_reduction;
 pub mod mini_lambda_to_cps_lang;
 
-pub struct Context {
+pub struct GensymContext {
     sym_ctr: AtomicUsize,
     sym_delim: &'static str,
 }
 
-impl Context {
+impl GensymContext {
     pub fn new(sym_delim: &'static str) -> Self {
-        Context {
+        GensymContext {
             sym_ctr: AtomicUsize::new(0),
             sym_delim,
         }
