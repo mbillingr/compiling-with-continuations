@@ -106,7 +106,13 @@ impl Context {
                     }
                 }
 
-                Expr::Fix(Ref::array(defs_out), self.eta_reduce(&*body).into())
+                let body = self.eta_reduce(&*body);
+
+                if defs_out.is_empty() {
+                    body
+                } else {
+                    Expr::Fix(Ref::array(defs_out), body.into())
+                }
             }
 
             Expr::Switch(v, arms) => Expr::Switch(
@@ -144,11 +150,11 @@ mod tests {
         let ctx = Box::leak(Box::new(Context::new("__")));
 
         let x = cps_expr!(fix f(x)=(halt x) in (f z));
-        let y = cps_expr!(fix in (halt z));
+        let y = cps_expr!((halt z));
         assert_eq!(ctx.eta_reduce(&x), y);
 
         let x = cps_expr!(fix f(a b c)=(g a b c) in (f x y z));
-        let y = cps_expr!(fix in (g x y z));
+        let y = cps_expr!((g x y z));
         assert_eq!(ctx.eta_reduce(&x), y);
     }
 
