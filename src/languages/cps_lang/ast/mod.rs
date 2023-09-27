@@ -7,6 +7,7 @@ use crate::languages::common_primops::PrimOp;
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value<V: 'static> {
     Var(V),
+    Label(V),
     Int(i64),
     Real(f64),
     String(Ref<String>),

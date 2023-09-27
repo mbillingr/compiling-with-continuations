@@ -101,6 +101,7 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
 pub fn eval_val(val: &Value, env: Env) -> Answer {
     match val {
         Value::Var(v) => env.lookup(v),
+        Value::Label(v) => env.lookup(v),
         Value::Int(x) => Answer::from_int(*x),
         Value::Real(x) => Answer::from_float(*x),
         Value::String(s) => Answer::from_str(*s),

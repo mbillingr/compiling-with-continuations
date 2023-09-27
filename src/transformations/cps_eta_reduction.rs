@@ -4,13 +4,13 @@ use crate::list;
 use crate::transformations::GensymContext;
 
 pub struct Context {
-    gs: GensymContext
+    gs: GensymContext,
 }
 
 impl Context {
     pub fn new(sym_delim: &'static str) -> Self {
         Context {
-            gs: GensymContext::new(sym_delim)
+            gs: GensymContext::new(sym_delim),
         }
     }
 }
@@ -52,7 +52,8 @@ impl Context {
                             Ref(Expr::App(Value::Var(c), Ref([Value::Var(gg)]))),
                         ) if Some(c) == params.last() && gg == g => {
                             let f_ = self.gs.gensym(f);
-                            let fparams: Vec<_> = params.iter().map(|p| self.gs.gensym(p)).collect();
+                            let fparams: Vec<_> =
+                                params.iter().map(|p| self.gs.gensym(p)).collect();
                             let c_ = *fparams
                                 .last()
                                 .expect("functions need at least one parameter: the continuation");

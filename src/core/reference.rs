@@ -1,7 +1,7 @@
 use std::fmt::Formatter;
 use std::ops::Deref;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq, Hash)]
 // public field for pattern matching
 pub struct Ref<T: ?Sized + 'static>(pub &'static T);
 

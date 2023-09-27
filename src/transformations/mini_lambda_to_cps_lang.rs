@@ -12,19 +12,17 @@ type LExpr = ast::Expr<Ref<str>>;
 type CExpr = cps::Expr<Ref<str>>;
 type CVal = cps::Value<Ref<str>>;
 
-
 pub struct Context {
-    gs: GensymContext
+    gs: GensymContext,
 }
 
 impl Context {
     pub fn new(sym_delim: &'static str) -> Self {
         Context {
-            gs: GensymContext::new(sym_delim)
+            gs: GensymContext::new(sym_delim),
         }
     }
 }
-
 
 impl Context {
     pub fn convert(&'static self, expr: &LExpr, c: Box<dyn FnOnce(CVal) -> CExpr>) -> CExpr {

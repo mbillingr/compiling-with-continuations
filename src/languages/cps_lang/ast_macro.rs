@@ -16,6 +16,10 @@ macro_rules! cps_value {
         $crate::languages::cps_lang::ast::Value::String($x.to_string().into())
     };
 
+    (@ $var:ident) => {
+        $crate::languages::cps_lang::ast::Value::Label(stringify!($var).into())
+    };
+
     ($var:ident) => {
         $crate::languages::cps_lang::ast::Value::Var(stringify!($var).into())
     };

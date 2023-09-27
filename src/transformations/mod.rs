@@ -2,6 +2,7 @@ use crate::core::reference::Ref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod cps_eta_reduction;
+pub mod label_fixrefs;
 pub mod mini_lambda_to_cps_lang;
 
 pub struct GensymContext {

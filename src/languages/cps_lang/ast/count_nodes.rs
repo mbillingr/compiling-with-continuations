@@ -83,6 +83,7 @@ impl<V> Value<V> {
     pub fn count_nodes(&self) -> HashMap<&'static str, usize> {
         let key = match self {
             Value::Var(_) => "var",
+            Value::Label(_) => "label",
             Value::Int(_) => "int",
             Value::Real(_) => "real",
             Value::String(_) => "string",
