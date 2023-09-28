@@ -156,16 +156,14 @@ impl<'a> Substitution<'a> {
             }
         }
         match value {
-            Value::Var(v) | Value::Label(v)
-                if self.0.contains_key(v) =>
-            {
+            Value::Var(v) | Value::Label(v) if self.0.contains_key(v) => {
                 self.0.insert(key, self.0[v])
             }
             _ => self.0.insert(key, value),
         };
     }
 
-    fn iter(&self) -> impl Iterator<Item=(&&Ref<str>, &&Value<Ref<str>>)> + '_ {
+    fn iter(&self) -> impl Iterator<Item = (&&Ref<str>, &&Value<Ref<str>>)> + '_ {
         self.0.iter()
     }
 }
