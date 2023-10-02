@@ -33,15 +33,13 @@ mod tests {
     use crate::languages::cps_lang;
     use crate::languages::cps_lang::ast as cps;
     use crate::languages::mini_lambda::ast as ml;
-    use crate::{list, make_testsuite_for_mini_lambda};
+    use crate::make_testsuite_for_mini_lambda;
 
     unsafe fn run_in_optimized_cps(mini_lambda_expr: &ml::Expr<Ref<str>>) -> Answer {
         let expr = mini_lambda_expr.clone();
 
-        let cps_expr = Box::leak(Box::new(mini_lambda_to_cps_lang::Context::new("__"))).convert(
-            &expr,
-            Box::new(|x| cps::Expr::App(cps::Value::Halt, list![x])),
-        );
+        let cps_expr = Box::leak(Box::new(mini_lambda_to_cps_lang::Context::new("__")))
+            .convert(&expr, Box::new(|x| cps::Expr::Halt(x)));
 
         let cps_expr = label_fixrefs::Context::new().convert_labels(&cps_expr);
 

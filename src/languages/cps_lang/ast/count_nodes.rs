@@ -88,7 +88,6 @@ impl<V> Value<V> {
             Value::Int(_) => "int",
             Value::Real(_) => "real",
             Value::String(_) => "string",
-            Value::Halt => "halt",
         };
         inc(key, Default::default())
     }

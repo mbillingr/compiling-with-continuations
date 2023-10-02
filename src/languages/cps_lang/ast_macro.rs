@@ -1,9 +1,5 @@
 #[macro_export]
 macro_rules! cps_value {
-    (halt) => {
-        $crate::languages::cps_lang::ast::Value::Halt
-    };
-
     (int $x:expr) => {
         $crate::languages::cps_lang::ast::Value::Int($x)
     };

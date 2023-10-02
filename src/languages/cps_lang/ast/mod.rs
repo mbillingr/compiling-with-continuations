@@ -12,7 +12,6 @@ pub enum Value<V: 'static> {
     Int(i64),
     Real(f64),
     String(Ref<String>),
-    Halt, // this represents a continuation that stops the program when called
 }
 
 type List<T> = Ref<[T]>;

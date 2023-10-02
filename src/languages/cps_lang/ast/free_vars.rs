@@ -42,7 +42,7 @@ impl<V: std::fmt::Debug + Clone + PartialEq + Eq + Hash> Expr<V> {
 
     pub fn fix_function_free_vars(&self) -> FreeVars<V> {
         match self {
-            Expr::Fix(defs, body) => FreeVars::empty()
+            Expr::Fix(defs, _) => FreeVars::empty()
                 .merge(defs.iter().map(|(_, p, b)| Self::function_free_vars(p, b)))
                 .without_these(defs.iter().map(|(f, _, _)| f)),
             _ => panic!("Expected fix"),
@@ -88,7 +88,7 @@ impl<V: Eq + Hash> FreeVars<V> {
         fvs.fold(self, Self::union)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item=&V> {
+    pub fn iter(&self) -> impl Iterator<Item = &V> {
         self.0.iter()
     }
 }

@@ -106,7 +106,7 @@ fn test_functions() {
     unsafe {
         assert_eq!(exec(&cps_expr!(fix in (halt (int 0)))).as_int(), 0);
         assert_eq!(
-            exec(&cps_expr!(fix foo(c)=(c (int 42)) in (foo halt))).as_int(),
+            exec(&cps_expr!(fix h(x)=(halt x); foo(c)=(c (int 42)) in (foo h))).as_int(),
             42
         );
     }
@@ -116,7 +116,8 @@ fn test_functions() {
 fn test_mutual_recursion() {
     unsafe {
         assert_eq!(
-            exec(&cps_expr!(fix foo(c)=(bar (int 42) c); bar(x c)=(c x) in (foo halt))).as_int(),
+            exec(&cps_expr!(fix h(x)=(halt x); foo(c)=(bar (int 42) c); bar(x c)=(c x) in (foo h)))
+                .as_int(),
             42
         );
     }

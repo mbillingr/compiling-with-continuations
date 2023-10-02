@@ -1,8 +1,6 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
-use crate::list;
 use crate::transformations::GensymContext;
-use std::collections::HashMap;
 
 pub struct Context {
     gs: GensymContext,

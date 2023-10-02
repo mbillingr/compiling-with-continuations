@@ -35,8 +35,6 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
                 expr = cnt;
             }
 
-            Expr::App(Value::Halt, args) => return eval_val(&args[0], env),
-
             Expr::App(fval, argvals) => {
                 let f = eval_val(fval, env);
                 let args = argvals.iter().map(move |a| eval_val(a, env));
@@ -107,11 +105,6 @@ pub fn eval_val(val: &Value, env: Env) -> Answer {
         Value::Int(x) => Answer::from_int(*x),
         Value::Real(x) => Answer::from_float(*x),
         Value::String(s) => Answer::from_str(*s),
-        Value::Halt => Answer::from_ref(Ref::new(Closure {
-            captured_env: Env::Empty,
-            params: Ref::array(vec!["x".into()]),
-            body: Expr::App(Value::Halt, Ref::array(vec![Value::Var("x".into())])).into(),
-        })),
     }
 }
 

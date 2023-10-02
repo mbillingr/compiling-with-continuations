@@ -1,10 +1,8 @@
-use std::collections::HashMap;
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 
 impl<V: Clone + PartialEq> Expr<V> {
-
-    pub fn substitute_vars(self, subs: impl IntoIterator<Item=(V, Value<V>)>) -> Self {
+    pub fn substitute_vars(self, subs: impl IntoIterator<Item = (V, Value<V>)>) -> Self {
         let mut out = self.clone();
         for (var, val) in subs {
             out = out.substitute_var(&var, &val);
@@ -136,28 +134,28 @@ mod tests {
     #[test]
     fn variable_value_substituted() {
         let x = Value::Var("foo");
-        let y = x.substitute_var(&"foo", &Value::Halt);
-        assert_eq!(y, Value::Halt);
+        let y = x.substitute_var(&"foo", &Value::Int(0));
+        assert_eq!(y, Value::Int(0));
     }
 
     #[test]
     fn label_value_substituted() {
         let x = Value::Label("foo");
-        let y = x.substitute_var(&"foo", &Value::Halt);
-        assert_eq!(y, Value::Halt);
+        let y = x.substitute_var(&"foo", &Value::Int(0));
+        assert_eq!(y, Value::Int(0));
     }
 
     #[test]
     fn other_variable_not_substituted() {
         let x = Value::Var("bar");
-        let y = x.substitute_var(&"foo", &Value::Halt);
+        let y = x.substitute_var(&"foo", &Value::Int(0));
         assert_eq!(y, x);
     }
 
     #[test]
     fn non_variable_values_pass_through() {
         let x = Value::Int(42);
-        let y = x.substitute_var(&"foo", &Value::Halt);
+        let y = x.substitute_var(&"foo", &Value::Int(0));
         assert_eq!(y, x);
     }
 
