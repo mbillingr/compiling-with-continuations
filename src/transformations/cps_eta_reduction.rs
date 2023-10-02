@@ -128,6 +128,8 @@ impl Context {
                 Ref::array(cnts.iter().map(|c| self.eta_reduce(c).into()).collect()),
             ),
 
+            Expr::Halt(v) => Expr::Halt(v.clone()),
+
             Expr::Panic(msg) => Expr::Panic(*msg),
         }
     }
@@ -177,8 +179,8 @@ mod tests {
     fn simple_reduction() {
         let ctx = Box::leak(Box::new(Context::new("__")));
 
-        let x = cps_expr!(fix f(x)=(halt x) in (f z));
-        let y = cps_expr!((halt z));
+        let x = cps_expr!(fix f(x)=(g x) in (f z));
+        let y = cps_expr!((g z));
         assert_eq!(ctx.eta_reduce(&x), y);
 
         let x = cps_expr!(fix f(a b c)=(g a b c) in (f x y z));
@@ -190,8 +192,8 @@ mod tests {
     fn reduction_also_in_sibling_functions() {
         let ctx = Box::leak(Box::new(Context::new("__")));
 
-        let x = cps_expr!(fix f(x)=(halt x); g(x)=(f z) in (g z));
-        let y = cps_expr!(fix g(x)=(halt z) in (g z));
+        let x = cps_expr!(fix f(x)=(h x); g(x)=(f z) in (g z));
+        let y = cps_expr!(fix g(x)=(h z) in (g z));
         assert_eq!(ctx.eta_reduce(&x), y);
     }
 
@@ -207,16 +209,16 @@ mod tests {
     fn multilevel_reduction() {
         let ctx = Box::leak(Box::new(Context::new("__")));
 
-        let x = cps_expr!(fix g(x)=(f x); f(x)=(halt x) in (g z));
-        let y = cps_expr!((halt z));
+        let x = cps_expr!(fix g(x)=(f x); f(x)=(h x) in (g z));
+        let y = cps_expr!((h z));
         assert_eq!(ctx.eta_reduce(&x), y);
 
-        let x = cps_expr!(fix f(x)=(halt x); g(x)=(f x) in (g z));
-        let y = cps_expr!((halt z));
+        let x = cps_expr!(fix f(x)=(h x); g(x)=(f x) in (g z));
+        let y = cps_expr!((h z));
         assert_eq!(ctx.eta_reduce(&x), y);
 
-        let x = cps_expr!(fix f(x)=(halt x) in (fix g(x)=(f x) in (g z)));
-        let y = cps_expr!((halt z));
+        let x = cps_expr!(fix f(x)=(h x) in (fix g(x)=(f x) in (g z)));
+        let y = cps_expr!((h z));
         assert_eq!(ctx.eta_reduce(&x), y);
     }
 

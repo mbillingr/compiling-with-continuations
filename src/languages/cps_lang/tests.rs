@@ -14,7 +14,7 @@ fn count_subexprs() {
 
     let c = x.count_nodes();
 
-    assert_eq!(c["app"], 6);
+    assert_eq!(c["app"], 5);
     assert_eq!(c["fix"], 1);
     assert_eq!(c["halt"], 1);
     assert_eq!(c["int"], 4);

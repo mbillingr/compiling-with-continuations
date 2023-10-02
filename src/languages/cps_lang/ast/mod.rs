@@ -26,6 +26,7 @@ pub enum Expr<V: 'static> {
     Fix(List<(V, List<V>, Ref<Expr<V>>)>, Ref<Expr<V>>),
     Switch(Value<V>, List<Ref<Expr<V>>>),
     PrimOp(PrimOp, List<Value<V>>, List<V>, List<Ref<Expr<V>>>),
+    Halt(Value<V>),
     Panic(&'static str),
 }
 

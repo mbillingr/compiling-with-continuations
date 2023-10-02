@@ -93,6 +93,8 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
                 expr = &cnts[0];
             }
 
+            Expr::Halt(v) => return eval_val(v, env),
+
             Expr::Panic(msg) => panic!("{}", msg),
         }
     }

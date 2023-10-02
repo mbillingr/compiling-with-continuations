@@ -94,6 +94,8 @@ impl Context {
                 Expr::PrimOp(*op, args_out, *ress, Ref::array(cnts_out))
             }
 
+            Expr::Halt(v) => Expr::Halt(self.convert_val(v, bindings)),
+
             Expr::Panic(msg) => Expr::Panic(*msg),
         }
     }

@@ -87,6 +87,10 @@ macro_rules! cps_expr {
         cps_expr!($($parts)*)
     };
 
+    (halt $val:tt) => {
+        $crate::languages::cps_lang::ast::Expr::Halt(cps_value!($val))
+    };
+
     (record [$($values:tt)*] $var:ident $cnt:tt) => {
         $crate::languages::cps_lang::ast::Expr::Record(
             cps_field_list!($($values)*),

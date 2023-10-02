@@ -83,6 +83,8 @@ impl Context {
                 ),
             ),
 
+            Expr::Halt(v) => Expr::Halt(v.clone()),
+
             Expr::Panic(msg) => Expr::Panic(*msg),
         }
     }

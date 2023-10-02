@@ -34,6 +34,8 @@ impl<V: std::fmt::Debug + Clone + PartialEq + Eq + Hash> Expr<V> {
                 fvs.merge_values(args.iter())
             }
 
+            Expr::Halt(v) => v.free_vars(),
+
             Expr::Panic(_) => FreeVars::empty(),
         }
     }

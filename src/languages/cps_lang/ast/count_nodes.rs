@@ -56,6 +56,7 @@ impl<V> Expr<V> {
                     .reduce(add)
                     .unwrap_or_default(),
             ),
+            Expr::Halt(v) => inc("halt", v.count_nodes()),
             Expr::Panic(_) => inc("panic", Default::default()),
         }
     }

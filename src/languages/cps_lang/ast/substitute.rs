@@ -76,6 +76,8 @@ impl<V: Clone + PartialEq> Expr<V> {
                 Expr::PrimOp(*op, args_out, *binds, cnts_out)
             }
 
+            Expr::Halt(v) => Expr::Halt(v.substitute_var(var, val)),
+
             Expr::Panic(msg) => Expr::Panic(*msg),
         }
     }

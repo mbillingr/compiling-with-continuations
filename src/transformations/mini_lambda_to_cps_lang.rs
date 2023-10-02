@@ -531,7 +531,7 @@ mod tests {
     pub fn convert_program(expr: LExpr) -> CExpr {
         // for testing we need to generate symbols that are valid rust identifiers
         let ctx = Box::leak(Box::new(Context::new("__")));
-        ctx.convert(&expr, Box::new(|x| CExpr::App(CVal::Halt, list![x])))
+        ctx.convert(&expr, Box::new(|x| CExpr::Halt(x)))
     }
 
     #[test]
