@@ -50,6 +50,13 @@ mod tests {
 
         println!("{:?}", cps_expr);
 
+        let cps_expr = cps_expr.labels_to_vars();
+
+        //let cps_expr =
+         //   Box::leak(Box::new(closure_conversion::Context::new("__"))).convert_closures(&cps_expr);
+
+        println!("{:?}", cps_expr);
+
         cps_lang::interpreter::exec(&cps_expr)
     }
 
