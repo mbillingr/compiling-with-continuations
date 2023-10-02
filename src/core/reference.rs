@@ -34,6 +34,17 @@ impl<T> Ref<[T]> {
     }
 }
 
+impl<T: Clone> Ref<[T]> {
+    pub fn prepend(&self, x: T) -> Self {
+        let mut xs = Vec::with_capacity(1 + self.len());
+        xs.push(x);
+        for y in self.iter().cloned() {
+            xs.push(y);
+        }
+        Self::array(xs)
+    }
+}
+
 #[macro_export]
 macro_rules! list {
     ($($item:expr),*$(,)?) => { $crate::core::reference::Ref::array(vec![$($item),*]) };

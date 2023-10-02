@@ -1,7 +1,17 @@
+use std::collections::HashMap;
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 
 impl<V: Clone + PartialEq> Expr<V> {
+
+    pub fn substitute_vars(self, subs: impl IntoIterator<Item=(V, Value<V>)>) -> Self {
+        let mut out = self.clone();
+        for (var, val) in subs {
+            out = out.substitute_var(&var, &val);
+        }
+        out
+    }
+
     pub fn substitute_var(&self, var: &V, val: &Value<V>) -> Self {
         match self {
             Expr::Record(fs, r, c) => {
@@ -68,6 +78,10 @@ impl<V: Clone + PartialEq> Expr<V> {
 
             Expr::Panic(msg) => Expr::Panic(*msg),
         }
+    }
+
+    pub fn rename_fn(&self, old_name: &V, new_name: &V) -> Self {
+        todo!()
     }
 }
 

@@ -17,7 +17,7 @@ pub enum Value<V: 'static> {
 
 type List<T> = Ref<[T]>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr<V: 'static> {
     Record(List<(Value<V>, AccessPath)>, V, Ref<Expr<V>>),
     Select(isize, Value<V>, V, Ref<Expr<V>>),

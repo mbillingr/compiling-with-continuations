@@ -20,6 +20,7 @@ impl<V: std::fmt::Debug + Clone + PartialEq + Eq + Hash> Expr<V> {
 
             Expr::Fix(defs, body) => body
                 .free_vars()
+                .union(self.fix_function_free_vars())
                 .merge(defs.iter().map(|(_, p, b)| Self::function_free_vars(p, b)))
                 .without_these(defs.iter().map(|(f, _, _)| f)),
 
@@ -34,6 +35,15 @@ impl<V: std::fmt::Debug + Clone + PartialEq + Eq + Hash> Expr<V> {
             }
 
             Expr::Panic(_) => FreeVars::empty(),
+        }
+    }
+
+    pub fn fix_function_free_vars(&self) -> FreeVars<V> {
+        match self {
+            Expr::Fix(defs, body) => FreeVars::empty()
+                .merge(defs.iter().map(|(_, p, b)| Self::function_free_vars(p, b)))
+                .without_these(defs.iter().map(|(f, _, _)| f)),
+            _ => panic!("Expected fix"),
         }
     }
 
@@ -74,6 +84,10 @@ impl<V: Eq + Hash> FreeVars<V> {
 
     pub fn merge(self, fvs: impl Iterator<Item = Self>) -> Self {
         fvs.fold(self, Self::union)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item=&V> {
+        self.0.iter()
     }
 }
 impl<V: Eq + Hash + 'static> FreeVars<V> {
