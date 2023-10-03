@@ -1,7 +1,7 @@
 mod count_nodes;
 mod free_vars;
-mod substitute;
 mod labels_to_vars;
+mod substitute;
 
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;

@@ -6,6 +6,7 @@ pub mod cps_eta_reduction;
 pub mod label_fixrefs;
 pub mod mini_lambda_to_cps_lang;
 
+#[derive(Debug)]
 pub struct GensymContext {
     sym_ctr: AtomicUsize,
     sym_delim: &'static str,
@@ -53,7 +54,7 @@ mod tests {
         let cps_expr = cps_expr.labels_to_vars();
 
         //let cps_expr =
-         //   Box::leak(Box::new(closure_conversion::Context::new("__"))).convert_closures(&cps_expr);
+        //   Box::leak(Box::new(closure_conversion::Context::new("__"))).convert_closures(&cps_expr);
 
         println!("{:?}", cps_expr);
 

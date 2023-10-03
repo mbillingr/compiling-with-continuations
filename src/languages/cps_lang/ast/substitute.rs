@@ -79,10 +79,6 @@ impl<V: Clone + PartialEq> Expr<V> {
             Expr::Panic(msg) => Expr::Panic(*msg),
         }
     }
-
-    pub fn rename_fn(&self, old_name: &V, new_name: &V) -> Self {
-        todo!()
-    }
 }
 
 fn substitute_if_not_shadowed<V: Clone + PartialEq>(

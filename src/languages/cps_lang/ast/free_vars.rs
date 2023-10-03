@@ -91,6 +91,10 @@ impl<V: Eq + Hash> FreeVars<V> {
     pub fn iter(&self) -> impl Iterator<Item = &V> {
         self.0.iter()
     }
+
+    pub fn into_iter(self) -> impl Iterator<Item = V> {
+        self.0.into_iter()
+    }
 }
 impl<V: Eq + Hash + 'static> FreeVars<V> {
     pub fn without_these<'a>(mut self, vs: impl Iterator<Item = &'a V>) -> Self {

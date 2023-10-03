@@ -1,7 +1,8 @@
+use std::borrow::Borrow;
 use std::fmt::Formatter;
 use std::ops::Deref;
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, PartialOrd, Ord, Eq, Hash)]
 // public field for pattern matching
 pub struct Ref<T: ?Sized + 'static>(pub &'static T);
 
@@ -87,6 +88,12 @@ impl<T: ?Sized> Deref for Ref<T> {
 impl<T: ?Sized + std::fmt::Debug> std::fmt::Debug for Ref<T> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl<T: ?Sized> Borrow<T> for Ref<T> {
+    fn borrow(&self) -> &T {
+        return self.0;
     }
 }
 

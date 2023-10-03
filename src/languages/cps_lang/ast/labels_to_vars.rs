@@ -5,9 +5,7 @@ impl<V: Clone + PartialEq> Expr<V> {
     pub fn labels_to_vars(&self) -> Self {
         match self {
             Expr::Record(fs, r, c) => {
-                let fs = fs
-                    .iter()
-                    .map(|(v, ap)| (v.label_to_var(), ap.clone()));
+                let fs = fs.iter().map(|(v, ap)| (v.label_to_var(), ap.clone()));
                 Expr::Record(
                     Ref::array(fs.collect()),
                     r.clone(),
@@ -15,24 +13,15 @@ impl<V: Clone + PartialEq> Expr<V> {
                 )
             }
 
-            Expr::Select(idx, r, x, c) => Expr::Select(
-                *idx,
-                r.label_to_var(),
-                x.clone(),
-                c.labels_to_vars().into(),
-            ),
+            Expr::Select(idx, r, x, c) => {
+                Expr::Select(*idx, r.label_to_var(), x.clone(), c.labels_to_vars().into())
+            }
 
-            Expr::Offset(idx, r, x, c) => Expr::Offset(
-                *idx,
-                r.label_to_var(),
-                x.clone(),
-                c.labels_to_vars().into(),
-            ),
+            Expr::Offset(idx, r, x, c) => {
+                Expr::Offset(*idx, r.label_to_var(), x.clone(), c.labels_to_vars().into())
+            }
 
-            Expr::App(rator, rands) => Expr::App(
-                rator.label_to_var(),
-                rands.labels_to_vars(),
-            ),
+            Expr::App(rator, rands) => Expr::App(rator.label_to_var(), rands.labels_to_vars()),
 
             Expr::Fix(defs, body) => {
                 let mut defs_out = Vec::with_capacity(defs.len());
@@ -43,9 +32,7 @@ impl<V: Clone + PartialEq> Expr<V> {
                 Expr::Fix(Ref::array(defs_out), body_out)
             }
 
-            Expr::Switch(v, arms) => {
-                Expr::Switch(v.label_to_var(), arms.labels_to_vars())
-            }
+            Expr::Switch(v, arms) => Expr::Switch(v.label_to_var(), arms.labels_to_vars()),
 
             Expr::PrimOp(op, args, binds, cnts) => {
                 Expr::PrimOp(*op, args.labels_to_vars(), *binds, cnts.labels_to_vars())
@@ -75,11 +62,7 @@ impl<V: Clone + PartialEq> Ref<[Value<V>]> {
 
 impl<V: Clone + PartialEq> Ref<[Ref<Expr<V>>]> {
     pub fn labels_to_vars(&self) -> Self {
-        Ref::array(
-            self.iter()
-                .map(|x| x.labels_to_vars().into())
-                .collect(),
-        )
+        Ref::array(self.iter().map(|x| x.labels_to_vars().into()).collect())
     }
 }
 

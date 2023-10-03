@@ -1,7 +1,7 @@
-use std::thread::current;
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
 use crate::transformations::GensymContext;
+use std::collections::HashMap;
 
 const CLS_FUNC_INDEX: isize = 0;
 
@@ -18,34 +18,49 @@ impl Context {
 }
 
 impl Context {
-    pub fn convert_closures(&'static self, exp: &Expr<Ref<str>>) -> Expr<Ref<str>> {
+    pub fn convert_closures(&self, exp: &Expr<Ref<str>>) -> Expr<Ref<str>> {
+        self.convert_closures_(exp, &KnownFunctions::new())
+    }
+    fn convert_closures_(
+        &self,
+        exp: &Expr<Ref<str>>,
+        known_functions: &KnownFunctions,
+    ) -> Expr<Ref<str>> {
         match exp {
-            Expr::Record(fields, r, cnt) => {
-                Expr::Record(*fields, r.clone(), self.convert_closures(cnt).into())
-            }
+            Expr::Record(fields, r, cnt) => Expr::Record(
+                *fields,
+                r.clone(),
+                self.convert_closures_(cnt, &known_functions.drop(r)).into(),
+            ),
 
             Expr::Select(idx, r, x, cnt) => Expr::Select(
                 *idx,
                 r.clone(),
                 x.clone(),
-                self.convert_closures(cnt).into(),
+                self.convert_closures_(cnt, &known_functions.drop(x)).into(),
             ),
 
             Expr::Offset(idx, r, x, cnt) => Expr::Offset(
                 *idx,
                 r.clone(),
                 x.clone(),
-                self.convert_closures(cnt).into(),
+                self.convert_closures_(cnt, &known_functions.drop(x)).into(),
             ),
 
-            Expr::App(Value::Var(r)|Value::Label(r), rands) => {
-                let f = self.gs.gensym("f");
-                Expr::Select(
-                    CLS_FUNC_INDEX,
-                    Value::Var(r.clone()),
-                    f,
-                    Expr::App(Value::Var(f), *rands).into(),
-                )
+            Expr::App(Value::Var(r) | Value::Label(r), rands) => {
+                if let Some(renamed) = known_functions.known_as(r) {
+                    let mut rands_out = vec![Value::Var(*r)];
+                    rands_out.extend(rands.iter().cloned());
+                    Expr::App(Value::Label(renamed), Ref::array(rands_out)).into()
+                } else {
+                    let f = self.gs.gensym("f");
+                    Expr::Select(
+                        CLS_FUNC_INDEX,
+                        Value::Var(r.clone()),
+                        f,
+                        Expr::App(Value::Var(f), *rands).into(),
+                    )
+                }
             }
 
             Expr::App(rator, _) => panic!("invalid operator: {:?}", rator),
@@ -61,18 +76,24 @@ impl Context {
                     closure.add_var(*v);
                 }
 
+                let known_functions = known_functions.extend(closure.aliases());
+
+                println!("{:?}", closure);
+
                 let defs_out: Vec<_> = defs
                     .iter()
                     .map(|(f, p, b)| {
-                        let mut fbody = Ref::new(self.convert_closures(b));
-                        for v in b.free_vars().iter() {
-                            fbody = closure.build_lookup(*v, f, Value::Var(cls_arg), fbody).into();
+                        let mut fbody = self.convert_closures_(b, &known_functions);
+                        let mut f_free: Vec<_> = b.free_vars().into_iter().collect();
+                        f_free.sort_unstable();
+                        for v in f_free {
+                            fbody = closure.build_lookup(v, f, Value::Var(*f), fbody);
                         }
-                        (closure.get_new_func_name(f), p.prepend(cls_arg), fbody)
+                        (closure.get_new_func_name(f), p.prepend(*f), fbody.into())
                     })
                     .collect();
 
-                let mut body = Ref::new(self.convert_closures(body));
+                let mut body = Ref::new(self.convert_closures_(body, &known_functions));
                 for (f, _, _) in defs.iter() {
                     let idx = closure.get_func_idx(f).unwrap();
                     body = Ref::new(Expr::Offset(idx, Value::Var(cls_arg), *f, body));
@@ -94,21 +115,19 @@ impl Context {
                 v.clone(),
                 Ref::array(
                     arms.iter()
-                        .map(|x| self.convert_closures(x).into())
+                        .map(|x| self.convert_closures_(x, known_functions).into())
                         .collect(),
                 ),
             ),
 
-            Expr::PrimOp(op, args, res, cnts) => Expr::PrimOp(
-                *op,
-                *args,
-                *res,
+            Expr::PrimOp(op, args, res, cnts) => Expr::PrimOp(*op, *args, *res, {
+                let known_functions = known_functions.drop_some(res.iter().map(|r| &**r));
                 Ref::array(
                     cnts.iter()
-                        .map(|c| self.convert_closures(c).into())
+                        .map(|c| self.convert_closures_(c, &known_functions).into())
                         .collect(),
-                ),
-            ),
+                )
+            }),
 
             Expr::Halt(v) => Expr::Halt(v.clone()),
 
@@ -117,6 +136,7 @@ impl Context {
     }
 }
 
+#[derive(Debug)]
 struct Closure<'a> {
     gs: &'a GensymContext,
     funcs: Vec<Ref<str>>,
@@ -150,24 +170,83 @@ impl<'a> Closure<'a> {
 
     fn get_var_idx(&self, name: &str, current_fn: &str) -> Option<isize> {
         let offset = self.funcs.len() as isize;
-        self.vars.iter().enumerate().find(|(_, v)| &***v == name).map(|(i, _)| i as isize).and_then(|i| self.get_func_idx(current_fn).map(|j|offset-j+i))
+        self.vars
+            .iter()
+            .enumerate()
+            .find(|(_, v)| &***v == name)
+            .map(|(i, _)| i as isize)
+            .and_then(|i| self.get_func_idx(current_fn).map(|j| offset - j + i))
     }
 
     fn get_func_idx(&self, name: &str) -> Option<isize> {
-        self.funcs.iter().enumerate().find(|(_, f)| &***f == name).map(|(i, _)| i as isize)
+        self.funcs
+            .iter()
+            .enumerate()
+            .find(|(_, f)| &***f == name)
+            .map(|(i, _)| i as isize)
     }
 
-    fn build_lookup(&self, name: Ref<str>, current_fn: &str, cls_val: Value<Ref<str>>, cnt: Ref<Expr<Ref<str>>>) -> Expr<Ref<str>> {
+    fn build_lookup(
+        &self,
+        name: Ref<str>,
+        current_fn: &str,
+        cls_val: Value<Ref<str>>,
+        cnt: Expr<Ref<str>>,
+    ) -> Expr<Ref<str>> {
+        if &*name == current_fn {
+            return cnt;
+        }
+
         if let Some(idx) = self.get_func_idx(&name) {
             let rel = idx - self.get_func_idx(current_fn).unwrap();
-            return Expr::Offset(rel, cls_val, name, cnt)
+            return Expr::Offset(rel, cls_val, name, cnt.into());
         }
 
         if let Some(idx) = self.get_var_idx(&name, current_fn) {
-            return Expr::Select(idx, cls_val, name, cnt)
+            return Expr::Select(idx, cls_val, name, cnt.into());
         }
 
         panic!("{:?}", name);
+    }
+
+    fn aliases(&self) -> impl Iterator<Item = (Ref<str>, Ref<str>)> + '_ {
+        self.funcs
+            .iter()
+            .copied()
+            .zip(self.renamed_funcs.iter().copied())
+    }
+}
+
+#[derive(Debug)]
+struct KnownFunctions(HashMap<Ref<str>, Ref<str>>);
+
+impl KnownFunctions {
+    pub fn new() -> Self {
+        KnownFunctions(Default::default())
+    }
+
+    pub fn extend(&self, fns: impl Iterator<Item = (Ref<str>, Ref<str>)>) -> Self {
+        let mut funcs = self.0.clone();
+        funcs.extend(fns);
+        KnownFunctions(funcs)
+    }
+
+    pub fn drop(&self, name: &str) -> Self {
+        let mut funcs = self.0.clone();
+        funcs.remove(name);
+        KnownFunctions(funcs)
+    }
+
+    pub fn drop_some<'a>(&self, names: impl Iterator<Item = &'a str>) -> Self {
+        let mut funcs = self.0.clone();
+        for name in names {
+            funcs.remove(name);
+        }
+        KnownFunctions(funcs)
+    }
+
+    pub fn known_as(&self, name: &str) -> Option<Ref<str>> {
+        self.0.get(name).copied()
     }
 }
 
@@ -175,8 +254,7 @@ impl<'a> Closure<'a> {
 mod tests {
     use super::*;
     use crate::{
-        cps_expr, cps_expr_list, cps_field, cps_field_list, cps_ident_list, cps_value,
-        cps_value_list,
+        cps_expr, cps_field, cps_field_list, cps_ident_list, cps_value,
     };
 
     #[test]
@@ -184,7 +262,7 @@ mod tests {
         let ctx = Box::leak(Box::new(Context::new("__")));
 
         let x = cps_expr!(record [] r (fix f(x)=(halt r) in (f f)));
-        let y = cps_expr!(record [] r (fix f__1(cls__0 x)=(select 1 cls__0 r (halt r)) in (record [(@f__1) r] cls__0 (offset 0 cls__0 f(select 0 f f__2 (f__2 f))))));
+        let y = cps_expr!(record [] r (fix f__1(f x)=(select 1 f r (halt r)) in (record [(@f__1) r] cls__0 (offset 0 cls__0 f ((@f__1) f f)))));
         assert_eq!(ctx.convert_closures(&x), y);
     }
 
@@ -195,12 +273,13 @@ mod tests {
         let x = cps_expr!(record [] r (fix f(x)=(halt r); g(x)=(f g) in (g f)));
         let y = cps_expr!(record [] r
             (fix
-                f__1(cls__0 x)=(select 2 cls__0 r (halt r));
-                g__2(cls__0 x)=(offset (-1) cls__0 f (f__1 f cls__0))
+                f__1(f x)=(select 2 f r (halt r));
+                g__2(g x)=(offset (-1) g f ((@f__1) f g))
             in
-                (record [(@f__1) r] cls__0
-                    (offset 0 cls__0 f
-                        (select 0 f f__2 (f__2 f))))));
+                (record [(@f__1) (@g__2) r] cls__0
+                    (offset 1 cls__0 g
+                        (offset 0 cls__0 f
+                            ((@g__2) g f))))));
         assert_eq!(ctx.convert_closures(&x), y);
     }
 }
