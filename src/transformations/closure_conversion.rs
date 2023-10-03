@@ -48,9 +48,10 @@ impl Context {
             ),
 
             Expr::App(Value::Var(r) | Value::Label(r), rands) => {
+                let mut rands_out = vec![Value::Var(*r)];
+                rands_out.extend(rands.iter().cloned());
+
                 if let Some(renamed) = known_functions.known_as(r) {
-                    let mut rands_out = vec![Value::Var(*r)];
-                    rands_out.extend(rands.iter().cloned());
                     Expr::App(Value::Label(renamed), Ref::array(rands_out)).into()
                 } else {
                     let f = self.gs.gensym("f");
@@ -58,7 +59,7 @@ impl Context {
                         CLS_FUNC_INDEX,
                         Value::Var(r.clone()),
                         f,
-                        Expr::App(Value::Var(f), *rands).into(),
+                        Expr::App(Value::Var(f), Ref::array(rands_out)).into(),
                     )
                 }
             }
@@ -78,13 +79,12 @@ impl Context {
 
                 let known_functions = known_functions.extend(closure.aliases());
 
-                println!("{:?}", closure);
-
                 let defs_out: Vec<_> = defs
                     .iter()
                     .map(|(f, p, b)| {
                         let mut fbody = self.convert_closures_(b, &known_functions);
-                        let mut f_free: Vec<_> = Expr::function_free_vars(p, b).into_iter().collect();
+                        let mut f_free: Vec<_> =
+                            Expr::function_free_vars(p, b).into_iter().collect();
                         f_free.sort_unstable();
                         for v in f_free {
                             fbody = closure.build_lookup(v, f, Value::Var(*f), fbody);
@@ -253,9 +253,16 @@ impl KnownFunctions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        cps_expr, cps_field, cps_field_list, cps_ident_list, cps_value,
-    };
+    use crate::{cps_expr, cps_field, cps_field_list, cps_ident_list, cps_value};
+
+    #[test]
+    fn unknown_application() {
+        let ctx = Box::leak(Box::new(Context::new("__")));
+
+        let x = cps_expr!((f x));
+        let y = cps_expr!(select 0 f f__0 (f__0 f x));
+        assert_eq!(ctx.convert_closures(&x), y);
+    }
 
     #[test]
     fn simple_conversion() {
