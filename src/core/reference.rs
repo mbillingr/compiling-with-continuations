@@ -97,6 +97,12 @@ impl<T: ?Sized> Borrow<T> for Ref<T> {
     }
 }
 
+impl<T: ?Sized + std::fmt::Display> std::fmt::Display for Ref<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
