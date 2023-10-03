@@ -84,7 +84,7 @@ impl Context {
                     .iter()
                     .map(|(f, p, b)| {
                         let mut fbody = self.convert_closures_(b, &known_functions);
-                        let mut f_free: Vec<_> = b.free_vars().into_iter().collect();
+                        let mut f_free: Vec<_> = Expr::function_free_vars(p, b).into_iter().collect();
                         f_free.sort_unstable();
                         for v in f_free {
                             fbody = closure.build_lookup(v, f, Value::Var(*f), fbody);

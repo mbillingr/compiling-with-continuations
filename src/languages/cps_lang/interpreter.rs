@@ -37,9 +37,10 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
 
             Expr::App(fval, argvals) => {
                 let f = eval_val(fval, env);
-                let args = argvals.iter().map(move |a| eval_val(a, env));
-
                 let cls = f.as_ref::<Closure>();
+                assert_eq!(argvals.len(), cls.params.len());
+
+                let args = argvals.iter().map(move |a| eval_val(a, env));
 
                 env = cls.captured_env;
                 for (a, v) in args.zip(&*cls.params) {
