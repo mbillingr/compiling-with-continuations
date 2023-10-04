@@ -1,5 +1,71 @@
 use crate::core::reference::Ref;
-use crate::languages::cps_lang::ast::{Expr, Value};
+use crate::languages::cps_lang::ast::{Expr, Transform, Transformed, Value};
+
+struct SubstituteVar<V: 'static>(V, Value<V>);
+
+impl<V: Clone + PartialEq> Transform<V> for SubstituteVar<V> {
+    fn visit_expr(&mut self, expr: &Expr<V>) -> Transformed<Expr<V>> {
+        match expr {
+            Expr::Record(fields, var, cnt) if var == &self.0 => Transformed::Done(Expr::Record(
+                self.transform_fields(fields),
+                var.clone(),
+                *cnt,
+            )),
+
+            Expr::Select(idx, rec, var, cnt) if var == &self.0 => Transformed::Done(Expr::Select(
+                *idx,
+                self.transform_value(rec),
+                var.clone(),
+                *cnt,
+            )),
+
+            Expr::Offset(idx, rec, var, cnt) if var == &self.0 => Transformed::Done(Expr::Offset(
+                *idx,
+                self.transform_value(rec),
+                var.clone(),
+                *cnt,
+            )),
+
+            Expr::Fix(defs, _) if defs.iter().any(|(f, _, _)| f == &self.0) => {
+                // var is shadowed by definition
+                Transformed::Done(expr.clone())
+            }
+
+            Expr::Fix(defs, cnt) => {
+                let mut defs_out = Vec::with_capacity(defs.len());
+                for (f, params, fbody) in defs.iter() {
+                    if params.contains(&self.0) {
+                        defs_out.push((f.clone(), *params, *fbody));
+                    } else {
+                        defs_out.push((f.clone(), *params, Ref::new(self.transform_expr(fbody))));
+                    }
+                }
+                let cnt_out = self.transform_expr(cnt);
+                Transformed::Done(Expr::Fix(Ref::array(defs_out), Ref::new(cnt_out)))
+            }
+
+            Expr::PrimOp(op, args, vars, cnts) if vars.contains(&self.0) => {
+                Transformed::Done(Expr::PrimOp(*op, self.transform_values(args), *vars, *cnts))
+            }
+
+            Expr::Record(_, _, _)
+            | Expr::Select(_, _, _, _)
+            | Expr::Offset(_, _, _, _)
+            | Expr::App(_, _)
+            | Expr::Switch(_, _)
+            | Expr::PrimOp(_, _, _, _)
+            | Expr::Halt(_)
+            | Expr::Panic(_) => Transformed::Continue,
+        }
+    }
+
+    fn visit_value(&mut self, value: &Value<V>) -> Transformed<Value<V>> {
+        match value {
+            Value::Var(v) | Value::Label(v) if v == &self.0 => Transformed::Done(self.1.clone()),
+            _ => Transformed::Continue,
+        }
+    }
+}
 
 impl<V: Clone + PartialEq> Expr<V> {
     pub fn substitute_vars(self, subs: impl IntoIterator<Item = (V, Value<V>)>) -> Self {
@@ -11,86 +77,7 @@ impl<V: Clone + PartialEq> Expr<V> {
     }
 
     pub fn substitute_var(&self, var: &V, val: &Value<V>) -> Self {
-        match self {
-            Expr::Record(fs, r, c) => {
-                let fs = fs
-                    .iter()
-                    .map(|(v, ap)| (v.substitute_var(var, val), ap.clone()));
-                Expr::Record(
-                    Ref::array(fs.collect()),
-                    r.clone(),
-                    substitute_if_not_shadowed(c, r, var, val),
-                )
-            }
-
-            Expr::Select(idx, r, x, c) => Expr::Select(
-                *idx,
-                r.substitute_var(var, val),
-                x.clone(),
-                substitute_if_not_shadowed(c, x, var, val),
-            ),
-
-            Expr::Offset(idx, r, x, c) => Expr::Offset(
-                *idx,
-                r.substitute_var(var, val),
-                x.clone(),
-                substitute_if_not_shadowed(c, x, var, val),
-            ),
-
-            Expr::App(rator, rands) => Expr::App(
-                rator.substitute_var(var, val),
-                rands.substitute_var(var, val),
-            ),
-
-            Expr::Fix(defs, body) if defs.iter().any(|(f, _, _)| f == var) => {
-                // substituted variable is shadowed by a definition
-                Expr::Fix(*defs, *body)
-            }
-
-            Expr::Fix(defs, body) => {
-                let mut defs_out = Vec::with_capacity(defs.len());
-                for (f, params, fbody) in defs.iter() {
-                    if params.contains(var) {
-                        defs_out.push((f.clone(), *params, *fbody));
-                    } else {
-                        defs_out.push((f.clone(), *params, fbody.substitute_var(var, val).into()));
-                    }
-                }
-                let body_out = body.substitute_var(var, val).into();
-                Expr::Fix(Ref::array(defs_out), body_out)
-            }
-
-            Expr::Switch(v, arms) => {
-                Expr::Switch(v.substitute_var(var, val), arms.substitute_var(var, val))
-            }
-
-            Expr::PrimOp(op, args, binds, cnts) => {
-                let args_out = args.substitute_var(var, val);
-                let cnts_out = if binds.contains(var) {
-                    *cnts
-                } else {
-                    cnts.substitute_var(var, val)
-                };
-                Expr::PrimOp(*op, args_out, *binds, cnts_out)
-            }
-
-            Expr::Halt(v) => Expr::Halt(v.substitute_var(var, val)),
-
-            Expr::Panic(msg) => Expr::Panic(*msg),
-        }
-    }
-}
-
-fn substitute_if_not_shadowed<V: Clone + PartialEq>(
-    expr: &Ref<Expr<V>>,
-    binding: &V,
-    var: &V,
-    val: &Value<V>,
-) -> Ref<Expr<V>> {
-    if binding == var {
-        *expr
-    } else {
-        expr.substitute_var(var, val).into()
+        SubstituteVar(var.clone(), val.clone()).transform_expr(self)
     }
 }
 
@@ -100,22 +87,6 @@ impl<V: Clone + PartialEq> Value<V> {
             Value::Var(v) | Value::Label(v) if v == var => val.clone(),
             _ => self.clone(),
         }
-    }
-}
-
-impl<V: Clone + PartialEq> Ref<[Value<V>]> {
-    pub fn substitute_var(&self, var: &V, val: &Value<V>) -> Self {
-        Ref::array(self.iter().map(|v| v.substitute_var(var, val)).collect())
-    }
-}
-
-impl<V: Clone + PartialEq> Ref<[Ref<Expr<V>>]> {
-    pub fn substitute_var(&self, var: &V, val: &Value<V>) -> Self {
-        Ref::array(
-            self.iter()
-                .map(|v| v.substitute_var(var, val).into())
-                .collect(),
-        )
     }
 }
 
