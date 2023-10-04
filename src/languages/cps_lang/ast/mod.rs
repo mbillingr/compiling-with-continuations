@@ -3,9 +3,11 @@ mod free_vars;
 mod labels_to_vars;
 mod pretty_print;
 mod substitute;
+mod transform;
 
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
+pub use transform::{Transform, Transformed};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value<V: 'static> {
