@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub mod closure_conversion;
 pub mod cps_eta_reduction;
 pub mod label_fixrefs;
+mod labels_to_vars;
 pub mod mini_lambda_to_cps_lang;
 
 #[derive(Debug)]
@@ -33,8 +34,10 @@ mod tests {
     use crate::core::answer::Answer;
     use crate::languages::cps_lang;
     use crate::languages::cps_lang::ast as cps;
+    use crate::languages::cps_lang::ast::Transform;
     use crate::languages::mini_lambda::ast as ml;
     use crate::make_testsuite_for_mini_lambda;
+    use crate::transformations::labels_to_vars::LabelsToVars;
 
     unsafe fn run_in_optimized_cps(mini_lambda_expr: &ml::Expr<Ref<str>>) -> Answer {
         let expr = mini_lambda_expr.clone();
@@ -53,7 +56,7 @@ mod tests {
         cps_expr.pretty_print();
         println!("\n");
 
-        let cps_expr = cps_expr.labels_to_vars();
+        let cps_expr = LabelsToVars.apply(&cps_expr);
 
         let cps_expr =
             Box::leak(Box::new(closure_conversion::Context::new("__"))).convert_closures(&cps_expr);
