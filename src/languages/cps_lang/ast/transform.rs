@@ -43,8 +43,13 @@ pub trait Transform<V: Clone> {
 }
 
 pub enum Transformed<T> {
+    /// The transform does not modify the node directly, but will recur into its children
     Continue,
+
+    /// The transform replaces the node and is done with this branch
     Done(T),
+
+    /// The transform should run again on the replaced node
     Again(T),
 }
 
