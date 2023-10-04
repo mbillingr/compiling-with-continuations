@@ -67,12 +67,11 @@ impl<V: std::fmt::Display> Expr<V> {
             Expr::Switch(val, arms) => {
                 print!("switch ");
                 val.pretty_print();
-                println!();
                 for (i, cnt) in arms.iter().enumerate() {
+                    println!();
                     println!("{: >1$}case {i}:", "", indent + INDENT);
                     print!("{: >1$}", "", indent + INDENT * 2);
                     cnt.pretty_print_(indent + INDENT * 2);
-                    println!()
                 }
             }
 
@@ -92,14 +91,15 @@ impl<V: std::fmt::Display> Expr<V> {
                 print!(")");
 
                 if cnt.len() == 1 {
+                    println!();
                     print!("{: >1$}", "", indent);
                     cnt[0].pretty_print_(indent);
                 } else {
                     for c in cnt.iter() {
+                        println!();
                         println!("{: >1$}case:", "", indent + INDENT);
                         print!("{: >1$}", "", indent + INDENT * 2);
                         c.pretty_print_(indent + INDENT * 2);
-                        println!()
                     }
                 }
             }
