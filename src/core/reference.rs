@@ -21,7 +21,9 @@ impl<T: ?Sized> Ref<T> {
     }
 
     pub unsafe fn unsafe_mutate(&self, f: impl Fn(&mut T)) {
-        let mut_ref = &mut *(self.0 as *const _ as *mut _);
+        let cptr = self.0 as *const T;
+        let mptr = cptr as *mut T;
+        let mut_ref = &mut *mptr;
         f(mut_ref)
     }
 }
