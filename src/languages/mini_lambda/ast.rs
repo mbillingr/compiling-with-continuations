@@ -82,6 +82,11 @@ impl Expr<Ref<str>> {
                 [Symbol(Ref("switch")), val, List(Ref([conreps @ ..])), List(Ref([arms @ ..])), default],
             )) => Self::parse_switch(val, conreps, arms, Some(default)),
 
+            List(Ref([Symbol(Ref("con")), conrep, value])) => Ok(Expr::Con(
+                ConRep::from_sexpr(conrep)?,
+                Ref::new(Self::from_sexpr(value)?),
+            )),
+
             List(Ref([rator, rand])) => Ok(Expr::App(
                 Ref::new(Self::from_sexpr(rator)?),
                 Ref::new(Self::from_sexpr(rand)?),
@@ -235,6 +240,10 @@ impl std::fmt::Display for Expr<Ref<str>> {
                 write!(f, ")")
             }
 
+            Expr::Con(conrep, val) => {
+                write!(f, "(con {} {})", conrep, val)
+            }
+
             _ => todo!("{:?}", self),
         }
     }
@@ -383,6 +392,14 @@ mod tests {
 
     #[test]
     fn serialize_con() {
+        let repr = "(con transparent 5)";
+        let expr = Expr::Con(ConRep::Transparent, Expr::Int(5).into());
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn serialize_decon() {
         todo!()
     }
 }
