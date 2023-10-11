@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 map-macro = "0.2"
+serde = { version = "1.0.188", features = ["derive"] }
+serde-lexpr = "0.1.3"

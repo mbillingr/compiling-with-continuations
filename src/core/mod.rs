@@ -4,3 +4,4 @@ pub mod env;
 #[macro_use]
 pub mod reference;
 pub mod ptr_tagging;
+mod symbol;

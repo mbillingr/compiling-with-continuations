@@ -1,8 +1,9 @@
 use std::borrow::Borrow;
 use std::fmt::Formatter;
 use std::ops::Deref;
+use serde::{Deserialize, Deserializer, Serialize};
 
-#[derive(PartialEq, PartialOrd, Ord, Eq, Hash)]
+#[derive(Serialize, PartialEq, PartialOrd, Ord, Eq, Hash)]
 // public field for pattern matching
 pub struct Ref<T: ?Sized + 'static>(pub &'static T);
 
@@ -102,6 +103,12 @@ impl<T: ?Sized> Borrow<T> for Ref<T> {
 impl<T: ?Sized + std::fmt::Display> std::fmt::Display for Ref<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl<'de> Deserialize<'de> for Ref<str> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        todo!()
     }
 }
 
