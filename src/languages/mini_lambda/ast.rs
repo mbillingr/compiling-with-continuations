@@ -61,6 +61,39 @@ impl Expr<Ref<str>> {
         Self::from_sexpr(&sexpr)
     }
 
+    pub fn to_sexpr(&self) -> S {
+        match self {
+            Expr::Var(v) => S::Symbol(*v),
+            Expr::Fn(var, body) => S::list(vec![S::symbol("fn"), S::Symbol(*var), body.to_sexpr()]),
+            Expr::Fix(fnames, fns, body) => {
+                let defs: Vec<_> = fns
+                    .iter()
+                    .map(|f| f.to_sexpr())
+                    .zip(fnames.iter())
+                    .map(|(f, name)| f.replace_head(S::Symbol(*name)))
+                    .collect();
+                S::list(vec![S::symbol("fix"), S::list(defs), body.to_sexpr()])
+            }
+            Expr::App(rator, rand) => S::list(vec![rator.to_sexpr(), rand.to_sexpr()]),
+            Expr::Int(i) => S::Int(*i),
+            Expr::Real(v) => S::Float(*v),
+            Expr::String(v) => S::String(*v),
+            Expr::Switch(val, conreps, arms, default) => {
+                let crs = S::list(conreps.iter().map(|cr|cr.to_sexpr()).collect());
+                let arms = S::list(arms.iter().map(|(c, arm)|S::list(vec![c.to_sexpr(), arm.to_sexpr()])).collect());
+                let mut out = vec![S::symbol("switch"), val.to_sexpr(), crs, arms];
+                if let Some(x) = default {
+                    out.push(x.to_sexpr());
+                }
+                S::list(out)
+            }
+            Expr::Con(conrep, value) => {
+                S::list(vec![S::symbol("con"), conrep.to_sexpr(), value.to_sexpr()])
+            }
+            _ => todo!("{:?}", self),
+        }
+    }
+
     pub fn from_sexpr(s: &sexpr::S) -> Result<Self, Error<'static>> {
         use sexpr::S::*;
         match s {
@@ -172,6 +205,14 @@ impl ConRep {
             _ => Err(Error::Syntax(s.clone())),
         }
     }
+
+    pub fn to_sexpr(&self) -> S {
+        match self {
+            ConRep::Transparent => S::symbol("transparent"),
+            ConRep::Constant(c) => S::list(vec![S::symbol("const"), S::Int(*c as i64)]),
+            ConRep::Tagged(c) => S::list(vec![S::symbol("tag"), S::Int(*c as i64)]),
+        }
+    }
 }
 
 impl Con {
@@ -189,63 +230,20 @@ impl Con {
             _ => Err(Error::Syntax(s.clone())),
         }
     }
+
+    pub fn to_sexpr(&self) -> S {
+        match self {
+            Con::Data(cr) => cr.to_sexpr(),
+            Con::Int(v) => S::Int(*v),
+            Con::Real(v) => S::Float(*v),
+            Con::String(v) => S::String(Ref::new(v.to_string()))
+        }
+    }
 }
 
 impl std::fmt::Display for Expr<Ref<str>> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Expr::Int(x) => x.fmt(f),
-            Expr::Real(x) => x.fmt(f),
-            Expr::String(x) => write!(f, "\"{}\"", x),
-            Expr::Var(v) => v.fmt(f),
-
-            Expr::Fn(var, body) => write!(f, "(fn {} {})", var, body),
-
-            Expr::Fix(fnames, fns, body) => {
-                write!(f, "(fix (")?;
-                for (i, (fname, func)) in fnames.iter().zip(fns.iter()).enumerate() {
-                    if i > 0 {
-                        write!(f, " ")?
-                    }
-                    write!(f, "({}", fname)?;
-                    if let Expr::Fn(var, fb) = func {
-                        write!(f, " {} {}", var, fb)?;
-                    }
-                    write!(f, ")")?;
-                }
-                write!(f, ") {})", body)
-            }
-
-            Expr::App(rator, rand) => write!(f, "({} {})", rator, rand),
-
-            Expr::Switch(val, conreps, arms, default) => {
-                write!(f, "(switch {} (", val)?;
-                for (i, cr) in conreps.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, " ")?
-                    }
-                    write!(f, "{}", cr)?;
-                }
-                write!(f, ") (")?;
-                for (i, (con, then)) in arms.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, " ")?
-                    }
-                    write!(f, "({} {})", con, then)?;
-                }
-                write!(f, ")")?;
-                if let Some(d) = default {
-                    write!(f, " {}", d)?;
-                }
-                write!(f, ")")
-            }
-
-            Expr::Con(conrep, val) => {
-                write!(f, "(con {} {})", conrep, val)
-            }
-
-            _ => todo!("{:?}", self),
-        }
+        write!(f, "{}", self.to_sexpr())
     }
 }
 

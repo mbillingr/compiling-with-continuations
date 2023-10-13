@@ -41,3 +41,48 @@ impl SexprFactory for SF {
         unimplemented!()
     }
 }
+
+impl S {
+    pub fn symbol(s: &'static str) -> Self {
+        S::Symbol(Ref(s))
+    }
+    pub fn list(elems: Vec<S>) -> Self {
+        S::List(Ref::array(elems))
+    }
+
+    pub fn replace_head(&self, new_head: S) -> Self {
+        match self {
+            S::List(elems) => {
+                let mut es: Vec<_> = elems.iter().cloned().collect();
+                if es.is_empty() {
+                    new_head
+                } else {
+                    es[0] = new_head;
+                    S::List(Ref::array(es))
+                }
+            }
+            _ => panic!("not a list")
+        }
+    }
+}
+
+impl std::fmt::Display for S {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            S::Int(v) => write!(f, "{}", v),
+            S::Float(v) => write!(f, "{}", v),
+            S::Symbol(s) => write!(f, "{}", s),
+            S::String(s) => write!(f, "{:?}", s),
+            S::List(elems) => {
+                write!(f, "(")?;
+                for (i, e) in elems.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{}", e)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
