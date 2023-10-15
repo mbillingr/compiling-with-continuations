@@ -1,7 +1,6 @@
 use super::{AccessPath as AP, Expr, Value};
 use crate::core::reference::Ref;
 use crate::core::sexpr::{S, SF};
-use crate::list;
 use sexpr_parser::Parser;
 
 impl std::fmt::Display for Expr<Ref<str>> {
@@ -20,12 +19,30 @@ impl Expr<Ref<str>> {
         use S::*;
         match s {
             List(Ref([Symbol(Ref("record")), List(Ref(fields)), Symbol(var), cnt])) => {
-                let fields_out: Result<Vec<_>,_> = fields
+                let fields_out: Result<Vec<_>, _> = fields
                     .iter()
-                    .map(|f| Value::from_sexpr(f).map(|f_|(f_, AP::Ref(0))))
+                    .map(|f| Value::from_sexpr(f).map(|f_| (f_, AP::Ref(0))))
                     .collect();
                 Ok(Expr::Record(
                     Ref::array(fields_out?),
+                    *var,
+                    Ref::new(Self::from_sexpr(cnt)?),
+                ))
+            }
+
+            List(Ref([Symbol(Ref("select")), Int(idx), rec, Symbol(var), cnt])) => {
+                Ok(Expr::Select(
+                    *idx as isize,
+                    Value::from_sexpr(rec)?,
+                    *var,
+                    Ref::new(Self::from_sexpr(cnt)?),
+                ))
+            }
+
+            List(Ref([Symbol(Ref("offset")), Int(idx), rec, Symbol(var), cnt])) => {
+                Ok(Expr::Offset(
+                    *idx as isize,
+                    Value::from_sexpr(rec)?,
                     *var,
                     Ref::new(Self::from_sexpr(cnt)?),
                 ))
@@ -46,6 +63,22 @@ impl Expr<Ref<str>> {
                 cnt.to_sexpr(),
             ]),
 
+            Expr::Select(idx, rec, var, cnt) => S::list(vec![
+                S::symbol("select"),
+                S::Int(*idx as i64),
+                rec.to_sexpr(),
+                S::Symbol(*var),
+                cnt.to_sexpr(),
+            ]),
+
+            Expr::Offset(idx, rec, var, cnt) => S::list(vec![
+                S::symbol("offset"),
+                S::Int(*idx as i64),
+                rec.to_sexpr(),
+                S::Symbol(*var),
+                cnt.to_sexpr(),
+            ]),
+
             Expr::Halt(val) => S::list(vec![S::symbol("halt"), val.to_sexpr()]),
 
             _ => todo!("{:?}", self),
@@ -54,10 +87,6 @@ impl Expr<Ref<str>> {
 }
 
 impl Value<Ref<str>> {
-    pub fn from_str<'i>(src: &'i str) -> Result<Self, Error<'i>> {
-        todo!()
-    }
-
     pub fn to_sexpr(&self) -> S {
         match self {
             Value::Var(v) => S::Symbol(*v),
@@ -111,6 +140,32 @@ mod tests {
 
     #[test]
     fn select() {
+        let repr = "(select 0 r x (halt x))";
+        let expr: Expr<Ref<str>> = Expr::Select(
+            0,
+            Value::Var("r".into()),
+            "x".into(),
+            Expr::Halt(Value::Var("x".into())).into(),
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn offset() {
+        let repr = "(offset 0 r x (halt x))";
+        let expr: Expr<Ref<str>> = Expr::Offset(
+            0,
+            Value::Var("r".into()),
+            "x".into(),
+            Expr::Halt(Value::Var("x".into())).into(),
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn app() {
         todo!()
     }
 }
