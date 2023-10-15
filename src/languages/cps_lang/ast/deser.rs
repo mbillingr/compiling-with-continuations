@@ -48,14 +48,43 @@ impl Expr<Ref<str>> {
                 ))
             }
 
+            List(Ref([Symbol(Ref("fix")), List(Ref(defs)), cnt])) => {
+                let defs_out: Result<Vec<_>, _> = defs.iter().map(Self::sexpr_to_def).collect();
+                Ok(Expr::Fix(
+                    Ref::array(defs_out?),
+                    Ref::new(Expr::from_sexpr(cnt)?),
+                ))
+            }
+
             List(Ref([Symbol(Ref("halt")), val])) => Ok(Expr::Halt(Value::from_sexpr(val)?)),
 
             List(Ref([rator, rands @ ..])) => {
-                let rands_out: Result<Vec<_>, _> = rands.iter().map1(Value::from_sexpr).collect();
+                let rands_out: Result<Vec<_>, _> = rands.iter().map(Value::from_sexpr).collect();
                 Ok(Expr::App(Value::from_sexpr(rator)?, Ref::array(rands_out?)))
             }
 
             _ => todo!("{:?}", s),
+        }
+    }
+
+    fn sexpr_to_def(d: &S) -> Result<(Ref<str>, Ref<[Ref<str>]>, Ref<Self>), Error<'static>> {
+        use S::*;
+        match d {
+            List(Ref([Symbol(fname), List(fargs), fbody])) => {
+                let mut params = vec![];
+                for p in fargs.iter() {
+                    match p {
+                        Symbol(s) => params.push(*s),
+                        _ => return Err(Error::Syntax(p.clone())),
+                    }
+                }
+                Ok((
+                    *fname,
+                    Ref::array(params),
+                    Ref::new(Self::from_sexpr(fbody)?),
+                ))
+            }
+            _ => Err(Error::Syntax(d.clone())),
         }
     }
 
@@ -88,6 +117,20 @@ impl Expr<Ref<str>> {
                 let mut items = vec![rator.to_sexpr()];
                 items.extend(rands.iter().map(Value::to_sexpr));
                 S::list(items)
+            }
+
+            Expr::Fix(defs, cnt) => {
+                let defs_out: Vec<_> = defs
+                    .iter()
+                    .map(|(fname, fargs, fbody)| {
+                        S::list(vec![
+                            S::Symbol(*fname),
+                            S::list(fargs.iter().copied().map(S::Symbol).collect()),
+                            fbody.to_sexpr(),
+                        ])
+                    })
+                    .collect();
+                S::list(vec![S::symbol("fix"), S::list(defs_out), cnt.to_sexpr()])
             }
 
             Expr::Halt(val) => S::list(vec![S::symbol("halt"), val.to_sexpr()]),
@@ -188,6 +231,21 @@ mod tests {
 
     #[test]
     fn fix() {
+        let repr = "(fix ((foo (x y) (halt 1))) (halt 0))";
+        let expr: Expr<Ref<str>> = Expr::Fix(
+            list![(
+                "foo".into(),
+                list!["x".into(), "y".into()],
+                Expr::Halt(Value::Int(1)).into()
+            )],
+            Expr::Halt(Value::Int(0)).into(),
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn switch() {
         todo!()
     }
 }
