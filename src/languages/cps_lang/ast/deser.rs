@@ -50,6 +50,11 @@ impl Expr<Ref<str>> {
 
             List(Ref([Symbol(Ref("halt")), val])) => Ok(Expr::Halt(Value::from_sexpr(val)?)),
 
+            List(Ref([rator, rands @ ..])) => {
+                let rands_out: Result<Vec<_>, _> = rands.iter().map1(Value::from_sexpr).collect();
+                Ok(Expr::App(Value::from_sexpr(rator)?, Ref::array(rands_out?)))
+            }
+
             _ => todo!("{:?}", s),
         }
     }
@@ -78,6 +83,12 @@ impl Expr<Ref<str>> {
                 S::Symbol(*var),
                 cnt.to_sexpr(),
             ]),
+
+            Expr::App(rator, rands) => {
+                let mut items = vec![rator.to_sexpr()];
+                items.extend(rands.iter().map(Value::to_sexpr));
+                S::list(items)
+            }
 
             Expr::Halt(val) => S::list(vec![S::symbol("halt"), val.to_sexpr()]),
 
@@ -166,6 +177,17 @@ mod tests {
 
     #[test]
     fn app() {
+        let repr = "(f x 1)";
+        let expr: Expr<Ref<str>> = Expr::App(
+            Value::Var("f".into()),
+            list![Value::Var("x".into()), Value::Int(1)],
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn fix() {
         todo!()
     }
 }
