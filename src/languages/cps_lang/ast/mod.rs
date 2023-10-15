@@ -29,7 +29,7 @@ pub enum Expr<V: 'static> {
     Switch(Value<V>, List<Ref<Expr<V>>>),
     PrimOp(PrimOp, List<Value<V>>, List<V>, List<Ref<Expr<V>>>),
     Halt(Value<V>),
-    Panic(&'static str),
+    Panic(Ref<str>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

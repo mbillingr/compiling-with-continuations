@@ -251,8 +251,8 @@ impl Context {
                 }
 
                 let arms = *arms;
-                let default =
-                    default.unwrap_or_else(|| Ref::new(LExpr::Panic("unspecified default case")));
+                let default = default
+                    .unwrap_or_else(|| Ref::new(LExpr::Panic("unspecified default case".into())));
                 let k = self.gs.gensym("k");
                 let x = self.gs.gensym("x");
                 let f = self.gs.gensym("f");
@@ -293,7 +293,7 @@ impl Context {
                 )
             }
 
-            LExpr::Panic(msg) => CExpr::Panic(msg),
+            LExpr::Panic(msg) => CExpr::Panic(*msg),
         }
     }
 

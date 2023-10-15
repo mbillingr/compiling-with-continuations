@@ -21,7 +21,7 @@ pub enum PrimOp {
 }
 
 impl PrimOp {
-    pub fn from_str(s:&str) -> Option<Self> {
+    pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "const/ptr?" => Some(PrimOp::CorP),
             "untag" => Some(PrimOp::Untag),
@@ -37,7 +37,7 @@ impl PrimOp {
             "=s" => Some(PrimOp::SSame),
             "call/cc" => Some(PrimOp::CallCC),
             "throw" => Some(PrimOp::Throw),
-            _ => None
+            _ => None,
         }
     }
     pub fn to_str(&self) -> &'static str {

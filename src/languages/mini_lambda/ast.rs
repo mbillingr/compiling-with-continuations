@@ -25,7 +25,7 @@ pub enum Expr<V: 'static> {
     Record(Ref<[Expr<V>]>),
     Select(isize, Ref<Expr<V>>),
     Prim(PrimOp),
-    Panic(&'static str),
+    Panic(Ref<str>),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -109,10 +109,10 @@ impl Expr<Ref<str>> {
                 S::Int(*idx as i64),
                 rec.to_sexpr(),
             ]),
-            Expr::Prim(op) => {
-                S::list(vec![S::symbol("primitive"), S::symbol(op.to_str())])
+            Expr::Prim(op) => S::list(vec![S::symbol("primitive"), S::symbol(op.to_str())]),
+            Expr::Panic(msg) => {
+                S::list(vec![S::symbol("panic!"), S::String(msg.to_string().into())])
             }
-            _ => todo!("{:?}", self),
         }
     }
 
@@ -157,9 +157,15 @@ impl Expr<Ref<str>> {
                 Ref::new(Self::from_sexpr(rec)?),
             )),
 
-            List(Ref([Symbol(Ref("primitive")), Symbol(Ref(op))])) if PrimOp::from_str(op).is_some() => Ok(Expr::Prim(
-                PrimOp::from_str(op).unwrap()
-            )),
+            List(Ref([Symbol(Ref("primitive")), Symbol(Ref(op))]))
+                if PrimOp::from_str(op).is_some() =>
+            {
+                Ok(Expr::Prim(PrimOp::from_str(op).unwrap()))
+            }
+
+            List(Ref([Symbol(Ref("panic!")), String(msg)])) => {
+                Ok(Expr::Panic(msg.to_string().into()))
+            }
 
             List(Ref([rator, rand])) => Ok(Expr::App(
                 Ref::new(Self::from_sexpr(rator)?),
@@ -465,6 +471,14 @@ mod tests {
     fn serialize_primitive_op() {
         let repr = "(primitive call/cc)";
         let expr = Expr::Prim(PrimOp::CallCC);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn serialize_panic() {
+        let repr = "(panic! \"WAAAA!!\")";
+        let expr = Expr::Panic("WAAAA!!".into());
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }
