@@ -1,5 +1,5 @@
 use crate::core::answer::Answer;
-use crate::core::ptr_tagging::maybe_pointer;
+use crate::core::ptr_tagging::{maybe_pointer, untag};
 use crate::core::reference::Ref;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -21,11 +21,49 @@ pub enum PrimOp {
 }
 
 impl PrimOp {
+    pub fn from_str(s:&str) -> Option<Self> {
+        match s {
+            "const/ptr?" => Some(PrimOp::CorP),
+            "untag" => Some(PrimOp::Untag),
+            "zero?" => Some(PrimOp::IsZero),
+            "make-box" => Some(PrimOp::MkBox),
+            "box-set" => Some(PrimOp::BoxSet),
+            "box-get" => Some(PrimOp::BoxGet),
+            "=" => Some(PrimOp::ISame),
+            "~" => Some(PrimOp::INeg),
+            "+" => Some(PrimOp::IAdd),
+            "-" => Some(PrimOp::ISub),
+            "=f" => Some(PrimOp::FSame),
+            "=s" => Some(PrimOp::SSame),
+            "call/cc" => Some(PrimOp::CallCC),
+            "throw" => Some(PrimOp::Throw),
+            _ => None
+        }
+    }
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            PrimOp::CorP => "const/ptr?",
+            PrimOp::Untag => "untag",
+            PrimOp::IsZero => "zero?",
+            PrimOp::MkBox => "make-box",
+            PrimOp::BoxSet => "box-set",
+            PrimOp::BoxGet => "box-get",
+            PrimOp::ISame => "=",
+            PrimOp::INeg => "~",
+            PrimOp::IAdd => "+",
+            PrimOp::ISub => "-",
+            PrimOp::FSame => "=f",
+            PrimOp::SSame => "=s",
+            PrimOp::CallCC => "call/cc",
+            PrimOp::Throw => "throw",
+        }
+    }
+
     pub unsafe fn apply(&self, mut args: impl Iterator<Item = Answer>) -> Answer {
         use PrimOp::*;
         match self {
             CorP => Answer::from_bool(maybe_pointer(args.next().unwrap().repr())),
-            Untag => Answer::from_bool(maybe_pointer(args.next().unwrap().repr())),
+            Untag => Answer::from_usize(untag(args.next().unwrap().repr())),
             IsZero => Answer::from_bool(args.next().unwrap().repr() == 0),
             MkBox => Answer::from_ref(Ref::new(args.next().unwrap())),
             BoxGet => *args.next().unwrap().as_ref(),

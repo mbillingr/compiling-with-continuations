@@ -79,8 +79,12 @@ impl Expr<Ref<str>> {
             Expr::Real(v) => S::Float(*v),
             Expr::String(v) => S::String(*v),
             Expr::Switch(val, conreps, arms, default) => {
-                let crs = S::list(conreps.iter().map(|cr|cr.to_sexpr()).collect());
-                let arms = S::list(arms.iter().map(|(c, arm)|S::list(vec![c.to_sexpr(), arm.to_sexpr()])).collect());
+                let crs = S::list(conreps.iter().map(|cr| cr.to_sexpr()).collect());
+                let arms = S::list(
+                    arms.iter()
+                        .map(|(c, arm)| S::list(vec![c.to_sexpr(), arm.to_sexpr()]))
+                        .collect(),
+                );
                 let mut out = vec![S::symbol("switch"), val.to_sexpr(), crs, arms];
                 if let Some(x) = default {
                     out.push(x.to_sexpr());
@@ -89,6 +93,24 @@ impl Expr<Ref<str>> {
             }
             Expr::Con(conrep, value) => {
                 S::list(vec![S::symbol("con"), conrep.to_sexpr(), value.to_sexpr()])
+            }
+            Expr::DeCon(conrep, value) => S::list(vec![
+                S::symbol("decon"),
+                conrep.to_sexpr(),
+                value.to_sexpr(),
+            ]),
+            Expr::Record(fields) => {
+                let mut fields_out = vec![S::symbol("record")];
+                fields_out.extend(fields.iter().map(Self::to_sexpr));
+                S::list(fields_out)
+            }
+            Expr::Select(idx, rec) => S::list(vec![
+                S::symbol("select"),
+                S::Int(*idx as i64),
+                rec.to_sexpr(),
+            ]),
+            Expr::Prim(op) => {
+                S::list(vec![S::symbol("primitive"), S::symbol(op.to_str())])
             }
             _ => todo!("{:?}", self),
         }
@@ -118,6 +140,25 @@ impl Expr<Ref<str>> {
             List(Ref([Symbol(Ref("con")), conrep, value])) => Ok(Expr::Con(
                 ConRep::from_sexpr(conrep)?,
                 Ref::new(Self::from_sexpr(value)?),
+            )),
+
+            List(Ref([Symbol(Ref("decon")), conrep, value])) => Ok(Expr::DeCon(
+                ConRep::from_sexpr(conrep)?,
+                Ref::new(Self::from_sexpr(value)?),
+            )),
+
+            List(Ref([Symbol(Ref("record")), fields @ ..])) => {
+                let fields_out: Result<Vec<_>, _> = fields.iter().map(Self::from_sexpr).collect();
+                Ok(Expr::Record(Ref::array(fields_out?)))
+            }
+
+            List(Ref([Symbol(Ref("select")), Int(idx), rec])) => Ok(Expr::Select(
+                *idx as isize,
+                Ref::new(Self::from_sexpr(rec)?),
+            )),
+
+            List(Ref([Symbol(Ref("primitive")), Symbol(Ref(op))])) if PrimOp::from_str(op).is_some() => Ok(Expr::Prim(
+                PrimOp::from_str(op).unwrap()
             )),
 
             List(Ref([rator, rand])) => Ok(Expr::App(
@@ -236,7 +277,7 @@ impl Con {
             Con::Data(cr) => cr.to_sexpr(),
             Con::Int(v) => S::Int(*v),
             Con::Real(v) => S::Float(*v),
-            Con::String(v) => S::String(Ref::new(v.to_string()))
+            Con::String(v) => S::String(Ref::new(v.to_string())),
         }
     }
 }
@@ -398,6 +439,33 @@ mod tests {
 
     #[test]
     fn serialize_decon() {
-        todo!()
+        let repr = "(decon transparent 5)";
+        let expr = Expr::DeCon(ConRep::Transparent, Expr::Int(5).into());
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn serialize_record() {
+        let repr = "(record 1 2)";
+        let expr = Expr::Record(list![Expr::Int(1), Expr::Int(2)]);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn serialize_select() {
+        let repr = "(select 0 r)";
+        let expr = Expr::Select(0, Ref::new(Expr::Var("r".into())));
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn serialize_primitive_op() {
+        let repr = "(primitive call/cc)";
+        let expr = Expr::Prim(PrimOp::CallCC);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
     }
 }

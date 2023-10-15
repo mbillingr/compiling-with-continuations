@@ -61,7 +61,7 @@ impl S {
                     S::List(Ref::array(es))
                 }
             }
-            _ => panic!("not a list")
+            _ => panic!("not a list"),
         }
     }
 }
