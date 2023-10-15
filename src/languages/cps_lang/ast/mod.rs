@@ -1,4 +1,5 @@
 mod count_nodes;
+mod deser;
 mod free_vars;
 mod pretty_print;
 mod substitute;
