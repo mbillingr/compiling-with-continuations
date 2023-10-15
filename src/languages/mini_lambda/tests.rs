@@ -1,50 +1,59 @@
 #[macro_export]
 macro_rules! make_testsuite_for_mini_lambda {
     (default_tests $runner:ident) => {
+        use $crate::languages::mini_lambda::ast::Expr;
+
+        macro_rules! run {
+            ($src:expr) => { $runner(&Expr::from_str($src).unwrap()) };
+        }
+
         #[test]
         fn constants() {
             unsafe {
-                assert_eq!($runner(&mini_expr!(int 0)).as_int(), 0);
-                assert_eq!($runner(&mini_expr!(real 1.2)).as_float(), 1.2);
-                assert_eq!($runner(&mini_expr!(str "abc")).as_str(), "abc");
+                assert_eq!(run!("0").as_int(), 0);
+                assert_eq!(run!("1.2").as_float(), 1.2);
+                assert_eq!(run!("\"abc\"").as_str(), "abc");
             }
         }
 
         #[test]
         fn record_creation_and_selection() {
             unsafe {
-                assert_eq!($runner(&mini_expr!(select [(int 1) (int 2)] 0)).as_int(), 1);
-                assert_eq!($runner(&mini_expr!(select [(int 1) (int 2)] 1)).as_int(), 2);
+                assert_eq!(run!("(select 0 (record 1 2))").as_int(), 1);
+                assert_eq!(run!("(select 1 (record 1 2))").as_int(), 2);
             }
         }
 
         #[test]
         fn function_definition_and_application() {
             unsafe {
-                assert_eq!($runner(&mini_expr!((fun x = int 1) int 2)).as_int(), 1);
+                assert_eq!(run!("((fn x 1) 2)").as_int(), 1);
             }
         }
 
         #[test]
         fn function_argument_referencing() {
             unsafe {
-                assert_eq!($runner(&mini_expr!((fun x = x) int 2)).as_int(), 2);
+                assert_eq!(run!("((fn x x) 2)").as_int(), 2);
             }
         }
 
         #[test]
         fn function_closure_capture() {
             unsafe {
-                assert_eq!(
-                    $runner(&mini_expr!(((fun x = fun y = x) int 3) int 4)).as_int(),
-                    3
-                );
+                assert_eq!(run!("(((fn x (fn y x)) 3) 4)").as_int(), 3);
             }
         }
 
         #[test]
         fn mutual_recursion() {
             unsafe {
+                assert_eq!(run!(
+                    "(fix ((foo x (bar x))
+                           (bar x ((primitive +) (record x 2))))
+                       (foo 5))").as_int(),
+                    7
+                );
                 assert_eq!($runner(&mini_expr!(
                     fix fun foo x = (bar x)
                         fun bar x = (- [x (int -2)])
