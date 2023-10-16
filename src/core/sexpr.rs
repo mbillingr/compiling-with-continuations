@@ -64,6 +64,13 @@ impl S {
             _ => panic!("not a list"),
         }
     }
+
+    pub fn try_symbol(&self) -> Option<Ref<str>> {
+        match self {
+            S::Symbol(s) => Some(*s),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for S {

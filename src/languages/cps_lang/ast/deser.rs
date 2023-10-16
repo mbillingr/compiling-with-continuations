@@ -1,6 +1,7 @@
 use super::{AccessPath as AP, Expr, Value};
 use crate::core::reference::Ref;
 use crate::core::sexpr::{S, SF};
+use crate::languages::common_primops::PrimOp;
 use sexpr_parser::Parser;
 
 impl std::fmt::Display for Expr<Ref<str>> {
@@ -56,14 +57,45 @@ impl Expr<Ref<str>> {
                 ))
             }
 
+            List(Ref([Symbol(Ref("switch")), val, arms @ ..])) => {
+                let arms_out: Result<Vec<_>, _> = arms
+                    .iter()
+                    .map(|x| Expr::from_sexpr(x).map(Ref::new))
+                    .collect();
+                Ok(Expr::Switch(Value::from_sexpr(val)?, Ref::array(arms_out?)))
+            }
+
+            List(Ref(
+                [Symbol(Ref("primop")), sop @ Symbol(Ref(op)), List(args), List(vars), List(cnts)],
+            )) => Ok(Expr::PrimOp(
+                PrimOp::from_str(op).ok_or_else(|| Error::Syntax(sop.clone()))?,
+                Ref::array(
+                    args.iter()
+                        .map(Value::from_sexpr)
+                        .collect::<Result<Vec<_>, _>>()?,
+                ),
+                Ref::array(
+                    vars.iter()
+                        .map(|s| s.try_symbol().ok_or_else(|| Error::Syntax(sop.clone())))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ),
+                Ref::array(
+                    cnts.iter()
+                        .map(|c| Expr::from_sexpr(c).map(Ref::new))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ),
+            )),
+
             List(Ref([Symbol(Ref("halt")), val])) => Ok(Expr::Halt(Value::from_sexpr(val)?)),
+
+            List(Ref([Symbol(Ref("panic")), String(msg)])) => Ok(Expr::Panic(msg.to_string().into())),
 
             List(Ref([rator, rands @ ..])) => {
                 let rands_out: Result<Vec<_>, _> = rands.iter().map(Value::from_sexpr).collect();
                 Ok(Expr::App(Value::from_sexpr(rator)?, Ref::array(rands_out?)))
             }
 
-            _ => todo!("{:?}", s),
+            _ => Err(Error::Syntax(s.clone())),
         }
     }
 
@@ -133,9 +165,23 @@ impl Expr<Ref<str>> {
                 S::list(vec![S::symbol("fix"), S::list(defs_out), cnt.to_sexpr()])
             }
 
+            Expr::Switch(val, arms) => {
+                let mut items = vec![S::symbol("switch"), val.to_sexpr()];
+                items.extend(arms.iter().map(|x| x.to_sexpr()));
+                S::list(items)
+            }
+
+            Expr::PrimOp(op, args, vars, cnts) => S::list(vec![
+                S::symbol("primop"),
+                S::Symbol(Ref(op.to_str())),
+                S::list(args.iter().map(Value::to_sexpr).collect()),
+                S::list(vars.iter().copied().map(S::Symbol).collect()),
+                S::list(cnts.iter().map(|c| c.to_sexpr()).collect()),
+            ]),
+
             Expr::Halt(val) => S::list(vec![S::symbol("halt"), val.to_sexpr()]),
 
-            _ => todo!("{:?}", self),
+            Expr::Panic(msg) => S::list(vec![S::symbol("panic"), S::String(msg.to_string().into())])
         }
     }
 }
@@ -178,6 +224,7 @@ impl<'i> From<sexpr_parser::Error<'i>> for Error<'i> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::languages::common_primops::PrimOp;
     use crate::list;
 
     #[test]
@@ -246,6 +293,46 @@ mod tests {
 
     #[test]
     fn switch() {
-        todo!()
+        let repr = "(switch 0 (halt 1) (halt 0))";
+        let expr: Expr<Ref<str>> = Expr::Switch(
+            Value::Int(0),
+            list![
+                Expr::Halt(Value::Int(1)).into(),
+                Expr::Halt(Value::Int(0)).into()
+            ],
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn primop() {
+        let repr = "(primop + (1 2) (res) ((halt res)))";
+        let expr: Expr<Ref<str>> = Expr::PrimOp(
+            PrimOp::IAdd,
+            list![Value::Int(1), Value::Int(2)],
+            list!["res".into()],
+            list![Ref::new(Expr::Halt(Value::Var("res".into())))],
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn halt() {
+        let repr = "(halt 42)";
+        let expr: Expr<Ref<str>> = Expr::Halt(Value::Int(42)
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn panics() {
+        let repr = "(panic \":(\")";
+        let expr: Expr<Ref<str>> = Expr::Panic(":(".into()
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
     }
 }
