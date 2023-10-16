@@ -10,7 +10,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(sym_delim: &'static str) -> Self {
+    pub fn new(sym_delim: String) -> Self {
         Context {
             gs: GensymContext::new(sym_delim),
         }
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn unknown_application() {
-        let ctx = Box::leak(Box::new(Context::new("__")));
+        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
 
         let x = cps_expr!((f x));
         let y = cps_expr!(select 0 f f__0 (f__0 f x));
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn simple_conversion() {
-        let ctx = Box::leak(Box::new(Context::new("__")));
+        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
 
         let x = cps_expr!(record [] r (fix f(x)=(halt r) in (f f)));
         let y = cps_expr!(record [] r (fix f__1(f x)=(select 1 f r (halt r)) in (record [(@f__1) r] cls__0 (offset 0 cls__0 f ((@f__1) f f)))));
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn mutual_recursion() {
-        let ctx = Box::leak(Box::new(Context::new("__")));
+        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
 
         let x = cps_expr!(record [] r (fix f(x)=(halt r); g(x)=(f g) in (g f)));
         let y = cps_expr!(record [] r

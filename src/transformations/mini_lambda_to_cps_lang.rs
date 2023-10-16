@@ -17,7 +17,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(sym_delim: &'static str) -> Self {
+    pub fn new(sym_delim: String) -> Self {
         Context {
             gs: GensymContext::new(sym_delim),
         }
@@ -530,7 +530,7 @@ mod tests {
 
     pub fn convert_program(expr: LExpr) -> CExpr {
         // for testing we need to generate symbols that are valid rust identifiers
-        let ctx = Box::leak(Box::new(Context::new("__")));
+        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
         ctx.convert(&expr, Box::new(|x| CExpr::Halt(x)))
     }
 

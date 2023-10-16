@@ -9,7 +9,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(sym_delim: &'static str) -> Self {
+    pub fn new(sym_delim: String) -> Self {
         Context {
             gs: GensymContext::new(sym_delim),
         }
@@ -175,59 +175,55 @@ mod tests {
     use super::*;
     use crate::{cps_expr, cps_expr_list, cps_ident_list, cps_value, cps_value_list};
 
+    fn eta_reduce(exp: Expr<Ref<str>>) -> Expr<Ref<str>> {
+        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
+        ctx.eta_reduce(&exp)
+    }
+
     #[test]
     fn simple_reduction() {
-        let ctx = Box::leak(Box::new(Context::new("__")));
-
         let x = cps_expr!(fix f(x)=(g x) in (f z));
         let y = cps_expr!((g z));
-        assert_eq!(ctx.eta_reduce(&x), y);
+        assert_eq!(eta_reduce(x), y);
 
         let x = cps_expr!(fix f(a b c)=(g a b c) in (f x y z));
         let y = cps_expr!((g x y z));
-        assert_eq!(ctx.eta_reduce(&x), y);
+        assert_eq!(eta_reduce(x), y);
     }
 
     #[test]
     fn reduction_also_in_sibling_functions() {
-        let ctx = Box::leak(Box::new(Context::new("__")));
-
         let x = cps_expr!(fix f(x)=(h x); g(x)=(f z) in (g z));
         let y = cps_expr!(fix g(x)=(h z) in (g z));
-        assert_eq!(ctx.eta_reduce(&x), y);
+        assert_eq!(eta_reduce(x), y);
     }
 
     #[test]
     fn no_reduction_allowed() {
-        let ctx = Box::leak(Box::new(Context::new("__")));
-
         let x = cps_expr!(fix f(x)=(f x) in (f z));
-        assert_eq!(ctx.eta_reduce(&x), x);
+        let y = x.clone();
+        assert_eq!(eta_reduce(x), y);
     }
 
     #[test]
     fn multilevel_reduction() {
-        let ctx = Box::leak(Box::new(Context::new("__")));
-
         let x = cps_expr!(fix g(x)=(f x); f(x)=(h x) in (g z));
         let y = cps_expr!((h z));
-        assert_eq!(ctx.eta_reduce(&x), y);
+        assert_eq!(eta_reduce(x), y);
 
         let x = cps_expr!(fix f(x)=(h x); g(x)=(f x) in (g z));
         let y = cps_expr!((h z));
-        assert_eq!(ctx.eta_reduce(&x), y);
+        assert_eq!(eta_reduce(x), y);
 
         let x = cps_expr!(fix f(x)=(h x) in (fix g(x)=(f x) in (g z)));
         let y = cps_expr!((h z));
-        assert_eq!(ctx.eta_reduce(&x), y);
+        assert_eq!(eta_reduce(x), y);
     }
 
     #[test]
     fn uncurrying() {
-        let ctx = Box::leak(Box::new(Context::new("__")));
-
         let x = cps_expr!(fix f(x c)=(fix g(b k)=(+ [x b] [r] [(k r)]) in (c g)) in f);
         let y = cps_expr!(fix f(x__1 c__2)=(fix g__3(b__4 k__5)=(f__0 x__1 c__2 g__3 b__4 k__5) in (c__2 g__3)); f__0(x c g b k)=(+ [x b] [r] [(k r)]) in f);
-        assert_eq!(ctx.eta_reduce(&x), y);
+        assert_eq!(eta_reduce(x), y);
     }
 }

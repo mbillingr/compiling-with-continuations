@@ -88,7 +88,9 @@ impl Expr<Ref<str>> {
 
             List(Ref([Symbol(Ref("halt")), val])) => Ok(Expr::Halt(Value::from_sexpr(val)?)),
 
-            List(Ref([Symbol(Ref("panic")), String(msg)])) => Ok(Expr::Panic(msg.to_string().into())),
+            List(Ref([Symbol(Ref("panic")), String(msg)])) => {
+                Ok(Expr::Panic(msg.to_string().into()))
+            }
 
             List(Ref([rator, rands @ ..])) => {
                 let rands_out: Result<Vec<_>, _> = rands.iter().map(Value::from_sexpr).collect();
@@ -181,7 +183,9 @@ impl Expr<Ref<str>> {
 
             Expr::Halt(val) => S::list(vec![S::symbol("halt"), val.to_sexpr()]),
 
-            Expr::Panic(msg) => S::list(vec![S::symbol("panic"), S::String(msg.to_string().into())])
+            Expr::Panic(msg) => {
+                S::list(vec![S::symbol("panic"), S::String(msg.to_string().into())])
+            }
         }
     }
 }
@@ -321,8 +325,7 @@ mod tests {
     #[test]
     fn halt() {
         let repr = "(halt 42)";
-        let expr: Expr<Ref<str>> = Expr::Halt(Value::Int(42)
-        );
+        let expr: Expr<Ref<str>> = Expr::Halt(Value::Int(42));
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }
@@ -330,8 +333,7 @@ mod tests {
     #[test]
     fn panics() {
         let repr = "(panic \":(\")";
-        let expr: Expr<Ref<str>> = Expr::Panic(":(".into()
-        );
+        let expr: Expr<Ref<str>> = Expr::Panic(":(".into());
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }

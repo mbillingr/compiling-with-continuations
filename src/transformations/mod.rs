@@ -10,11 +10,11 @@ pub mod mini_lambda_to_cps_lang;
 #[derive(Debug)]
 pub struct GensymContext {
     sym_ctr: AtomicUsize,
-    sym_delim: &'static str,
+    sym_delim: String,
 }
 
 impl GensymContext {
-    pub fn new(sym_delim: &'static str) -> Self {
+    pub fn new(sym_delim: String) -> Self {
         GensymContext {
             sym_ctr: AtomicUsize::new(0),
             sym_delim,
@@ -42,24 +42,26 @@ mod tests {
     unsafe fn run_in_optimized_cps(mini_lambda_expr: &ml::Expr<Ref<str>>) -> Answer {
         let expr = mini_lambda_expr.clone();
 
-        let cps_expr = Box::leak(Box::new(mini_lambda_to_cps_lang::Context::new("__")))
-            .convert(&expr, Box::new(|x| cps::Expr::Halt(x)));
+        let cps_expr = Box::leak(Box::new(mini_lambda_to_cps_lang::Context::new(
+            "__".to_string(),
+        )))
+        .convert(&expr, Box::new(|x| cps::Expr::Halt(x)));
 
         let cps_expr = label_fixrefs::Context::new().convert_labels(&cps_expr);
 
         cps_expr.pretty_print();
         println!("\n");
 
-        let cps_expr =
-            Box::leak(Box::new(cps_eta_reduction::Context::new("__"))).eta_reduce(&cps_expr);
+        let cps_expr = Box::leak(Box::new(cps_eta_reduction::Context::new("__".to_string())))
+            .eta_reduce(&cps_expr);
 
         cps_expr.pretty_print();
         println!("\n");
 
         let cps_expr = LabelsToVars.transform_expr(&cps_expr);
 
-        let cps_expr =
-            Box::leak(Box::new(closure_conversion::Context::new("__"))).convert_closures(&cps_expr);
+        let cps_expr = Box::leak(Box::new(closure_conversion::Context::new("__".to_string())))
+            .convert_closures(&cps_expr);
 
         cps_expr.pretty_print();
         println!("\n");
