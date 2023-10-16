@@ -38,7 +38,12 @@ impl Context {
 
                 let mut substitutions = Substitution::new();
 
-                for (f, params, fbody) in defs.iter() {
+                let reduced_bodies: Vec<_> = defs
+                    .iter()
+                    .map(|(_, _, b)| Ref::new(self.eta_reduce(b)))
+                    .collect();
+
+                for ((f, params, _), fbody) in defs.iter().zip(&reduced_bodies) {
                     match &**fbody {
                         Expr::App(Value::Var(g) | Value::Label(g), _) if f == g => {}
 
@@ -96,7 +101,7 @@ impl Context {
 
                         _ => {}
                     }
-                    defs_out.push((f.clone(), *params, self.eta_reduce(fbody).into()));
+                    defs_out.push((f.clone(), *params, *fbody));
                 }
 
                 let mut body = *body;
@@ -216,6 +221,10 @@ mod tests {
         assert_eq!(eta_reduce(x), y);
 
         let x = cps_expr!(fix f(x)=(h x) in (fix g(x)=(f x) in (g z)));
+        let y = cps_expr!((h z));
+        assert_eq!(eta_reduce(x), y);
+
+        let x = cps_expr!(fix g(x)=(fix f(x)=(h x) in (f x)) in (g z));
         let y = cps_expr!((h z));
         assert_eq!(eta_reduce(x), y);
     }
