@@ -1,0 +1,14 @@
+{"packages":{"linux-x64":[{"name":"base"
+                          ,"version":"2.1.0"}
+                         ,{"name":"base-clm"
+                          ,"version":"1.5.2"}
+                         ,{"name":"base-code-generator"
+                          ,"version":"2.2.0"}
+                         ,{"name":"base-compiler"
+                          ,"version":"3.1.1"}
+                         ,{"name":"base-lib"
+                          ,"version":"2.2.0"}
+                         ,{"name":"base-rts"
+                          ,"version":"3.0.1"}
+                         ,{"name":"base-stdenv"
+                          ,"version":"2.1.1"}]}}

@@ -1,0 +1,18 @@
+format_version: 0.4.6
+name: cc-passes
+version: 0.1.0
+type: Application
+src:
+  - src
+dependencies:
+  base: ^2.1.0
+build:
+  app:
+    script:
+      - clm:
+          src: [src]
+          main: HelloWorld
+          target: bin/HelloWorld
+tests:
+  compilation:
+    compilation: {}
