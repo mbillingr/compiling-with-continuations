@@ -3,8 +3,8 @@
 # Just put the main program and libraries at the top here
 # without extensions, and the makefile takes care of
 # everything else:
-SCM_PROGRAM = main
-SCM_LIBS = libs/lib1 libs/lib2
+SCM_PROGRAM = cps-interpreter
+SCM_LIBS = 
 
 # Don't edit below this line
 #================================================================
