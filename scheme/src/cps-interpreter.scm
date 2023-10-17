@@ -42,6 +42,9 @@
       (('switch value arms ...)
        (eval-expr (list-ref arms (eval-val value))))
 
+      (('primop op args vars cnts)
+       (error "unimplemented primop" op))
+
       (('halt val) 
        (eval-val val env))
 
