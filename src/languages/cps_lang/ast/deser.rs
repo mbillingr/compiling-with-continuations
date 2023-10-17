@@ -1,4 +1,4 @@
-use super::{AccessPath as AP, Expr, Value};
+use super::{AccessPath as AP, AccessPath, Expr, Value};
 use crate::core::reference::Ref;
 use crate::core::sexpr::{S, SF};
 use crate::languages::common_primops::PrimOp;
@@ -19,10 +19,10 @@ impl Expr<Ref<str>> {
     pub fn from_sexpr(s: &S) -> Result<Self, Error<'static>> {
         use S::*;
         match s {
-            List(Ref([Symbol(Ref("record")), List(Ref(fields)), Symbol(var), cnt])) => {
-                let fields_out: Result<Vec<_>, _> = fields
+            List(Ref([Symbol(Ref("record")), List(Ref(faps)), Symbol(var), cnt])) => {
+                let fields_out: Result<Vec<_>, _> = faps
                     .iter()
-                    .map(|f| Value::from_sexpr(f).map(|f_| (f_, AP::Ref(0))))
+                    .map(Self::sexpr_to_fieldaccess)
                     .collect();
                 Ok(Expr::Record(
                     Ref::array(fields_out?),
@@ -101,6 +101,14 @@ impl Expr<Ref<str>> {
         }
     }
 
+    fn sexpr_to_fieldaccess(fap:&S) -> Result<(Value<Ref<str>>, AccessPath), Error<'static>> {
+        use S::*;
+        match fap {
+            List(Ref([f, ap])) => Ok((Value::from_sexpr(f)?, AccessPath::from_sexpr(ap)?)),
+            _ => Err(Error::Syntax(fap.clone())),
+        }
+    }
+
     fn sexpr_to_def(d: &S) -> Result<(Ref<str>, Ref<[Ref<str>]>, Ref<Self>), Error<'static>> {
         use S::*;
         match d {
@@ -126,7 +134,7 @@ impl Expr<Ref<str>> {
         match self {
             Expr::Record(fields, var, cnt) => S::list(vec![
                 S::symbol("record"),
-                S::list(fields.iter().map(|(f, _)| f.to_sexpr()).collect()),
+                S::list(fields.iter().map(|(f, ap)| S::list(vec![f.to_sexpr(), ap.to_sexpr()])).collect()),
                 S::Symbol(*var),
                 cnt.to_sexpr(),
             ]),
@@ -213,6 +221,23 @@ impl Value<Ref<str>> {
     }
 }
 
+impl AccessPath {
+    pub fn to_sexpr(&self) -> S {
+        match self {
+            AccessPath::Ref(i) => S::list(vec![S::symbol("ref"), S::Int(*i as i64)] ),
+            AccessPath::Sel(i, ap) => S::list(vec![S::symbol("sel"), S::Int(*i as i64), ap.to_sexpr()]),
+        }
+    }
+
+    pub fn from_sexpr(s: &S) -> Result<Self, Error<'static>> {
+        match s {
+            S::List(Ref([S::Symbol(Ref("ref")), S::Int(i)])) => Ok(AccessPath::Ref(*i as isize)),
+            S::List(Ref([S::Symbol(Ref("sel")), S::Int(i), ap])) => Ok(AccessPath::Sel(*i as isize, Ref::new(AccessPath::from_sexpr(ap)?))),
+            _ => Err(Error::Syntax(s.clone())),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Error<'i> {
     ParseError(sexpr_parser::Error<'i>),
@@ -233,7 +258,7 @@ mod tests {
 
     #[test]
     fn record() {
-        let repr = "(record (1 2) r (halt r))";
+        let repr = "(record ((1 (ref 0)) (2 (ref 0))) r (halt r))";
         let expr: Expr<Ref<str>> = Expr::Record(
             list![(Value::Int(1), AP::Ref(0)), (Value::Int(2), AP::Ref(0))],
             "r".into(),
