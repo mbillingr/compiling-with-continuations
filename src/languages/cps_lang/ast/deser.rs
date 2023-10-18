@@ -20,10 +20,8 @@ impl Expr<Ref<str>> {
         use S::*;
         match s {
             List(Ref([Symbol(Ref("record")), List(Ref(faps)), Symbol(var), cnt])) => {
-                let fields_out: Result<Vec<_>, _> = faps
-                    .iter()
-                    .map(Self::sexpr_to_fieldaccess)
-                    .collect();
+                let fields_out: Result<Vec<_>, _> =
+                    faps.iter().map(Self::sexpr_to_fieldaccess).collect();
                 Ok(Expr::Record(
                     Ref::array(fields_out?),
                     *var,
@@ -101,7 +99,7 @@ impl Expr<Ref<str>> {
         }
     }
 
-    fn sexpr_to_fieldaccess(fap:&S) -> Result<(Value<Ref<str>>, AccessPath), Error<'static>> {
+    fn sexpr_to_fieldaccess(fap: &S) -> Result<(Value<Ref<str>>, AccessPath), Error<'static>> {
         use S::*;
         match fap {
             List(Ref([f, ap])) => Ok((Value::from_sexpr(f)?, AccessPath::from_sexpr(ap)?)),
@@ -134,7 +132,12 @@ impl Expr<Ref<str>> {
         match self {
             Expr::Record(fields, var, cnt) => S::list(vec![
                 S::symbol("record"),
-                S::list(fields.iter().map(|(f, ap)| S::list(vec![f.to_sexpr(), ap.to_sexpr()])).collect()),
+                S::list(
+                    fields
+                        .iter()
+                        .map(|(f, ap)| S::list(vec![f.to_sexpr(), ap.to_sexpr()]))
+                        .collect(),
+                ),
                 S::Symbol(*var),
                 cnt.to_sexpr(),
             ]),
@@ -224,15 +227,20 @@ impl Value<Ref<str>> {
 impl AccessPath {
     pub fn to_sexpr(&self) -> S {
         match self {
-            AccessPath::Ref(i) => S::list(vec![S::symbol("ref"), S::Int(*i as i64)] ),
-            AccessPath::Sel(i, ap) => S::list(vec![S::symbol("sel"), S::Int(*i as i64), ap.to_sexpr()]),
+            AccessPath::Ref(i) => S::list(vec![S::symbol("ref"), S::Int(*i as i64)]),
+            AccessPath::Sel(i, ap) => {
+                S::list(vec![S::symbol("sel"), S::Int(*i as i64), ap.to_sexpr()])
+            }
         }
     }
 
     pub fn from_sexpr(s: &S) -> Result<Self, Error<'static>> {
         match s {
             S::List(Ref([S::Symbol(Ref("ref")), S::Int(i)])) => Ok(AccessPath::Ref(*i as isize)),
-            S::List(Ref([S::Symbol(Ref("sel")), S::Int(i), ap])) => Ok(AccessPath::Sel(*i as isize, Ref::new(AccessPath::from_sexpr(ap)?))),
+            S::List(Ref([S::Symbol(Ref("sel")), S::Int(i), ap])) => Ok(AccessPath::Sel(
+                *i as isize,
+                Ref::new(AccessPath::from_sexpr(ap)?),
+            )),
             _ => Err(Error::Syntax(s.clone())),
         }
     }

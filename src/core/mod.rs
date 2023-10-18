@@ -5,4 +5,5 @@ pub mod env;
 pub mod reference;
 pub mod ptr_tagging;
 pub mod sexpr;
+#[macro_use]
 pub mod sets;

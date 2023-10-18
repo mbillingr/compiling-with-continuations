@@ -6,6 +6,7 @@ pub mod cps_eta_reduction;
 pub mod label_fixrefs;
 mod labels_to_vars;
 pub mod mini_lambda_to_cps_lang;
+pub mod spill_phase;
 
 #[derive(Debug)]
 pub struct GensymContext {

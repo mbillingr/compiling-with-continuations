@@ -1,10 +1,11 @@
 use crate::core::reference::Ref;
+use crate::core::sets::Set;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use map_macro::hash_set;
 use std::collections::HashSet;
 use std::hash::Hash;
 
-impl<V: std::fmt::Debug + Clone + PartialEq + Eq + Hash> Expr<V> {
+impl<V: Clone + PartialEq + Eq + Hash> Expr<V> {
     pub fn free_vars(&self) -> FreeVars<V> {
         match self {
             Expr::Record(fields, r, cnt) => cnt
@@ -54,7 +55,7 @@ impl<V: std::fmt::Debug + Clone + PartialEq + Eq + Hash> Expr<V> {
     }
 }
 
-impl<V: std::fmt::Debug + Clone + PartialEq + Eq + Hash> Value<V> {
+impl<V: Clone + PartialEq + Eq + Hash> Value<V> {
     pub fn free_vars(&self) -> FreeVars<V> {
         match self {
             Value::Var(v) | Value::Label(v) => FreeVars::singleton(v.clone()),
@@ -105,7 +106,7 @@ impl<V: Eq + Hash + 'static> FreeVars<V> {
     }
 }
 
-impl<V: std::fmt::Debug + Clone + Eq + Hash + 'static> FreeVars<V> {
+impl<V: Clone + Eq + Hash + 'static> FreeVars<V> {
     fn merge_values<'a>(self, vals: impl Iterator<Item = &'a Value<V>>) -> Self {
         self.merge(vals.map(Value::free_vars))
     }
@@ -130,6 +131,13 @@ impl<V: Eq + Hash> From<HashSet<V>> for FreeVars<V> {
 impl<V: Eq + Hash> Into<HashSet<V>> for FreeVars<V> {
     fn into(self) -> HashSet<V> {
         self.0
+    }
+}
+
+impl<V: Eq + Hash> From<FreeVars<V>> for Set<V> {
+    fn from(value: FreeVars<V>) -> Self {
+        let tmp: HashSet<_> = value.into();
+        tmp.into()
     }
 }
 

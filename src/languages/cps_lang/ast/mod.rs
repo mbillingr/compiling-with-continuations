@@ -1,3 +1,4 @@
+mod accessors;
 mod count_nodes;
 mod deser;
 mod free_vars;

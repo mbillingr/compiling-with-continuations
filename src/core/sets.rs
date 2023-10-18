@@ -15,9 +15,18 @@ impl<T: Clone + Eq + Hash> Set<T> {
     }
 
     pub fn contains<Q: Hash + Eq>(&self, elem: &Q) -> bool
-        where T: Borrow<Q>
+    where
+        T: Borrow<Q>,
     {
         self.0.contains(elem)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
     pub fn add(&self, elem: T) -> Self {
@@ -27,7 +36,8 @@ impl<T: Clone + Eq + Hash> Set<T> {
     }
 
     pub fn remove<Q: Hash + Eq>(&self, elem: &Q) -> Self
-        where T: Borrow<Q>
+    where
+        T: Borrow<Q>,
     {
         let mut set = self.0.clone();
         set.remove(elem);
@@ -47,11 +57,28 @@ impl<T: Clone + Eq + Hash> Set<T> {
     }
 }
 
+impl<V: Eq + Hash> From<HashSet<V>> for Set<V> {
+    fn from(elems: HashSet<V>) -> Self {
+        Set(elems)
+    }
+}
+
+impl<V: Eq + Hash> From<Vec<V>> for Set<V> {
+    fn from(elems: Vec<V>) -> Self {
+        Set(elems.into_iter().collect())
+    }
+}
+
+#[macro_export]
 macro_rules! set {
+    () => {{
+        $crate::core::sets::Set::empty()
+    }};
+
     ($($x:expr),* $(,)?) => {{
-        let mut set = HashSet::new();
+        let mut set = std::collections::HashSet::new();
         $(set.insert($x);)*
-        Set(set)
+        $crate::core::sets::Set::from(set)
     }};
 }
 
