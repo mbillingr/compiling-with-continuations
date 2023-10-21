@@ -1,6 +1,7 @@
 use crate::core::sets::Set;
 use crate::languages::cps_lang::ast::{Expr, Transform, Transformed, Value};
 use crate::set;
+use std::collections::VecDeque;
 use std::hash::Hash;
 
 pub struct Spill<V: Clone + Eq + Hash> {
@@ -81,11 +82,15 @@ impl<V: Clone + Eq + Hash> Transform<V> for Spill<V> {
                 .len();
 
         if n_dup < self.duplicate_vars.len() {
-            todo!(
-                "must discard a duplicate var (maybe more?) {} < {}",
-                n_dup,
-                self.duplicate_vars.len()
-            )
+            let new_dups = self.duplicate_vars.clone();
+            // discard most distantly used members of duplicate_vars
+            let dups_to_drop = remove_n_next_used_vars_from(
+                self.duplicate_vars.clone(),
+                expr,
+                self.duplicate_vars.len() - n_dup,
+            );
+            // is it enough to compute new_dups, or is there something we need to do?
+            let new_dups = self.duplicate_vars.difference(&dups_to_drop);
         }
 
         let need_more_registers_for_arguments = args
@@ -106,6 +111,30 @@ impl<V: Clone + Eq + Hash> Transform<V> for Spill<V> {
     fn visit_value(&mut self, value: &Value<V>) -> Transformed<Value<V>> {
         Transformed::Continue
     }
+}
+
+fn remove_n_next_used_vars_from<V: Eq + Hash + Clone>(
+    mut vars: Set<V>,
+    expr: &Expr<V>,
+    n_to_remove: usize,
+) -> Set<V> {
+    /// breath first traversal of the expression tree to find earliest
+    let mut exprs_to_visit = VecDeque::from(vec![expr]);
+    while vars.len() > n_to_remove && !exprs_to_visit.is_empty() {
+        let expr = exprs_to_visit.pop_front().unwrap();
+
+        for var in expr.operand_vars() {
+            vars = vars.remove(var);
+            if vars.len() <= n_to_remove {
+                return vars;
+            }
+        }
+
+        for cnt in expr.continuation_exprs() {
+            exprs_to_visit.push_back(cnt);
+        }
+    }
+    vars
 }
 
 #[cfg(test)]
