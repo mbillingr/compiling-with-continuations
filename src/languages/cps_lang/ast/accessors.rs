@@ -1,5 +1,5 @@
 use crate::languages::cps_lang::ast::{Expr, Value};
-use std::iter::{empty, once};
+use std::iter::once;
 
 impl<V> Expr<V> {
     pub fn continuation_exprs(&self) -> Vec<&Expr<V>> {
