@@ -110,30 +110,8 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> Transform<V> for Spill<V> {
             self.duplicate_vars.clone()
         };
 
-        println!(
-            "A: {:?}",
-            args.union(&self.unspilled_vars.intersection(&v_after))
-        );
-
-        println!(
-            "B: {:?}",
-            w.union(&self.unspilled_vars.intersection(&v_after))
-        );
-
-        let need_more_registers_for_arguments = args
-            .union(&self.unspilled_vars.intersection(&v_after))
-            .len()
-            > self.n_registers - len(&sv_after);
-        let need_more_registers_for_results =
-            w.union(&self.unspilled_vars.intersection(&v_after)).len()
-                > self.n_registers - len(&sv_after);
-
-        if need_more_registers_for_arguments | need_more_registers_for_results {
-            todo!(
-                "must crate new spill record {} {}",
-                need_more_registers_for_arguments,
-                need_more_registers_for_results
-            )
+        if self.must_spill(&args, &w, &v_after, &sv_after) {
+            todo!("must crate new spill record")
         } else {
             let must_fetch = args.difference(&self.unspilled_vars.union(&new_dups));
             // In contrast to the book, I add W to the unspilled vars.
@@ -156,6 +134,37 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> Transform<V> for Spill<V> {
 
     fn visit_value(&mut self, _value: &Value<V>) -> Transformed<Value<V>> {
         Transformed::Continue
+    }
+}
+
+impl<V: Clone + Eq + Hash + std::fmt::Debug> Spill<V> {
+    fn must_spill(
+        &self,
+        args: &Set<V>,
+        w: &Set<V>,
+        v_after: &Set<V>,
+        sv_after: &Option<V>,
+    ) -> bool {
+        println!(
+            "A: {:?}",
+            args.union(&self.unspilled_vars.intersection(&v_after))
+        );
+
+        println!(
+            "B: {:?}",
+            w.union(&self.unspilled_vars.intersection(&v_after))
+        );
+
+        let need_more_registers_for_arguments = args
+            .union(&self.unspilled_vars.intersection(&v_after))
+            .len()
+            > self.n_registers - len(&sv_after);
+
+        let need_more_registers_for_results =
+            w.union(&self.unspilled_vars.intersection(&v_after)).len()
+                > self.n_registers - len(&sv_after);
+
+        need_more_registers_for_arguments | need_more_registers_for_results
     }
 }
 
@@ -212,6 +221,23 @@ mod tests {
         let expr =
             Expr::from_str("(primop + () (a b c d) ((primop + () (e) ((a b c d e)))))").unwrap();
         assert_eq!(expr.transform(&mut Spill::new(5)), expr);
+    }
+
+    #[test]
+    fn spill_decision() {
+        assert_eq!(
+            Spill::<&str> {
+                n_registers: 2,
+                previous_result: Set::empty(),
+                current_spill_record: None,
+                unspilled_vars: Set::empty(),
+                duplicate_vars: Set::empty(),
+            }
+            .must_spill(&Set::empty(), &Set::empty(), &Set::empty(), &None),
+            false
+        );
+
+        todo!("check all relevant cases")
     }
 
     #[test]
