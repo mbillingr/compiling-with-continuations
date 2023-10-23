@@ -57,14 +57,8 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
 
         let step = SpillStep::new(self, expr);
 
-        let s_after = if step.is_spill_record_still_useful() {
-            self.current_spill_record.clone()
-        } else {
-            SpillRecord::NoSpill
-        };
-
         let n_dup = self.n_registers
-            - step.current_spill_record.bound_var_as_set().len()
+            - step.s_before.bound_var_as_set().len()
             - self
                 .unspilled_vars
                 .intersection(&step.v_before)
@@ -88,7 +82,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
             &step.args,
             &step.w,
             &step.v_after,
-            &s_after.bound_var_as_set(),
+            &step.s_after.bound_var_as_set(),
         ) {
             let sv: V = self.gs.gensym("spill");
             let currently_in_registers = self.unspilled_vars.union(&new_dups);
@@ -118,7 +112,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                             .intersection(&step.v_after),
                         previous_result: step.w,
                         duplicate_vars: new_dups,
-                        current_spill_record: s_after,
+                        current_spill_record: step.s_after,
                         gs: self.gs.clone(),
                     };
                     expr.replace_continuations(
@@ -135,7 +129,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                     let i = s.get_index(&v);
                     let new_spill_record = if f == 1 {
                         // discard spill record if this is the last fetch from it
-                        s_after
+                        step.s_after
                     } else {
                         self.current_spill_record.clone()
                     };
@@ -175,7 +169,8 @@ struct SpillStep<'a, V: Eq + Hash> {
     w: Set<V>,
     v_before: Set<V>,
     v_after: Set<V>,
-    current_spill_record: &'a SpillRecord<V>,
+    s_before: &'a SpillRecord<V>,
+    s_after: SpillRecord<V>,
 }
 
 impl<'a, V: Eq + Hash + Clone + std::fmt::Debug> SpillStep<'a, V> {
@@ -185,7 +180,7 @@ impl<'a, V: Eq + Hash + Clone + std::fmt::Debug> SpillStep<'a, V> {
         let args = Set::from(expr.operand_vars().into_iter().cloned().collect::<Vec<_>>());
         let w = Set::from(expr.bound_vars().into_iter().cloned().collect::<Vec<_>>());
 
-        let v_before: Set<V> = expr.free_vars().into();
+        let v_before = Set::from(expr.free_vars());
         let v_after = expr
             .continuation_exprs()
             .into_iter()
@@ -193,21 +188,20 @@ impl<'a, V: Eq + Hash + Clone + std::fmt::Debug> SpillStep<'a, V> {
             .map(Set::from)
             .fold(set![], |acc, fv| acc.union(&fv));
 
+        let s_after = if spill.current_spill_record.is_still_useful(&v_after) {
+            spill.current_spill_record.clone()
+        } else {
+            SpillRecord::NoSpill
+        };
+
         SpillStep {
             args,
             w,
             v_before,
             v_after,
-            current_spill_record: &spill.current_spill_record,
+            s_before: &spill.current_spill_record,
+            s_after,
         }
-    }
-
-    fn is_spill_record_still_useful(&self) -> bool {
-        self.current_spill_record
-            .spilled_vars()
-            .map(|vars| vars.intersection(&self.v_after))
-            .map(|used_fields| !used_fields.is_empty())
-            .unwrap_or(false)
     }
 }
 
@@ -326,6 +320,15 @@ impl<V: Eq + Hash + Clone + std::fmt::Debug> SpillRecord<V> {
         panic!("{v:?} not found in spill record")
     }
 
+    fn is_still_useful(&self, used_vars: &Set<V>) -> bool {
+        match self {
+            SpillRecord::NoSpill => false,
+            SpillRecord::Spilled { contained_vars, .. } => {
+                !contained_vars.intersection(used_vars).is_empty()
+            }
+        }
+    }
+
     fn substitute(self, old_var: &V, new_var: V) -> Self {
         match self {
             SpillRecord::NoSpill => self,
@@ -357,13 +360,6 @@ impl<V: Eq + Hash + Clone + std::fmt::Debug> SpillRecord<V> {
         match self {
             SpillRecord::NoSpill => set![],
             SpillRecord::Spilled { bound_var, .. } => set![bound_var.clone()],
-        }
-    }
-
-    fn spilled_vars(&self) -> Option<&Set<V>> {
-        match self {
-            SpillRecord::NoSpill => None,
-            SpillRecord::Spilled { contained_vars, .. } => Some(contained_vars),
         }
     }
 }
