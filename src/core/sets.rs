@@ -29,6 +29,10 @@ impl<T: Clone + Eq + Hash> Set<T> {
         self.0.len()
     }
 
+    pub fn iter(&self) -> impl Iterator<Item=&T> {
+        self.0.iter()
+    }
+
     pub fn add(&self, elem: T) -> Self {
         let mut set = self.0.clone();
         set.insert(elem);

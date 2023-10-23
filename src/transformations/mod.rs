@@ -15,16 +15,38 @@ pub struct GensymContext {
 }
 
 impl GensymContext {
-    pub fn new(sym_delim: String) -> Self {
+    pub fn new(sym_delim: impl ToString) -> Self {
         GensymContext {
             sym_ctr: AtomicUsize::new(0),
-            sym_delim,
+            sym_delim: sym_delim.to_string(),
         }
     }
 
-    fn gensym(&self, name: &str) -> Ref<str> {
+    fn gensym<V: GenSym>(&self, name: &str) -> V {
         let n = self.sym_ctr.fetch_add(1, Ordering::Relaxed);
-        Ref::from(format!("{name}{}{}", self.sym_delim, n))
+        V::gensym(name, &self.sym_delim, n)
+    }
+}
+
+trait GenSym {
+    fn gensym(name: &str, delim: &str, unique: impl std::fmt::Display) -> Self;
+}
+
+impl GenSym for Ref<str> {
+    fn gensym(name: &str, delim: &str, unique: impl std::fmt::Display) -> Self {
+        Ref::from(format!("{name}{}{}", delim, unique))
+    }
+}
+
+impl GenSym for String {
+    fn gensym(name: &str, delim: &str, unique: impl std::fmt::Display) -> Self {
+        format!("{name}{}{}", delim, unique)
+    }
+}
+
+impl GenSym for &'static str {
+    fn gensym(name: &str, delim: &str, unique: impl std::fmt::Display) -> Self {
+        Box::leak(format!("{name}{}{}", delim, unique).into_boxed_str())
     }
 }
 
