@@ -6,6 +6,7 @@ pub mod closure_conversion;
 pub mod cps_eta_reduction;
 pub mod label_fixrefs;
 mod labels_to_vars;
+pub mod lambda_lifting;
 pub mod make_all_names_unique;
 pub mod mini_lambda_to_cps_lang;
 pub mod spill_phase;
@@ -92,10 +93,16 @@ mod tests {
         cps_expr.pretty_print();
         println!("\n");
 
-        let cps_expr = LabelsToVars.transform_expr(&cps_expr);
+        //let cps_expr = LabelsToVars.transform_expr(&cps_expr);
 
         let cps_expr = Box::leak(Box::new(closure_conversion::Context::new("__".to_string())))
             .convert_closures(&cps_expr);
+
+        let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
+        cps_expr.pretty_print();
+        println!("\n");
+
+        let cps_expr = lambda_lifting::lift_lambdas(&cps_expr);
 
         // Spilling does not work for less than 3 registers in some tests. Not sure if there is a bug
         // or if it simply can't work with that few registers...
@@ -103,7 +110,6 @@ mod tests {
 
         // finally, get rid of multiple __ parts
         let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
-
         cps_expr.pretty_print();
         println!("\n");
 

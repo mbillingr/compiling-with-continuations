@@ -75,6 +75,10 @@ impl<V: Eq + Hash> FreeVars<V> {
         FreeVars(hash_set![v])
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn without(mut self, v: &V) -> Self {
         self.0.remove(v);
         self
