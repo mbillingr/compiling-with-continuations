@@ -57,13 +57,6 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
 
         let step = SpillStep::new(self, expr);
 
-        /*let (sv_after, sc_after, si_after) = if step.is_spill_record_still_useful() {
-            let s = self.current_spill_record.clone().unwrap();
-            (Some(s.bound_var), s.contained_vars, s.indices)
-        } else {
-            (None, set![], Default::default())
-        };*/
-
         let s_after = if step.is_spill_record_still_useful() {
             self.current_spill_record.clone()
         } else {
@@ -71,7 +64,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
         };
 
         let n_dup = self.n_registers
-            - step.s_before.len()
+            - step.current_spill_record.bound_var_as_set().len()
             - self
                 .unspilled_vars
                 .intersection(&step.v_before)
@@ -182,7 +175,6 @@ struct SpillStep<'a, V: Eq + Hash> {
     w: Set<V>,
     v_before: Set<V>,
     v_after: Set<V>,
-    s_before: Set<V>,
     current_spill_record: &'a SpillRecord<V>,
 }
 
@@ -201,18 +193,11 @@ impl<'a, V: Eq + Hash + Clone + std::fmt::Debug> SpillStep<'a, V> {
             .map(Set::from)
             .fold(set![], |acc, fv| acc.union(&fv));
 
-        let s_before = if let SpillRecord::Spilled { bound_var, .. } = &spill.current_spill_record {
-            set![bound_var.clone()]
-        } else {
-            set![]
-        };
-
         SpillStep {
             args,
             w,
             v_before,
             v_after,
-            s_before,
             current_spill_record: &spill.current_spill_record,
         }
     }
