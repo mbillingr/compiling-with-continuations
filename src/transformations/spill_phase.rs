@@ -144,7 +144,6 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V>
                 self.expr,
                 self.duplicate_vars.len() - n_dup,
             );
-            println!("dropping dups: {:?}", dups_to_drop);
             self.duplicate_vars = self.duplicate_vars.difference(&dups_to_drop);
         }
 
@@ -153,82 +152,91 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V>
 
     fn build_expression(self) -> Expr<V> {
         if self.must_spill() {
-            let sv: V = self.gs.gensym("spill");
-            let currently_in_registers = self.unspilled_vars.union(&self.duplicate_vars);
-            let (spill_fields, new_record) =
-                self.s_before
-                    .build_new_record(self.v_before.clone(), &sv, &currently_in_registers);
-            let new_state = Spill {
-                n_registers: self.n_registers,
-                previous_result: set![],
-                unspilled_vars: set![],
-                duplicate_vars: currently_in_registers.intersection(&self.v_before),
-                current_spill_record: new_record,
-                gs: self.gs.clone(),
-            };
-            let expr_ = new_state.transform_expr(self.expr);
-            Expr::Record(Ref::array(spill_fields), sv, Ref::new(expr_))
-        } else {
-            let must_fetch = self
-                .args
-                .difference(&self.unspilled_vars.union(&self.duplicate_vars));
-            match must_fetch.len() {
-                0 => {
-                    // no fetch needed.
-                    // In contrast to the book, I add W to the unspilled vars.
-                    let new_state = Spill {
-                        n_registers: self.n_registers,
-                        unspilled_vars: self
-                            .unspilled_vars
-                            .union(&self.w)
-                            .intersection(&self.v_after),
-                        previous_result: self.w,
-                        duplicate_vars: self.duplicate_vars,
-                        current_spill_record: self.s_after,
-                        gs: self.gs.clone(),
-                    };
-                    self.expr.replace_continuations(
-                        self.expr
-                            .continuation_exprs()
-                            .into_iter()
-                            .map(|c| new_state.transform_expr(c)),
-                    )
-                }
+            return self.make_spill_record();
+        }
 
-                f => {
-                    let v = must_fetch.pop().unwrap();
-                    let v_: V = self.gs.gensym(&v);
-                    let i = self.s_before.get_index(&v);
-                    let new_spill_record = if f == 1 {
-                        // discard spill record if this is the last fetch from it
-                        self.s_after
-                    } else {
-                        self.s_before.clone()
-                    };
-                    let new_state = Spill {
-                        n_registers: self.n_registers,
-                        previous_result: set![],
-                        unspilled_vars: self.unspilled_vars.intersection(&self.v_before),
-                        duplicate_vars: self.duplicate_vars.add(v_.clone()),
-                        current_spill_record: new_spill_record.substitute(&v, v_.clone()),
-                        gs: self.gs.clone(),
-                    };
-                    let expr_ = new_state
-                        .transform_expr(&self.expr.substitute_var(&v, &Value::Var(v_.clone())));
-                    Expr::Select(
-                        i,
-                        Value::Var(
-                            self.s_before
-                                .bound_var()
-                                .expect("attempting fetch without spill record")
-                                .clone(),
-                        ),
-                        v_,
-                        Ref::new(expr_),
-                    )
-                }
+        let must_fetch = self
+            .args
+            .difference(&self.unspilled_vars.union(&self.duplicate_vars));
+        match must_fetch.len() {
+            0 => self.continue_without_fetch(),
+            1 => {
+                let new_spill_record = self.s_after.clone();
+                let v = must_fetch.pop().unwrap();
+                self.make_fetch(&v, new_spill_record)
+            }
+            _ => {
+                let new_spill_record = self.s_before.clone();
+                let v = must_fetch.pop().unwrap();
+                self.make_fetch(&v, new_spill_record)
             }
         }
+    }
+
+    fn make_spill_record(self) -> Expr<V> {
+        let sv: V = self.gs.gensym("spill");
+        let currently_in_registers = self.unspilled_vars.union(&self.duplicate_vars);
+        let (spill_fields, new_record) =
+            self.s_before
+                .build_new_record(self.v_before.clone(), &sv, &currently_in_registers);
+        let new_state = Spill {
+            n_registers: self.n_registers,
+            previous_result: set![],
+            unspilled_vars: set![],
+            duplicate_vars: currently_in_registers.intersection(&self.v_before),
+            current_spill_record: new_record,
+            gs: self.gs.clone(),
+        };
+        let expr_ = new_state.transform_expr(self.expr);
+        Expr::Record(Ref::array(spill_fields), sv, Ref::new(expr_))
+    }
+
+    fn continue_without_fetch(self) -> Expr<V> {
+        // In contrast to the book, I add W to the unspilled vars. I think this is necessary to
+        // actually populate the unspilled_vars field, where would they come from otherwise?
+        let new_state = Spill {
+            n_registers: self.n_registers,
+            unspilled_vars: self
+                .unspilled_vars
+                .union(&self.w)
+                .intersection(&self.v_after),
+            previous_result: self.w,
+            duplicate_vars: self.duplicate_vars,
+            current_spill_record: self.s_after,
+            gs: self.gs.clone(),
+        };
+        self.expr.replace_continuations(
+            self.expr
+                .continuation_exprs()
+                .into_iter()
+                .map(|c| new_state.transform_expr(c)),
+        )
+    }
+
+    fn make_fetch(self, v: &V, new_spill_record: SpillRecord<V>) -> Expr<V> {
+        let v_: V = self.gs.gensym(&v);
+        let i = self.s_before.get_index(&v);
+        let new_state = Spill {
+            n_registers: self.n_registers,
+            previous_result: set![],
+            unspilled_vars: self.unspilled_vars.intersection(&self.v_before),
+            duplicate_vars: self.duplicate_vars.add(v_.clone()),
+            current_spill_record: new_spill_record.substitute(&v, v_.clone()),
+            gs: self.gs.clone(),
+        };
+        let expr_ =
+            new_state.transform_expr(&self.expr.substitute_var(&v, &Value::Var(v_.clone())));
+        Expr::Select(
+            i,
+            Value::Var(
+                self.s_before
+                    .bound_var()
+                    .expect("attempting fetch without spill record")
+                    .clone(),
+            ),
+            v_,
+            Ref::new(expr_),
+        )
     }
 
     fn must_spill(&self) -> bool {
