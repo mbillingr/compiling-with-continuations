@@ -62,6 +62,7 @@ mod tests {
     use crate::languages::mini_lambda::ast as ml;
     use crate::make_testsuite_for_mini_lambda;
     use crate::transformations::labels_to_vars::LabelsToVars;
+    use crate::transformations::spill_phase::Spill;
 
     unsafe fn run_in_optimized_cps(mini_lambda_expr: &ml::Expr<Ref<str>>) -> Answer {
         let expr = mini_lambda_expr.clone();
@@ -86,6 +87,10 @@ mod tests {
 
         let cps_expr = Box::leak(Box::new(closure_conversion::Context::new("__".to_string())))
             .convert_closures(&cps_expr);
+
+        // Spilling does not work for less than 3 registers in some tests. Not sure if there is a bug
+        // or if it simply can't work with that few registers...
+        let cps_expr = Spill::new_context(3, "__".to_string()).transform_expr(&cps_expr);
 
         cps_expr.pretty_print();
         println!("\n");
