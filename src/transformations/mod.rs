@@ -6,6 +6,7 @@ pub mod closure_conversion;
 pub mod cps_eta_reduction;
 pub mod label_fixrefs;
 mod labels_to_vars;
+pub mod make_all_names_unique;
 pub mod mini_lambda_to_cps_lang;
 pub mod spill_phase;
 
@@ -24,6 +25,12 @@ impl GensymContext {
     }
 
     fn gensym<V: GenSym>(&self, name: &str) -> V {
+        let n = self.sym_ctr.fetch_add(1, Ordering::Relaxed);
+        V::gensym(name, &self.sym_delim, n)
+    }
+
+    fn resetsym<V: GenSym>(&self, name: &str) -> V {
+        let name = name.split(&self.sym_delim).next().unwrap();
         let n = self.sym_ctr.fetch_add(1, Ordering::Relaxed);
         V::gensym(name, &self.sym_delim, n)
     }
@@ -72,6 +79,8 @@ mod tests {
         )))
         .convert(&expr, Box::new(|x| cps::Expr::Halt(x)));
 
+        let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
+
         let cps_expr = label_fixrefs::Context::new().convert_labels(&cps_expr);
 
         cps_expr.pretty_print();
@@ -90,7 +99,10 @@ mod tests {
 
         // Spilling does not work for less than 3 registers in some tests. Not sure if there is a bug
         // or if it simply can't work with that few registers...
-        let cps_expr = Spill::new_context(3, "__".to_string()).spill_toplevel(&cps_expr);
+        //let cps_expr = Spill::new_context(3, "__".to_string()).spill_toplevel(&cps_expr);
+
+        // finally, get rid of multiple __ parts
+        let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
 
         cps_expr.pretty_print();
         println!("\n");
