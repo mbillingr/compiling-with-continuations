@@ -146,6 +146,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
             Transformed::Done(spill_record)
         } else {
             let must_fetch = args.difference(&self.unspilled_vars.union(&new_dups));
+            println!("neet to fetch: {:?}", must_fetch);
             // In contrast to the book, I add W to the unspilled vars.
             match must_fetch.len() {
                 0 => {
@@ -179,10 +180,13 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                         previous_result: set![],
                         unspilled_vars: self.unspilled_vars.intersection(&v_before),
                         duplicate_vars: new_dups.add(v_.clone()),
-                        current_spill_record: sv_after.map(|bound_var| SpillRecord {
-                            bound_var,
-                            contained_vars: sc_after,
-                            indices: si_after,
+                        current_spill_record: sv_after.map(|bound_var| {
+                            SpillRecord {
+                                bound_var,
+                                contained_vars: sc_after,
+                                indices: si_after,
+                            }
+                            .substitute(&v, v_.clone())
                         }),
                         gs: self.gs.clone(),
                     };
@@ -192,7 +196,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                         Expr::Select(i, Value::Var(s.bound_var.clone()), v_, Ref::new(expr_));
                     Transformed::Done(select_expr)
                 }
-                _ => Transformed::Continue, // this is wrong. todo!("fetch variables from spill"),
+                _ => todo!("fetch variables from spill"),
             }
         }
     }
@@ -310,37 +314,27 @@ fn len<T>(opt: &Option<T>) -> usize {
     }
 }
 
-fn get<V: Eq + Hash + Clone + Ord>(
-    vars: &Set<V>,
-    in_register: &Set<V>,
-    spill: &Option<SpillRecord<V>>,
-) -> Vec<(Value<V>, AccessPath)> {
-    let mut vars: Vec<_> = vars.iter().cloned().collect();
-    vars.sort_unstable();
-    vars.into_iter()
-        .map(|v| {
-            if in_register.contains(&v) {
-                (Value::Var(v), AccessPath::Ref(0))
-            } else {
-                let s = spill.as_ref().unwrap();
-                (
-                    Value::Var(s.bound_var.clone()),
-                    AccessPath::Sel(s.get_index(&v), Ref::new(AccessPath::Ref(0))),
-                )
-            }
-        })
-        .collect()
-}
-
-impl<V: Eq + Hash> SpillRecord<V> {
+impl<V: Eq + Hash + Clone + std::fmt::Debug> SpillRecord<V> {
     fn get_index(&self, v: &V) -> isize {
-        *self.indices.get(v).unwrap()
+        *self
+            .indices
+            .get(v)
+            .unwrap_or_else(|| panic!("{v:?} not found in spill record"))
+    }
+
+    fn substitute(mut self, old_var: &V, new_var: V) -> Self {
+        let idx = self.indices[old_var];
+        self.indices.remove(old_var);
+        self.indices.insert(new_var.clone(), idx);
+        self.contained_vars = self.contained_vars.remove(old_var).add(new_var);
+        self
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use map_macro::{hash_map, map};
 
     #[test]
     fn expr_unchanged_if_nothing_to_spill() {
@@ -449,5 +443,45 @@ mod tests {
         )
         .unwrap();
         assert_eq!(expr.transform(&mut Spill::new_context(5, "__")), expect);
+    }
+
+    #[test]
+    fn last_fetch() {
+        let mut spill = Spill {
+            n_registers: 5,
+            previous_result: set![],
+            current_spill_record: Some(SpillRecord {
+                bound_var: Ref::from("s"),
+                contained_vars: set![Ref::from("f")],
+                indices: hash_map![Ref::from("f") => 0],
+            }),
+            unspilled_vars: set![],
+            duplicate_vars: set![],
+            gs: Arc::new(GensymContext::new("__")),
+        };
+        assert_eq!(
+            spill.transform_expr(&Expr::from_str("(f)").unwrap()),
+            Expr::from_str("(select 0 s f__0 (f__0))").unwrap()
+        )
+    }
+
+    #[test]
+    fn fetch_args_from_spill() {
+        let mut spill = Spill {
+            n_registers: 5,
+            previous_result: set![],
+            current_spill_record: Some(SpillRecord {
+                bound_var: Ref::from("s"),
+                contained_vars: set![Ref::from("f"), Ref::from("x")],
+                indices: hash_map![Ref::from("f") => 0, Ref::from("x") => 1],
+            }),
+            unspilled_vars: set![],
+            duplicate_vars: set![],
+            gs: Arc::new(GensymContext::new("__")),
+        };
+        assert_eq!(
+            spill.transform_expr(&Expr::from_str("(f x)").unwrap()),
+            Expr::from_str("(select 0 s f__0 (select 1 s x__1 (f__0 x__1)))").unwrap()
+        )
     }
 }
