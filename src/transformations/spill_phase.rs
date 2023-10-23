@@ -57,26 +57,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
 
         let step = SpillStep::new(self, expr);
 
-        let n_dup = self.n_registers
-            - step.s_before.bound_var_as_set().len()
-            - self
-                .unspilled_vars
-                .intersection(&step.v_before)
-                .union(&self.previous_result)
-                .len();
-
-        let new_dups = if n_dup < self.duplicate_vars.len() {
-            // discard most distantly used members of duplicate_vars
-            let dups_to_drop = remove_n_next_used_vars_from(
-                self.duplicate_vars.clone(),
-                expr,
-                self.duplicate_vars.len() - n_dup,
-            );
-            println!("dropping dups: {:?}", dups_to_drop);
-            self.duplicate_vars.difference(&dups_to_drop)
-        } else {
-            self.duplicate_vars.clone()
-        };
+        let step = step.discard_duplicates(expr);
 
         let new_expr = if self.must_spill(
             &step.args,
@@ -85,7 +66,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
             &step.s_after.bound_var_as_set(),
         ) {
             let sv: V = self.gs.gensym("spill");
-            let currently_in_registers = self.unspilled_vars.union(&new_dups);
+            let currently_in_registers = self.unspilled_vars.union(&step.duplicate_vars);
             let (spill_fields, new_record) =
                 self.build_spill_record(step.v_before.clone(), &sv, &currently_in_registers);
             let mut new_state = Spill {
@@ -99,7 +80,9 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
             let expr_ = new_state.transform_expr(expr);
             Expr::Record(Ref::array(spill_fields), sv, Ref::new(expr_))
         } else {
-            let must_fetch = step.args.difference(&self.unspilled_vars.union(&new_dups));
+            let must_fetch = step
+                .args
+                .difference(&self.unspilled_vars.union(&step.duplicate_vars));
             match must_fetch.len() {
                 0 => {
                     // no fetch needed.
@@ -111,7 +94,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                             .union(&step.w)
                             .intersection(&step.v_after),
                         previous_result: step.w,
-                        duplicate_vars: new_dups,
+                        duplicate_vars: step.duplicate_vars,
                         current_spill_record: step.s_after,
                         gs: self.gs.clone(),
                     };
@@ -137,7 +120,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                         n_registers: self.n_registers,
                         previous_result: set![],
                         unspilled_vars: self.unspilled_vars.intersection(&step.v_before),
-                        duplicate_vars: new_dups.add(v_.clone()),
+                        duplicate_vars: step.duplicate_vars.add(v_.clone()),
                         current_spill_record: new_spill_record.substitute(&v, v_.clone()),
                         gs: self.gs.clone(),
                     };
@@ -165,6 +148,10 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
 }
 
 struct SpillStep<'a, V: Eq + Hash> {
+    n_registers: usize,
+    previous_result: &'a Set<V>,
+    unspilled_vars: &'a Set<V>,
+    duplicate_vars: Set<V>,
     args: Set<V>,
     w: Set<V>,
     v_before: Set<V>,
@@ -195,6 +182,10 @@ impl<'a, V: Eq + Hash + Clone + std::fmt::Debug> SpillStep<'a, V> {
         };
 
         SpillStep {
+            n_registers: spill.n_registers,
+            previous_result: &spill.previous_result,
+            unspilled_vars: &spill.unspilled_vars,
+            duplicate_vars: spill.duplicate_vars.clone(),
             args,
             w,
             v_before,
@@ -202,6 +193,29 @@ impl<'a, V: Eq + Hash + Clone + std::fmt::Debug> SpillStep<'a, V> {
             s_before: &spill.current_spill_record,
             s_after,
         }
+    }
+
+    fn discard_duplicates(mut self, expr: &Expr<V>) -> Self {
+        let n_dup = self.n_registers
+            - self.s_before.bound_var_as_set().len()
+            - self
+                .unspilled_vars
+                .intersection(&self.v_before)
+                .union(&self.previous_result)
+                .len();
+
+        if n_dup < self.duplicate_vars.len() {
+            // discard most distantly used members of duplicate_vars
+            let dups_to_drop = remove_n_next_used_vars_from(
+                self.duplicate_vars.clone(),
+                expr,
+                self.duplicate_vars.len() - n_dup,
+            );
+            println!("dropping dups: {:?}", dups_to_drop);
+            self.duplicate_vars = self.duplicate_vars.difference(&dups_to_drop);
+        }
+
+        self
     }
 }
 
