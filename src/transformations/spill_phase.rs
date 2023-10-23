@@ -70,12 +70,13 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
 impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
     fn transform_expr(&self, expr: &Expr<V>) -> Expr<V> {
         SpillStep::new(self, expr)
-            .discard_duplicates(expr)
-            .build_expression(expr)
+            .discard_duplicates()
+            .build_expression()
     }
 }
 
-struct SpillStep<'a, V: Eq + Hash> {
+struct SpillStep<'a, V: 'static + Eq + Hash> {
+    expr: &'a Expr<V>,
     n_registers: usize,
     previous_result: &'a Set<V>,
     unspilled_vars: &'a Set<V>,
@@ -91,7 +92,7 @@ struct SpillStep<'a, V: Eq + Hash> {
 }
 
 impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V> {
-    fn new(spill: &'a Spill<V>, expr: &Expr<V>) -> Self {
+    fn new(spill: &'a Spill<V>, expr: &'a Expr<V>) -> Self {
         // todo: is this correct, or should we include a set item for every argument to the expr,
         //       even if it's not a variable?
         let args = Set::from(expr.operand_vars().into_iter().cloned().collect::<Vec<_>>());
@@ -112,6 +113,7 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V>
         };
 
         SpillStep {
+            expr,
             n_registers: spill.n_registers,
             previous_result: &spill.previous_result,
             unspilled_vars: &spill.unspilled_vars,
@@ -126,7 +128,7 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V>
         }
     }
 
-    fn discard_duplicates(mut self, expr: &Expr<V>) -> Self {
+    fn discard_duplicates(mut self) -> Self {
         let n_dup = self.n_registers
             - self.s_before.bound_var_as_set().len()
             - self
@@ -139,7 +141,7 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V>
             // discard most distantly used members of duplicate_vars
             let dups_to_drop = remove_n_next_used_vars_from(
                 self.duplicate_vars.clone(),
-                expr,
+                self.expr,
                 self.duplicate_vars.len() - n_dup,
             );
             println!("dropping dups: {:?}", dups_to_drop);
@@ -149,7 +151,7 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V>
         self
     }
 
-    fn build_expression(self, expr: &Expr<V>) -> Expr<V> {
+    fn build_expression(self) -> Expr<V> {
         if self.must_spill() {
             let sv: V = self.gs.gensym("spill");
             let currently_in_registers = self.unspilled_vars.union(&self.duplicate_vars);
@@ -164,7 +166,7 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V>
                 current_spill_record: new_record,
                 gs: self.gs.clone(),
             };
-            let expr_ = new_state.transform_expr(expr);
+            let expr_ = new_state.transform_expr(self.expr);
             Expr::Record(Ref::array(spill_fields), sv, Ref::new(expr_))
         } else {
             let must_fetch = self
@@ -185,8 +187,9 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V>
                         current_spill_record: self.s_after,
                         gs: self.gs.clone(),
                     };
-                    expr.replace_continuations(
-                        expr.continuation_exprs()
+                    self.expr.replace_continuations(
+                        self.expr
+                            .continuation_exprs()
                             .into_iter()
                             .map(|c| new_state.transform_expr(c)),
                     )
@@ -210,8 +213,8 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V>
                         current_spill_record: new_spill_record.substitute(&v, v_.clone()),
                         gs: self.gs.clone(),
                     };
-                    let expr_ =
-                        new_state.transform_expr(&expr.substitute_var(&v, &Value::Var(v_.clone())));
+                    let expr_ = new_state
+                        .transform_expr(&self.expr.substitute_var(&v, &Value::Var(v_.clone())));
                     Expr::Select(
                         i,
                         Value::Var(
@@ -409,6 +412,7 @@ mod tests {
     fn spill_decision() {
         assert_eq!(
             SpillStep {
+                expr: &Expr::Panic("dummy".into()),
                 n_registers: 2,
                 previous_result: &set![],
                 unspilled_vars: &set!["x"],
@@ -428,6 +432,7 @@ mod tests {
         // need all registers for args
         assert_eq!(
             SpillStep {
+                expr: &Expr::Panic("dummy".into()),
                 n_registers: 2,
                 previous_result: &set![],
                 unspilled_vars: &set!["x"],
@@ -447,6 +452,7 @@ mod tests {
         // need all registers for results
         assert_eq!(
             SpillStep {
+                expr: &Expr::Panic("dummy".into()),
                 n_registers: 2,
                 previous_result: &set![],
                 unspilled_vars: &set!["x"],
@@ -466,6 +472,7 @@ mod tests {
         // need to preserve existing values
         assert_eq!(
             SpillStep {
+                expr: &Expr::Panic("dummy".into()),
                 n_registers: 2,
                 previous_result: &set![],
                 unspilled_vars: &set!["x", "y"],
@@ -485,6 +492,7 @@ mod tests {
         // need to preserve spill record
         assert_eq!(
             SpillStep {
+                expr: &Expr::Panic("dummy".into()),
                 n_registers: 2,
                 previous_result: &set![],
                 unspilled_vars: &set!["x"],
