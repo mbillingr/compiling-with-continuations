@@ -1,3 +1,4 @@
+use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use std::iter::once;
 
@@ -13,6 +14,39 @@ impl<V> Expr<V> {
             }
             Expr::App(_, _) | Expr::Halt(_) | Expr::Panic(_) => vec![],
         }
+    }
+
+    pub fn replace_continuations(&self, cnts: impl Iterator<Item = Expr<V>>) -> Expr<V>
+    where
+        V: Clone,
+    {
+        let mut cnts = cnts.map(Ref::new);
+        let expr_ = match self {
+            Expr::Record(f, v, _) => Expr::Record(*f, v.clone(), cnts.next().unwrap()),
+            Expr::Select(i, a, v, _) => {
+                Expr::Select(*i, a.clone(), v.clone(), cnts.next().unwrap())
+            }
+            Expr::Offset(i, a, v, _) => {
+                Expr::Offset(*i, a.clone(), v.clone(), cnts.next().unwrap())
+            }
+            Expr::Fix(defs, _) => Expr::Fix(*defs, cnts.next().unwrap()),
+            Expr::Switch(a, cs) => {
+                let cnts_: Vec<_> = cnts.collect();
+                assert_eq!(cnts_.len(), cs.len());
+                return Expr::Switch(a.clone(), Ref::array(cnts_));
+            }
+            Expr::PrimOp(op, a, v, cs) => {
+                let cnts_: Vec<_> = cnts.collect();
+                assert_eq!(cnts_.len(), cs.len());
+                return Expr::PrimOp(*op, *a, *v, Ref::array(cnts_));
+            }
+
+            Expr::App(_, _) | Expr::Halt(_) | Expr::Panic(_) => self.clone(),
+        };
+
+        assert!(cnts.next().is_none());
+
+        expr_
     }
 
     pub fn operands(&self) -> Vec<&Value<V>> {

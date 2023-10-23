@@ -1,4 +1,5 @@
 use crate::core::reference::Ref;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod closure_conversion;
@@ -28,7 +29,7 @@ impl GensymContext {
     }
 }
 
-trait GenSym {
+pub trait GenSym: Deref<Target = str> {
     fn gensym(name: &str, delim: &str, unique: impl std::fmt::Display) -> Self;
 }
 

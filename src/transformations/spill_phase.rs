@@ -3,7 +3,7 @@ use crate::core::sets::Set;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Transform, Transformed, Value};
 use crate::set;
 use crate::transformations::{GenSym, GensymContext};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::sync::Arc;
 
@@ -149,17 +149,49 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
             // In contrast to the book, I add W to the unspilled vars.
             match must_fetch.len() {
                 0 => {
-                    self.unspilled_vars = self.unspilled_vars.union(&w).intersection(&v_after);
-                    self.previous_result = w;
-                    self.duplicate_vars = new_dups;
-                    self.current_spill_record = sv_after.map(|bound_var| SpillRecord {
-                        bound_var,
-                        contained_vars: sc_after,
-                        indices: si_after,
-                    });
-                    Transformed::Continue
+                    let mut new_state = Spill {
+                        n_registers: self.n_registers,
+                        unspilled_vars: self.unspilled_vars.union(&w).intersection(&v_after),
+                        previous_result: w,
+                        duplicate_vars: new_dups,
+                        current_spill_record: sv_after.map(|bound_var| SpillRecord {
+                            bound_var,
+                            contained_vars: sc_after,
+                            indices: si_after,
+                        }),
+                        gs: self.gs.clone(),
+                    };
+                    Transformed::Done(
+                        expr.replace_continuations(
+                            expr.continuation_exprs()
+                                .into_iter()
+                                .map(|c| new_state.transform_expr(c)),
+                        ),
+                    )
                 }
-                1 => Transformed::Continue, // this is wrong. todo!("fetch variables from spill {:?}", expr),
+                1 => {
+                    let s = self.current_spill_record.as_ref().unwrap();
+                    let v = must_fetch.get_singleton().unwrap();
+                    let v_: V = self.gs.gensym(&v);
+                    let i = s.get_index(&v);
+                    let mut new_state = Spill {
+                        n_registers: self.n_registers,
+                        previous_result: set![],
+                        unspilled_vars: self.unspilled_vars.intersection(&v_before),
+                        duplicate_vars: new_dups.add(v_.clone()),
+                        current_spill_record: sv_after.map(|bound_var| SpillRecord {
+                            bound_var,
+                            contained_vars: sc_after,
+                            indices: si_after,
+                        }),
+                        gs: self.gs.clone(),
+                    };
+                    let expr_ =
+                        new_state.transform_expr(&expr.substitute_var(&v, &Value::Var(v_.clone())));
+                    let select_expr =
+                        Expr::Select(i, Value::Var(s.bound_var.clone()), v_, Ref::new(expr_));
+                    Transformed::Done(select_expr)
+                }
                 _ => Transformed::Continue, // this is wrong. todo!("fetch variables from spill"),
             }
         }
@@ -404,16 +436,16 @@ mod tests {
                                    (spill__0 (sel 3 (ref 0)))
                                    (e (ref 0)) (f (ref 0)) (g (ref 0)) 
                                    (spill__0 (sel 4 (ref 0)))) spill__1
-                            (select 4 spill__1 c_
-                              (primop + (b c_) (h) (
-                                (select 5 spill__1 d_
-                                  (primop + (d_ e) (i) (
-                                    (select 3 spill__1 g_
-                                      (primop + (f g_) (j) (
+                            (select 1 spill__1 c__2
+                              (primop + (b c__2) (h) (
+                                (select 2 spill__1 d__3
+                                  (primop + (d__3 e) (i) (
+                                    (select 5 spill__1 g__4
+                                      (primop + (f g__4) (j) (
                                         (primop + (h i) (k) (
                                           (primop + (k j) (l) (
-                                            (select 6 spill__1 m_
-                                              (m_ l)))))))))))))))))))))))))",
+                                            (select 6 spill__1 m__5
+                                              (m__5 l)))))))))))))))))))))))))",
         )
         .unwrap();
         assert_eq!(expr.transform(&mut Spill::new_context(5, "__")), expect);

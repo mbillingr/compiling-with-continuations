@@ -29,8 +29,15 @@ impl<T: Clone + Eq + Hash> Set<T> {
         self.0.len()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item=&T> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.0.iter()
+    }
+
+    pub fn get_singleton(self) -> Option<T> {
+        if self.len() != 1 {
+            return None;
+        }
+        self.0.into_iter().next()
     }
 
     pub fn add(&self, elem: T) -> Self {
