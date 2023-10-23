@@ -15,7 +15,7 @@ pub struct Spill<V: Clone + Eq + Hash> {
     previous_result: Set<V>,
 
     /// The current spill record S
-    current_spill_record: Option<SpillRecord<V>>,
+    current_spill_record: SpillRecord<V>,
 
     /// The uniquely bound variables U
     unspilled_vars: Set<V>,
@@ -26,19 +26,12 @@ pub struct Spill<V: Clone + Eq + Hash> {
     gs: Arc<GensymContext>,
 }
 
-#[derive(Debug, Clone)]
-pub struct SpillRecord<V: Eq + Hash> {
-    bound_var: V,
-    contained_vars: Set<V>,
-    indices: HashMap<V, isize>,
-}
-
 impl<V: Clone + Eq + Hash> Spill<V> {
     pub fn new(n_registers: usize, gs: Arc<GensymContext>) -> Self {
         Spill {
             n_registers,
             previous_result: set![],
-            current_spill_record: None,
+            current_spill_record: SpillRecord::NoSpill,
             unspilled_vars: set![],
             duplicate_vars: set![],
             gs,
@@ -49,7 +42,7 @@ impl<V: Clone + Eq + Hash> Spill<V> {
         Spill {
             n_registers,
             previous_result: set![],
-            current_spill_record: None,
+            current_spill_record: SpillRecord::NoSpill,
             unspilled_vars: set![],
             duplicate_vars: set![],
             gs: Arc::new(GensymContext::new(gensym_delimiter)),
@@ -62,15 +55,139 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
         println!("entering {:?}", expr);
         println!("{:?}", self);
 
-        /* the first assertion here does not know if a spill will actually be needed, and falsely
-           fail in some edge cases.
-        if self.current_spill_record.is_none() {
-            // need to reserve one register for the spill record
-            assert!(self.duplicate_vars.len() + self.unspilled_vars.len() < self.n_registers);
-        } else {
-            assert!(self.duplicate_vars.len() + self.unspilled_vars.len() <= self.n_registers);
-        }*/
+        let step = SpillStep::new(self, expr);
 
+        /*let (sv_after, sc_after, si_after) = if step.is_spill_record_still_useful() {
+            let s = self.current_spill_record.clone().unwrap();
+            (Some(s.bound_var), s.contained_vars, s.indices)
+        } else {
+            (None, set![], Default::default())
+        };*/
+
+        let s_after = if step.is_spill_record_still_useful() {
+            self.current_spill_record.clone()
+        } else {
+            SpillRecord::NoSpill
+        };
+
+        let n_dup = self.n_registers
+            - step.s_before.len()
+            - self
+                .unspilled_vars
+                .intersection(&step.v_before)
+                .union(&self.previous_result)
+                .len();
+
+        let new_dups = if n_dup < self.duplicate_vars.len() {
+            // discard most distantly used members of duplicate_vars
+            let dups_to_drop = remove_n_next_used_vars_from(
+                self.duplicate_vars.clone(),
+                expr,
+                self.duplicate_vars.len() - n_dup,
+            );
+            println!("dropping dups: {:?}", dups_to_drop);
+            self.duplicate_vars.difference(&dups_to_drop)
+        } else {
+            self.duplicate_vars.clone()
+        };
+
+        let new_expr = if self.must_spill(
+            &step.args,
+            &step.w,
+            &step.v_after,
+            &s_after.bound_var_as_set(),
+        ) {
+            let sv: V = self.gs.gensym("spill");
+            let currently_in_registers = self.unspilled_vars.union(&new_dups);
+            let (spill_fields, new_record) =
+                self.build_spill_record(step.v_before.clone(), &sv, &currently_in_registers);
+            let mut new_state = Spill {
+                n_registers: self.n_registers,
+                previous_result: set![],
+                unspilled_vars: set![],
+                duplicate_vars: currently_in_registers.intersection(&step.v_before),
+                current_spill_record: new_record,
+                gs: self.gs.clone(),
+            };
+            let expr_ = new_state.transform_expr(expr);
+            Expr::Record(Ref::array(spill_fields), sv, Ref::new(expr_))
+        } else {
+            let must_fetch = step.args.difference(&self.unspilled_vars.union(&new_dups));
+            match must_fetch.len() {
+                0 => {
+                    // no fetch needed.
+                    // In contrast to the book, I add W to the unspilled vars.
+                    let mut new_state = Spill {
+                        n_registers: self.n_registers,
+                        unspilled_vars: self
+                            .unspilled_vars
+                            .union(&step.w)
+                            .intersection(&step.v_after),
+                        previous_result: step.w,
+                        duplicate_vars: new_dups,
+                        current_spill_record: s_after,
+                        gs: self.gs.clone(),
+                    };
+                    expr.replace_continuations(
+                        expr.continuation_exprs()
+                            .into_iter()
+                            .map(|c| new_state.transform_expr(c)),
+                    )
+                }
+
+                f => {
+                    let s = &self.current_spill_record;
+                    let v = must_fetch.pop().unwrap();
+                    let v_: V = self.gs.gensym(&v);
+                    let i = s.get_index(&v);
+                    let new_spill_record = if f == 1 {
+                        // discard spill record if this is the last fetch from it
+                        s_after
+                    } else {
+                        self.current_spill_record.clone()
+                    };
+                    let mut new_state = Spill {
+                        n_registers: self.n_registers,
+                        previous_result: set![],
+                        unspilled_vars: self.unspilled_vars.intersection(&step.v_before),
+                        duplicate_vars: new_dups.add(v_.clone()),
+                        current_spill_record: new_spill_record.substitute(&v, v_.clone()),
+                        gs: self.gs.clone(),
+                    };
+                    let expr_ =
+                        new_state.transform_expr(&expr.substitute_var(&v, &Value::Var(v_.clone())));
+                    Expr::Select(
+                        i,
+                        Value::Var(
+                            s.bound_var()
+                                .expect("attempting fetch without spill record")
+                                .clone(),
+                        ),
+                        v_,
+                        Ref::new(expr_),
+                    )
+                }
+            }
+        };
+        Transformed::Done(new_expr)
+    }
+
+    fn visit_value(&mut self, _value: &Value<V>) -> Transformed<Value<V>> {
+        Transformed::Continue
+    }
+}
+
+struct SpillStep<'a, V: Eq + Hash> {
+    args: Set<V>,
+    w: Set<V>,
+    v_before: Set<V>,
+    v_after: Set<V>,
+    s_before: Set<V>,
+    current_spill_record: &'a SpillRecord<V>,
+}
+
+impl<'a, V: Eq + Hash + Clone + std::fmt::Debug> SpillStep<'a, V> {
+    fn new(spill: &'a Spill<V>, expr: &Expr<V>) -> Self {
         // todo: is this correct, or should we include a set item for every argument to the expr,
         //       even if it's not a variable?
         let args = Set::from(expr.operand_vars().into_iter().cloned().collect::<Vec<_>>());
@@ -84,148 +201,28 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
             .map(Set::from)
             .fold(set![], |acc, fv| acc.union(&fv));
 
-        println!("v_after = {:?}", v_after);
-
-        let s_before = if let Some(SpillRecord { bound_var, .. }) = &self.current_spill_record {
+        let s_before = if let SpillRecord::Spilled { bound_var, .. } = &spill.current_spill_record {
             set![bound_var.clone()]
         } else {
             set![]
         };
 
-        let spill_record_still_useful = self
-            .current_spill_record
-            .as_ref()
-            .map(|s| s.contained_vars.intersection(&v_after))
-            .map(|used_fields| !used_fields.is_empty())
-            .unwrap_or(false);
-
-        let (sv_after, sc_after, si_after) = if spill_record_still_useful {
-            let s = self.current_spill_record.clone().unwrap();
-            (Some(s.bound_var), s.contained_vars, s.indices)
-        } else {
-            (None, set![], Default::default())
-        };
-
-        let n_dup = self.n_registers
-            - s_before.len()
-            - self
-                .unspilled_vars
-                .intersection(&v_before)
-                .union(&self.previous_result)
-                .len();
-
-        let new_dups = if n_dup < self.duplicate_vars.len() {
-            // discard most distantly used members of duplicate_vars
-            let dups_to_drop = remove_n_next_used_vars_from(
-                self.duplicate_vars.clone(),
-                expr,
-                self.duplicate_vars.len() - n_dup,
-            );
-            println!("dropping dups: {:?}", dups_to_drop);
-            // is it enough to compute new_dups, or is there something we need to do?
-            self.duplicate_vars.difference(&dups_to_drop)
-        } else {
-            self.duplicate_vars.clone()
-        };
-
-        if self.must_spill(&args, &w, &v_after, &sv_after) {
-            let sv: V = self.gs.gensym("spill");
-            let currently_in_registers = self.unspilled_vars.union(&new_dups);
-            let (spill_fields, new_record) =
-                self.build_spill_record(v_before.clone(), &sv, &currently_in_registers);
-            let mut new_state = Spill {
-                n_registers: self.n_registers,
-                previous_result: set![],
-                unspilled_vars: set![],
-                duplicate_vars: currently_in_registers.intersection(&v_before),
-                current_spill_record: Some(new_record),
-                gs: self.gs.clone(),
-            };
-            let expr_ = new_state.transform_expr(expr);
-            let spill_record = Expr::Record(Ref::array(spill_fields), sv, Ref::new(expr_));
-            Transformed::Done(spill_record)
-        } else {
-            let must_fetch = args.difference(&self.unspilled_vars.union(&new_dups));
-            println!("neet to fetch: {:?}", must_fetch);
-            // In contrast to the book, I add W to the unspilled vars.
-            match must_fetch.len() {
-                0 => {
-                    let mut new_state = Spill {
-                        n_registers: self.n_registers,
-                        unspilled_vars: self.unspilled_vars.union(&w).intersection(&v_after),
-                        previous_result: w,
-                        duplicate_vars: new_dups,
-                        current_spill_record: sv_after.map(|bound_var| SpillRecord {
-                            bound_var,
-                            contained_vars: sc_after,
-                            indices: si_after,
-                        }),
-                        gs: self.gs.clone(),
-                    };
-                    Transformed::Done(
-                        expr.replace_continuations(
-                            expr.continuation_exprs()
-                                .into_iter()
-                                .map(|c| new_state.transform_expr(c)),
-                        ),
-                    )
-                }
-
-                1 => {
-                    let s = self.current_spill_record.as_ref().unwrap();
-                    let v = must_fetch.pop().unwrap();
-                    let v_: V = self.gs.gensym(&v);
-                    let i = s.get_index(&v);
-                    let mut new_state = Spill {
-                        n_registers: self.n_registers,
-                        previous_result: set![],
-                        unspilled_vars: self.unspilled_vars.intersection(&v_before),
-                        duplicate_vars: new_dups.add(v_.clone()),
-                        current_spill_record: sv_after.map(|bound_var| {
-                            SpillRecord {
-                                bound_var,
-                                contained_vars: sc_after,
-                                indices: si_after,
-                            }
-                            .substitute(&v, v_.clone())
-                        }),
-                        gs: self.gs.clone(),
-                    };
-                    let expr_ =
-                        new_state.transform_expr(&expr.substitute_var(&v, &Value::Var(v_.clone())));
-                    let select_expr =
-                        Expr::Select(i, Value::Var(s.bound_var.clone()), v_, Ref::new(expr_));
-                    Transformed::Done(select_expr)
-                }
-
-                _ => {
-                    let s = self.current_spill_record.as_ref().unwrap();
-                    let v = must_fetch.pop().unwrap();
-                    let v_: V = self.gs.gensym(&v);
-                    let i = s.get_index(&v);
-                    let mut new_state = Spill {
-                        n_registers: self.n_registers,
-                        previous_result: set![],
-                        unspilled_vars: self.unspilled_vars.intersection(&v_before),
-                        duplicate_vars: new_dups.add(v_.clone()),
-                        current_spill_record: self
-                            .current_spill_record
-                            .clone()
-                            .map(|s| s.substitute(&v, v_.clone())),
-                        gs: self.gs.clone(),
-                    };
-                    let expr_ =
-                        new_state.transform_expr(&expr.substitute_var(&v, &Value::Var(v_.clone())));
-                    let select_expr =
-                        Expr::Select(i, Value::Var(s.bound_var.clone()), v_, Ref::new(expr_));
-                    Transformed::Done(select_expr)
-                }
-            }
+        SpillStep {
+            args,
+            w,
+            v_before,
+            v_after,
+            s_before,
+            current_spill_record: &spill.current_spill_record,
         }
     }
 
-    fn visit_value(&mut self, _value: &Value<V>) -> Transformed<Value<V>> {
-        Transformed::Continue
+    fn is_spill_record_still_useful(&self) -> bool {
+        self.current_spill_record
+            .spilled_vars()
+            .map(|vars| vars.intersection(&self.v_after))
+            .map(|used_fields| !used_fields.is_empty())
+            .unwrap_or(false)
     }
 }
 
@@ -235,13 +232,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
         self
     }
 
-    fn must_spill(
-        &self,
-        args: &Set<V>,
-        w: &Set<V>,
-        v_after: &Set<V>,
-        sv_after: &Option<V>,
-    ) -> bool {
+    fn must_spill(&self, args: &Set<V>, w: &Set<V>, v_after: &Set<V>, sv_after: &Set<V>) -> bool {
         println!(
             "A: {:?}",
             args.union(&self.unspilled_vars.intersection(&v_after))
@@ -255,17 +246,17 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
         let need_more_registers_for_arguments = args
             .union(&self.unspilled_vars.intersection(&v_after))
             .len()
-            > self.n_registers - len(&sv_after);
+            > self.n_registers - sv_after.len();
 
         let need_more_registers_for_results =
             w.union(&self.unspilled_vars.intersection(&v_after)).len()
-                > self.n_registers - len(&sv_after);
+                > self.n_registers - sv_after.len();
 
         need_more_registers_for_arguments | need_more_registers_for_results
     }
 
     fn build_spill_record(
-        &mut self,
+        &self,
         v_before: Set<V>,
         sv: &V,
         currently_in_registers: &Set<V>,
@@ -281,7 +272,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
             .map(|(i, v)| (v.clone(), i as isize))
             .collect();
 
-        let new_record = SpillRecord {
+        let new_record = SpillRecord::Spilled {
             bound_var: sv.clone(),
             contained_vars: v_before,
             indices,
@@ -293,10 +284,9 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
                 if currently_in_registers.contains(&v) {
                     (Value::Var(v), AccessPath::Ref(0))
                 } else {
-                    let s = spill.as_ref().unwrap();
                     (
-                        Value::Var(s.bound_var.clone()),
-                        AccessPath::Sel(s.get_index(&v), Ref::new(AccessPath::Ref(0))),
+                        Value::Var(spill.bound_var().unwrap().clone()),
+                        AccessPath::Sel(spill.get_index(&v), Ref::new(AccessPath::Ref(0))),
                     )
                 }
             })
@@ -330,27 +320,66 @@ fn remove_n_next_used_vars_from<V: Eq + Hash + Clone>(
     vars
 }
 
-fn len<T>(opt: &Option<T>) -> usize {
-    match opt {
-        None => 0,
-        Some(_) => 1,
-    }
+#[derive(Debug, Clone)]
+pub enum SpillRecord<V: Eq + Hash> {
+    NoSpill,
+    Spilled {
+        bound_var: V,
+        contained_vars: Set<V>,
+        indices: HashMap<V, isize>,
+    },
 }
 
 impl<V: Eq + Hash + Clone + std::fmt::Debug> SpillRecord<V> {
     fn get_index(&self, v: &V) -> isize {
-        *self
-            .indices
-            .get(v)
-            .unwrap_or_else(|| panic!("{v:?} not found in spill record"))
+        if let SpillRecord::Spilled { indices, .. } = self {
+            if let Some(idx) = indices.get(v) {
+                return *idx;
+            }
+        }
+
+        panic!("{v:?} not found in spill record")
     }
 
-    fn substitute(mut self, old_var: &V, new_var: V) -> Self {
-        let idx = self.indices[old_var];
-        self.indices.remove(old_var);
-        self.indices.insert(new_var.clone(), idx);
-        self.contained_vars = self.contained_vars.remove(old_var).add(new_var);
-        self
+    fn substitute(self, old_var: &V, new_var: V) -> Self {
+        match self {
+            SpillRecord::NoSpill => self,
+            SpillRecord::Spilled {
+                bound_var,
+                contained_vars,
+                mut indices,
+            } => {
+                let idx = indices[old_var];
+                indices.remove(old_var);
+                indices.insert(new_var.clone(), idx);
+                SpillRecord::Spilled {
+                    bound_var,
+                    contained_vars: contained_vars.remove(old_var).add(new_var),
+                    indices,
+                }
+            }
+        }
+    }
+
+    fn bound_var(&self) -> Option<&V> {
+        match self {
+            SpillRecord::NoSpill => None,
+            SpillRecord::Spilled { bound_var, .. } => Some(bound_var),
+        }
+    }
+
+    fn bound_var_as_set(&self) -> Set<V> {
+        match self {
+            SpillRecord::NoSpill => set![],
+            SpillRecord::Spilled { bound_var, .. } => set![bound_var.clone()],
+        }
+    }
+
+    fn spilled_vars(&self) -> Option<&Set<V>> {
+        match self {
+            SpillRecord::NoSpill => None,
+            SpillRecord::Spilled { contained_vars, .. } => Some(contained_vars),
+        }
     }
 }
 
@@ -385,7 +414,7 @@ mod tests {
         assert_eq!(
             Spill::new_context(2, "__")
                 .with_unspilled(set!["x"])
-                .must_spill(&set!["a"], &set!["w"], &set!["x"], &None),
+                .must_spill(&set!["a"], &set!["w"], &set!["x"], &set![]),
             false
         );
 
@@ -393,7 +422,7 @@ mod tests {
         assert_eq!(
             Spill::new_context(2, "__")
                 .with_unspilled(set!["x"])
-                .must_spill(&set!["a", "b"], &set!["w"], &set!["x"], &None),
+                .must_spill(&set!["a", "b"], &set!["w"], &set!["x"], &set![]),
             true
         );
 
@@ -401,7 +430,7 @@ mod tests {
         assert_eq!(
             Spill::new_context(2, "__")
                 .with_unspilled(set!["x"])
-                .must_spill(&set!["a"], &set!["v", "w"], &set!["x"], &None),
+                .must_spill(&set!["a"], &set!["v", "w"], &set!["x"], &set![]),
             true
         );
 
@@ -409,7 +438,7 @@ mod tests {
         assert_eq!(
             Spill::new_context(2, "__")
                 .with_unspilled(set!["x", "y"])
-                .must_spill(&set!["a"], &set!["v"], &set!["x", "y"], &None),
+                .must_spill(&set!["a"], &set!["v"], &set!["x", "y"], &set![]),
             true
         );
 
@@ -417,7 +446,7 @@ mod tests {
         assert_eq!(
             Spill::new_context(2, "__")
                 .with_unspilled(set!["x"])
-                .must_spill(&set!["a"], &set!["v"], &set!["x"], &Some("s")),
+                .must_spill(&set!["a"], &set!["v"], &set!["x"], &set!["s"]),
             true
         );
     }
@@ -474,11 +503,11 @@ mod tests {
         let mut spill = Spill {
             n_registers: 5,
             previous_result: set![],
-            current_spill_record: Some(SpillRecord {
+            current_spill_record: SpillRecord::Spilled {
                 bound_var: Ref::from("s"),
                 contained_vars: set![Ref::from("f")],
                 indices: hash_map![Ref::from("f") => 0],
-            }),
+            },
             unspilled_vars: set![],
             duplicate_vars: set![],
             gs: Arc::new(GensymContext::new("__")),
@@ -494,11 +523,11 @@ mod tests {
         let mut spill = Spill {
             n_registers: 5,
             previous_result: set![],
-            current_spill_record: Some(SpillRecord {
+            current_spill_record: SpillRecord::Spilled {
                 bound_var: Ref::from("s"),
                 contained_vars: set![Ref::from("f"), Ref::from("x")],
                 indices: hash_map![Ref::from("f") => 0, Ref::from("x") => 1],
-            }),
+            },
             unspilled_vars: set![],
             duplicate_vars: set![],
             gs: Arc::new(GensymContext::new("__")),
