@@ -59,12 +59,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
 
         let step = step.discard_duplicates(expr);
 
-        let new_expr = if self.must_spill(
-            &step.args,
-            &step.w,
-            &step.v_after,
-            &step.s_after.bound_var_as_set(),
-        ) {
+        let new_expr = if step.must_spill() {
             let sv: V = self.gs.gensym("spill");
             let currently_in_registers = self.unspilled_vars.union(&step.duplicate_vars);
             let (spill_fields, new_record) =
@@ -217,35 +212,28 @@ impl<'a, V: Eq + Hash + Clone + std::fmt::Debug> SpillStep<'a, V> {
 
         self
     }
+
+    fn must_spill(&self) -> bool {
+        let need_more_registers_for_arguments = self
+            .args
+            .union(&self.unspilled_vars.intersection(&self.v_after))
+            .len()
+            > self.n_registers - self.s_after.bound_var_as_set().len();
+
+        let need_more_registers_for_results = self
+            .w
+            .union(&self.unspilled_vars.intersection(&self.v_after))
+            .len()
+            > self.n_registers - self.s_after.bound_var_as_set().len();
+
+        need_more_registers_for_arguments | need_more_registers_for_results
+    }
 }
 
 impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
     pub fn with_unspilled(mut self, vars: Set<V>) -> Self {
         self.unspilled_vars = vars;
         self
-    }
-
-    fn must_spill(&self, args: &Set<V>, w: &Set<V>, v_after: &Set<V>, sv_after: &Set<V>) -> bool {
-        println!(
-            "A: {:?}",
-            args.union(&self.unspilled_vars.intersection(&v_after))
-        );
-
-        println!(
-            "B: {:?}",
-            w.union(&self.unspilled_vars.intersection(&v_after))
-        );
-
-        let need_more_registers_for_arguments = args
-            .union(&self.unspilled_vars.intersection(&v_after))
-            .len()
-            > self.n_registers - sv_after.len();
-
-        let need_more_registers_for_results =
-            w.union(&self.unspilled_vars.intersection(&v_after)).len()
-                > self.n_registers - sv_after.len();
-
-        need_more_registers_for_arguments | need_more_registers_for_results
     }
 
     fn build_spill_record(
@@ -407,41 +395,95 @@ mod tests {
     #[test]
     fn spill_decision() {
         assert_eq!(
-            Spill::new_context(2, "__")
-                .with_unspilled(set!["x"])
-                .must_spill(&set!["a"], &set!["w"], &set!["x"], &set![]),
+            SpillStep {
+                n_registers: 2,
+                previous_result: &set![],
+                unspilled_vars: &set!["x"],
+                duplicate_vars: set![],
+                args: set!["a"],
+                w: set!["w"],
+                v_before: set![],
+                v_after: set!["x"],
+                s_before: &SpillRecord::NoSpill,
+                s_after: SpillRecord::NoSpill,
+            }
+            .must_spill(),
             false
         );
 
         // need all registers for args
         assert_eq!(
-            Spill::new_context(2, "__")
-                .with_unspilled(set!["x"])
-                .must_spill(&set!["a", "b"], &set!["w"], &set!["x"], &set![]),
+            SpillStep {
+                n_registers: 2,
+                previous_result: &set![],
+                unspilled_vars: &set!["x"],
+                duplicate_vars: set![],
+                args: set!["a", "b"],
+                w: set!["w"],
+                v_before: set![],
+                v_after: set!["x"],
+                s_before: &SpillRecord::NoSpill,
+                s_after: SpillRecord::NoSpill,
+            }
+            .must_spill(),
             true
         );
 
         // need all registers for results
         assert_eq!(
-            Spill::new_context(2, "__")
-                .with_unspilled(set!["x"])
-                .must_spill(&set!["a"], &set!["v", "w"], &set!["x"], &set![]),
+            SpillStep {
+                n_registers: 2,
+                previous_result: &set![],
+                unspilled_vars: &set!["x"],
+                duplicate_vars: set![],
+                args: set!["a"],
+                w: set!["v", "w"],
+                v_before: set![],
+                v_after: set!["x"],
+                s_before: &SpillRecord::NoSpill,
+                s_after: SpillRecord::NoSpill,
+            }
+            .must_spill(),
             true
         );
 
         // need to preserve existing values
         assert_eq!(
-            Spill::new_context(2, "__")
-                .with_unspilled(set!["x", "y"])
-                .must_spill(&set!["a"], &set!["v"], &set!["x", "y"], &set![]),
+            SpillStep {
+                n_registers: 2,
+                previous_result: &set![],
+                unspilled_vars: &set!["x", "y"],
+                duplicate_vars: set![],
+                args: set!["a"],
+                w: set!["w"],
+                v_before: set![],
+                v_after: set!["x", "y"],
+                s_before: &SpillRecord::NoSpill,
+                s_after: SpillRecord::NoSpill,
+            }
+            .must_spill(),
             true
         );
 
         // need to preserve spill record
         assert_eq!(
-            Spill::new_context(2, "__")
-                .with_unspilled(set!["x"])
-                .must_spill(&set!["a"], &set!["v"], &set!["x"], &set!["s"]),
+            SpillStep {
+                n_registers: 2,
+                previous_result: &set![],
+                unspilled_vars: &set!["x"],
+                duplicate_vars: set![],
+                args: set!["a"],
+                w: set!["w"],
+                v_before: set![],
+                v_after: set!["x"],
+                s_before: &SpillRecord::NoSpill,
+                s_after: SpillRecord::Spilled {
+                    bound_var: "s",
+                    contained_vars: set![],
+                    indices: Default::default(),
+                },
+            }
+            .must_spill(),
             true
         );
     }
