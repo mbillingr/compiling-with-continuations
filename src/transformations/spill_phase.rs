@@ -91,10 +91,10 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> Transform<V> for Spill<V> {
         let n_dup = self.n_registers
             - s_before.len()
             - self
-                .unspilled_vars
-                .intersection(&v_before)
-                .union(&self.previous_result)
-                .len();
+            .unspilled_vars
+            .intersection(&v_before)
+            .union(&self.previous_result)
+            .len();
 
         let new_dups = if n_dup < self.duplicate_vars.len() {
             // discard most distantly used members of duplicate_vars
@@ -138,6 +138,11 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> Transform<V> for Spill<V> {
 }
 
 impl<V: Clone + Eq + Hash + std::fmt::Debug> Spill<V> {
+    pub fn with_unspilled(mut self, vars: Set<V>) -> Self {
+        self.unspilled_vars = vars;
+        self
+    }
+
     fn must_spill(
         &self,
         args: &Set<V>,
@@ -226,18 +231,38 @@ mod tests {
     #[test]
     fn spill_decision() {
         assert_eq!(
-            Spill::<&str> {
-                n_registers: 2,
-                previous_result: Set::empty(),
-                current_spill_record: None,
-                unspilled_vars: Set::empty(),
-                duplicate_vars: Set::empty(),
-            }
-            .must_spill(&Set::empty(), &Set::empty(), &Set::empty(), &None),
+            Spill::new(2).with_unspilled(set!["x"])
+                .must_spill(&set!["a"], &set!["w"], &set!["x"], &None),
             false
         );
 
-        todo!("check all relevant cases")
+        // need all registers for args
+        assert_eq!(
+            Spill::new(2).with_unspilled(set!["x"])
+                .must_spill(&set!["a", "b"], &set!["w"], &set!["x"], &None),
+            true
+        );
+
+        // need all registers for results
+        assert_eq!(
+            Spill::new(2).with_unspilled(set!["x"])
+                .must_spill(&set!["a"], &set!["v", "w"], &set!["x"], &None),
+            true
+        );
+
+        // need to preserve existing values
+        assert_eq!(
+            Spill::new(2).with_unspilled(set!["x", "y"])
+                .must_spill(&set!["a"], &set!["v"], &set!["x", "y"], &None),
+            true
+        );
+
+        // need to preserve spill record
+        assert_eq!(
+            Spill::new(2).with_unspilled(set!["x"])
+                .must_spill(&set!["a"], &set!["v"], &set!["x"], &Some("s")),
+            true
+        );
     }
 
     #[test]
@@ -247,14 +272,14 @@ mod tests {
               (primop + () (e f) (
                 (a b c d e f)))))",
         )
-        .unwrap();
+            .unwrap();
         let expect = Expr::from_str(
             "(primop + () (a b c d) (
               (record () spill 
                 (primop + () (e f) (
                   (select 3 spill d_ (a b c d_ e f)))))))",
         )
-        .unwrap();
+            .unwrap();
         assert_eq!(expr.transform(&mut Spill::new(5)), expect);
     }
 }
