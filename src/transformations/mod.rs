@@ -90,7 +90,7 @@ mod tests {
 
         // Spilling does not work for less than 3 registers in some tests. Not sure if there is a bug
         // or if it simply can't work with that few registers...
-        let cps_expr = Spill::new_context(3, "__".to_string()).transform_expr(&cps_expr);
+        let cps_expr = Spill::new_context(3, "__".to_string()).spill_toplevel(&cps_expr);
 
         cps_expr.pretty_print();
         println!("\n");

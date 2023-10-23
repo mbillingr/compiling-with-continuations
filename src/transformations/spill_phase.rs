@@ -68,7 +68,18 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
 }
 
 impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
-    fn transform_expr(&self, expr: &Expr<V>) -> Expr<V> {
+    pub fn spill_toplevel(&self, expr: &Expr<V>) -> Expr<V> {
+        if let Expr::Fix(defs, cnt) = expr {
+            todo!()
+        } else {
+            panic!("not a fixture")
+        }
+    }
+
+    pub fn transform_expr(&self, expr: &Expr<V>) -> Expr<V> {
+        if let Expr::Fix(_, _) = expr {
+            panic!("Encountered fixture form during spill phase. Did you forget to do closure conversion and lambda lifting first?")
+        }
         SpillStep::new(self, expr)
             .discard_duplicates()
             .build_expression()
