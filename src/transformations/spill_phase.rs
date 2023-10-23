@@ -52,6 +52,23 @@ impl<V: Clone + Eq + Hash> Spill<V> {
 
 impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spill<V> {
     fn visit_expr(&mut self, expr: &Expr<V>) -> Transformed<Expr<V>> {
+        Transformed::Done(self.transform_expr(expr))
+    }
+
+    fn visit_value(&mut self, _: &Value<V>) -> Transformed<Value<V>> {
+        Transformed::Continue
+    }
+
+    fn transform_expr(&mut self, expr: &Expr<V>) -> Expr<V>
+    where
+        Self: Sized,
+    {
+        Self::transform_expr(self, expr)
+    }
+}
+
+impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
+    fn transform_expr(&self, expr: &Expr<V>) -> Expr<V> {
         println!("entering {:?}", expr);
         println!("{:?}", self);
 
@@ -59,12 +76,12 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
 
         let step = step.discard_duplicates(expr);
 
-        let new_expr = if step.must_spill() {
+        if step.must_spill() {
             let sv: V = self.gs.gensym("spill");
             let currently_in_registers = self.unspilled_vars.union(&step.duplicate_vars);
             let (spill_fields, new_record) =
                 self.build_spill_record(step.v_before.clone(), &sv, &currently_in_registers);
-            let mut new_state = Spill {
+            let new_state = Spill {
                 n_registers: self.n_registers,
                 previous_result: set![],
                 unspilled_vars: set![],
@@ -82,7 +99,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                 0 => {
                     // no fetch needed.
                     // In contrast to the book, I add W to the unspilled vars.
-                    let mut new_state = Spill {
+                    let new_state = Spill {
                         n_registers: self.n_registers,
                         unspilled_vars: self
                             .unspilled_vars
@@ -111,7 +128,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                     } else {
                         self.current_spill_record.clone()
                     };
-                    let mut new_state = Spill {
+                    let new_state = Spill {
                         n_registers: self.n_registers,
                         previous_result: set![],
                         unspilled_vars: self.unspilled_vars.intersection(&step.v_before),
@@ -133,12 +150,7 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                     )
                 }
             }
-        };
-        Transformed::Done(new_expr)
-    }
-
-    fn visit_value(&mut self, _value: &Value<V>) -> Transformed<Value<V>> {
-        Transformed::Continue
+        }
     }
 }
 
@@ -537,7 +549,7 @@ mod tests {
 
     #[test]
     fn last_fetch() {
-        let mut spill = Spill {
+        let spill = Spill {
             n_registers: 5,
             previous_result: set![],
             current_spill_record: SpillRecord::Spilled {
@@ -557,7 +569,7 @@ mod tests {
 
     #[test]
     fn fetch_args_from_spill() {
-        let mut spill = Spill {
+        let spill = Spill {
             n_registers: 5,
             previous_result: set![],
             current_spill_record: SpillRecord::Spilled {
