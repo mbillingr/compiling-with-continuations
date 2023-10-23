@@ -33,10 +33,7 @@ impl<T: Clone + Eq + Hash> Set<T> {
         self.0.iter()
     }
 
-    pub fn get_singleton(self) -> Option<T> {
-        if self.len() != 1 {
-            return None;
-        }
+    pub fn pop(self) -> Option<T> {
         self.0.into_iter().next()
     }
 

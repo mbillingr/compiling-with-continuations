@@ -170,9 +170,10 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                         ),
                     )
                 }
+
                 1 => {
                     let s = self.current_spill_record.as_ref().unwrap();
-                    let v = must_fetch.get_singleton().unwrap();
+                    let v = must_fetch.pop().unwrap();
                     let v_: V = self.gs.gensym(&v);
                     let i = s.get_index(&v);
                     let mut new_state = Spill {
@@ -196,7 +197,29 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
                         Expr::Select(i, Value::Var(s.bound_var.clone()), v_, Ref::new(expr_));
                     Transformed::Done(select_expr)
                 }
-                _ => todo!("fetch variables from spill"),
+
+                _ => {
+                    let s = self.current_spill_record.as_ref().unwrap();
+                    let v = must_fetch.pop().unwrap();
+                    let v_: V = self.gs.gensym(&v);
+                    let i = s.get_index(&v);
+                    let mut new_state = Spill {
+                        n_registers: self.n_registers,
+                        previous_result: set![],
+                        unspilled_vars: self.unspilled_vars.intersection(&v_before),
+                        duplicate_vars: new_dups.add(v_.clone()),
+                        current_spill_record: self
+                            .current_spill_record
+                            .clone()
+                            .map(|s| s.substitute(&v, v_.clone())),
+                        gs: self.gs.clone(),
+                    };
+                    let expr_ =
+                        new_state.transform_expr(&expr.substitute_var(&v, &Value::Var(v_.clone())));
+                    let select_expr =
+                        Expr::Select(i, Value::Var(s.bound_var.clone()), v_, Ref::new(expr_));
+                    Transformed::Done(select_expr)
+                }
             }
         }
     }
@@ -334,7 +357,8 @@ impl<V: Eq + Hash + Clone + std::fmt::Debug> SpillRecord<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use map_macro::{hash_map, map};
+    use crate::core::either::{either, Or};
+    use map_macro::hash_map;
 
     #[test]
     fn expr_unchanged_if_nothing_to_spill() {
@@ -481,7 +505,14 @@ mod tests {
         };
         assert_eq!(
             spill.transform_expr(&Expr::from_str("(f x)").unwrap()),
-            Expr::from_str("(select 0 s f__0 (select 1 s x__1 (f__0 x__1)))").unwrap()
+            either(Expr::from_str("(select 0 s f__0 (select 1 s x__1 (f__0 x__1)))").unwrap())
+                .or(Expr::from_str("(select 1 s x__0 (select 0 s f__1 (f__1 x__0)))").unwrap())
         )
+    }
+
+    impl<V, A: PartialEq<Expr<V>>, B: PartialEq<Expr<V>>> PartialEq<Or<A, B>> for Expr<V> {
+        fn eq(&self, other: &Or<A, B>) -> bool {
+            other == self
+        }
     }
 }
