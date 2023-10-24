@@ -8,6 +8,7 @@ pub mod cps_uncurrying;
 pub mod label_fixrefs;
 mod labels_to_vars;
 pub mod lambda_lifting;
+pub mod limit_args;
 pub mod make_all_names_unique;
 pub mod mini_lambda_to_cps_lang;
 pub mod spill_phase;
@@ -101,6 +102,11 @@ mod tests {
             .pretty_print();
         println!("\n");
 
+        let n_registers = 5;
+        let max_args = n_registers - 2; // reserve two registers for closure and continuation
+
+        let cps_expr = limit_args::LimitArgs::new(max_args, gs.clone()).transform_expr(&cps_expr);
+
         let cps_expr = LabelsToVars.transform_expr(&cps_expr);
 
         let cps_expr = closure_conversion::Context::new(gs.clone()).convert_closures(&cps_expr);
@@ -116,7 +122,7 @@ mod tests {
         // Spilling does not work for less than 3 registers in some tests. Not sure if there is a bug
         // or if it simply can't work with that few registers...
         let cps_expr =
-            spill_phase::spill_toplevel(&cps_expr, 5, Arc::new(GensymContext::new("__")));
+            spill_phase::spill_toplevel(&cps_expr, n_registers, Arc::new(GensymContext::new("__")));
 
         // finally, get rid of multiple __ parts
         let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
