@@ -62,6 +62,7 @@ impl GenSym for &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     use crate::core::answer::Answer;
     use crate::languages::cps_lang;
@@ -93,7 +94,7 @@ mod tests {
         cps_expr.pretty_print();
         println!("\n");
 
-        let cps_expr = LabelsToVars.transform_expr(&cps_expr);
+        //let cps_expr = LabelsToVars.transform_expr(&cps_expr);
 
         let cps_expr = Box::leak(Box::new(closure_conversion::Context::new("__".to_string())))
             .convert_closures(&cps_expr);
@@ -106,7 +107,8 @@ mod tests {
 
         // Spilling does not work for less than 3 registers in some tests. Not sure if there is a bug
         // or if it simply can't work with that few registers...
-        //let cps_expr = Spill::new_context(3, "__".to_string()).spill_toplevel(&cps_expr);
+        let cps_expr =
+            spill_phase::spill_toplevel(&cps_expr, 4, Arc::new(GensymContext::new("__")));
 
         // finally, get rid of multiple __ parts
         let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);

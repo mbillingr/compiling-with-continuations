@@ -77,6 +77,12 @@ impl<V: Eq + Hash> From<Vec<V>> for Set<V> {
     }
 }
 
+impl<V: Eq + Hash> FromIterator<V> for Set<V> {
+    fn from_iter<T: IntoIterator<Item = V>>(iter: T) -> Self {
+        Set(FromIterator::<V>::from_iter(iter))
+    }
+}
+
 #[macro_export]
 macro_rules! set {
     () => {{

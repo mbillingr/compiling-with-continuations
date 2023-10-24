@@ -6,6 +6,28 @@ use crate::transformations::{GenSym, GensymContext};
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::sync::Arc;
+pub fn spill_toplevel<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug>(
+    expr: &Expr<V>,
+    n_registers: usize,
+    gs: Arc<GensymContext>,
+) -> Expr<V> {
+    if let Expr::Fix(defs, cnt) = expr {
+        let defs_out = defs
+            .iter()
+            .map(|(f, p, b)| {
+                let spill = Spill::new_function(p, n_registers, gs.clone());
+                (f.clone(), *p, Ref::new(spill.transform_expr(b)))
+            })
+            .collect();
+
+        let spill = Spill::new(n_registers, gs);
+        let cnt_out = spill.transform_expr(cnt);
+
+        Expr::Fix(Ref::array(defs_out), Ref::new(cnt_out))
+    } else {
+        panic!("not a fixture")
+    }
+}
 
 #[derive(Debug)]
 pub struct Spill<V: Clone + Eq + Hash> {
@@ -33,6 +55,17 @@ impl<V: Clone + Eq + Hash> Spill<V> {
             previous_result: set![],
             current_spill_record: SpillRecord::NoSpill,
             unspilled_vars: set![],
+            duplicate_vars: set![],
+            gs,
+        }
+    }
+    pub fn new_function(params: &[V], n_registers: usize, gs: Arc<GensymContext>) -> Self {
+        assert!(params.len() <= n_registers);
+        Spill {
+            n_registers,
+            previous_result: set![],
+            current_spill_record: SpillRecord::NoSpill,
+            unspilled_vars: params.iter().cloned().collect(),
             duplicate_vars: set![],
             gs,
         }
@@ -68,14 +101,6 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
 }
 
 impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
-    pub fn spill_toplevel(&self, expr: &Expr<V>) -> Expr<V> {
-        if let Expr::Fix(defs, cnt) = expr {
-            todo!()
-        } else {
-            panic!("not a fixture")
-        }
-    }
-
     pub fn transform_expr(&self, expr: &Expr<V>) -> Expr<V> {
         if let Expr::Fix(_, _) = expr {
             panic!(
@@ -392,6 +417,9 @@ impl<V: Eq + Hash + Clone + Ord + std::fmt::Debug> SpillRecord<V> {
                 if currently_in_registers.contains(&v) {
                     (Value::Var(v), AccessPath::Ref(0))
                 } else {
+                    if let SpillRecord::NoSpill = self {
+                        panic!("{v:?} not in registers and not spilled")
+                    }
                     (
                         Value::Var(self.bound_var().unwrap().clone()),
                         AccessPath::Sel(self.get_index(&v), Ref::new(AccessPath::Ref(0))),
