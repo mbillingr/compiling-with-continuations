@@ -11,22 +11,31 @@ pub fn lift_lambdas<V: Clone + Eq + Hash + std::fmt::Debug>(toplevel_expr: &Expr
         functions: Default::default(),
     };
     let expr = context.transform_expr(toplevel_expr);
-    Expr::Fix(Ref::array(context.functions), Ref::new(expr))
+    let result = Expr::Fix(Ref::array(context.functions), Ref::new(expr));
+
+    let fffvs = result.fix_function_free_vars();
+    if !fffvs.is_empty() {
+        panic!("variables free in top level fixture: {fffvs:?}")
+    }
+
+    result
 }
 
 impl<V: Clone + Eq + Hash + std::fmt::Debug> Transform<V> for LambdaLifting<V> {
     fn visit_expr(&mut self, expr: &Expr<V>) -> Transformed<Expr<V>> {
         match expr {
             Expr::Fix(defs, cnt) => {
-                assert!(expr.fix_function_free_vars().is_empty());
-                self.functions.extend(defs.iter().cloned());
+                for (f, p, b) in defs.iter() {
+                    let body_out = self.transform_expr(b);
+                    self.functions.push((f.clone(), *p, Ref::new(body_out)));
+                }
                 Transformed::Again((**cnt).clone())
             }
             _ => Transformed::Continue,
         }
     }
 
-    fn visit_value(&mut self, value: &Value<V>) -> Transformed<Value<V>> {
+    fn visit_value(&mut self, _: &Value<V>) -> Transformed<Value<V>> {
         Transformed::Continue
     }
 }
@@ -71,8 +80,8 @@ mod tests {
         )
         .unwrap();
         let y = Expr::from_str(
-            "(fix ((f (k) (k 1))
-                   (g (k) (k 2))) 
+            "(fix ((g (k) (k 2))
+                   (f (k) (k 1))) 
                (record () r 
                  (halt 0)))",
         )
