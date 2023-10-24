@@ -18,12 +18,7 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> Transform<V> for LambdaLifting<V> {
     fn visit_expr(&mut self, expr: &Expr<V>) -> Transformed<Expr<V>> {
         match expr {
             Expr::Fix(defs, cnt) => {
-                for (f, p, b) in defs.iter() {
-                    let fv = Expr::function_free_vars(p, b);
-                    if !fv.is_empty() {
-                        panic!("function can't lift {f:?} because it has free variables. {fv:?}")
-                    }
-                }
+                assert!(expr.fix_function_free_vars().is_empty());
                 self.functions.extend(defs.iter().cloned());
                 Transformed::Again((**cnt).clone())
             }
