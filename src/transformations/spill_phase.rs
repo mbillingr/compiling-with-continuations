@@ -12,6 +12,12 @@ pub fn spill_toplevel<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug>(
     gs: Arc<GensymContext>,
 ) -> Expr<V> {
     if let Expr::Fix(defs, cnt) = expr {
+        for (f, p, _) in defs.iter() {
+            if p.len() > n_registers {
+                panic!("function {f:?} has more parameters than available registers")
+            }
+        }
+
         let defs_out = defs
             .iter()
             .map(|(f, p, b)| {
@@ -473,7 +479,7 @@ mod tests {
                 v_after: set!["x"],
                 s_before: &SpillRecord::NoSpill,
                 s_after: SpillRecord::NoSpill,
-                gs: Arc::new(GensymContext::new("__"))
+                gs: Arc::new(GensymContext::new("__")),
             }
             .must_spill(),
             false
@@ -493,7 +499,7 @@ mod tests {
                 v_after: set!["x"],
                 s_before: &SpillRecord::NoSpill,
                 s_after: SpillRecord::NoSpill,
-                gs: Arc::new(GensymContext::new("__"))
+                gs: Arc::new(GensymContext::new("__")),
             }
             .must_spill(),
             true
@@ -513,7 +519,7 @@ mod tests {
                 v_after: set!["x"],
                 s_before: &SpillRecord::NoSpill,
                 s_after: SpillRecord::NoSpill,
-                gs: Arc::new(GensymContext::new("__"))
+                gs: Arc::new(GensymContext::new("__")),
             }
             .must_spill(),
             true
@@ -533,7 +539,7 @@ mod tests {
                 v_after: set!["x", "y"],
                 s_before: &SpillRecord::NoSpill,
                 s_after: SpillRecord::NoSpill,
-                gs: Arc::new(GensymContext::new("__"))
+                gs: Arc::new(GensymContext::new("__")),
             }
             .must_spill(),
             true
@@ -557,7 +563,7 @@ mod tests {
                     contained_vars: set![],
                     indices: Default::default(),
                 },
-                gs: Arc::new(GensymContext::new("__"))
+                gs: Arc::new(GensymContext::new("__")),
             }
             .must_spill(),
             true
