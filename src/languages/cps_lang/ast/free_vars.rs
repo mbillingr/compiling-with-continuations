@@ -58,7 +58,7 @@ impl<V: Clone + PartialEq + Eq + Hash> Expr<V> {
 impl<V: Clone + PartialEq + Eq + Hash> Value<V> {
     pub fn free_vars(&self) -> FreeVars<V> {
         match self {
-            Value::Var(v) | Value::Label(v) => FreeVars::singleton(v.clone()),
+            Value::Var(v) => FreeVars::singleton(v.clone()),
             _ => FreeVars::empty(),
         }
     }

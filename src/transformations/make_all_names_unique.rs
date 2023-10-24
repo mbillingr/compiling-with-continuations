@@ -134,8 +134,18 @@ impl Context {
         bindings: &HashMap<V, V>,
     ) -> Value<V> {
         match val {
-            Value::Var(x) => Value::Var(bindings.get(x).unwrap().clone()),
-            Value::Label(x) => Value::Label(bindings.get(x).unwrap().clone()),
+            Value::Var(x) => Value::Var(
+                bindings
+                    .get(x)
+                    .unwrap_or_else(|| panic!("unbound {x:?}"))
+                    .clone(),
+            ),
+            Value::Label(x) => Value::Label(
+                bindings
+                    .get(x)
+                    .unwrap_or_else(|| panic!("unbound {x:?}"))
+                    .clone(),
+            ),
             _ => val.clone(),
         }
     }

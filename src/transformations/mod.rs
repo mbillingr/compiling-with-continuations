@@ -94,7 +94,7 @@ mod tests {
         cps_expr.pretty_print();
         println!("\n");
 
-        //let cps_expr = LabelsToVars.transform_expr(&cps_expr);
+        let cps_expr = LabelsToVars.transform_expr(&cps_expr);
 
         let cps_expr = Box::leak(Box::new(closure_conversion::Context::new("__".to_string())))
             .convert_closures(&cps_expr);
