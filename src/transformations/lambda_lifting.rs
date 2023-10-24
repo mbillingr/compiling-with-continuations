@@ -30,3 +30,53 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> Transform<V> for LambdaLifting<V> {
         Transformed::Continue
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn top_level_fix_invariant() {
+        let expr = Expr::from_str("(fix ((f (k) (k 1)) (g (k) (k 2))) (halt 0))").unwrap();
+        assert_eq!(lift_lambdas(&expr), expr);
+    }
+
+    #[test]
+    fn lift_fix_in_continuations() {
+        let x = Expr::from_str(
+            "(record () r
+              (fix ((f (k) (k 1))) 
+                (fix ((g (k) (k 2))) 
+                  (halt 0))))",
+        )
+        .unwrap();
+        let y = Expr::from_str(
+            "(fix ((f (k) (k 1))
+                   (g (k) (k 2))) 
+               (record () r 
+                 (halt 0)))",
+        )
+        .unwrap();
+        assert_eq!(lift_lambdas(&x), y);
+    }
+
+    #[test]
+    fn lift_fix_in_function_bodies() {
+        let x = Expr::from_str(
+            "(record () r
+              (fix ((f (k) 
+                      (fix ((g (k) (k 2))) 
+                        (k 1))))                  
+                (halt 0)))",
+        )
+        .unwrap();
+        let y = Expr::from_str(
+            "(fix ((f (k) (k 1))
+                   (g (k) (k 2))) 
+               (record () r 
+                 (halt 0)))",
+        )
+        .unwrap();
+        assert_eq!(lift_lambdas(&x), y);
+    }
+}
