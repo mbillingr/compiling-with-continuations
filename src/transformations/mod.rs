@@ -84,12 +84,14 @@ mod tests {
 
         let cps_expr = label_fixrefs::Context::new().convert_labels(&cps_expr);
 
+        println!("Initial CPS:");
         cps_expr.pretty_print();
         println!("\n");
 
         let cps_expr = Box::leak(Box::new(cps_eta_reduction::Context::new("__".to_string())))
             .eta_reduce(&cps_expr);
 
+        println!("η Reduced:");
         cps_expr.pretty_print();
         println!("\n");
 
@@ -100,6 +102,7 @@ mod tests {
 
         let cps_expr = lambda_lifting::lift_lambdas(&cps_expr);
 
+        println!("Closure Conversion & Lambda Lifting:");
         let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
         cps_expr.pretty_print();
         println!("\n");
@@ -111,6 +114,7 @@ mod tests {
 
         // finally, get rid of multiple __ parts
         let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
+        println!("Final:");
         cps_expr.pretty_print();
         println!("\n");
 
