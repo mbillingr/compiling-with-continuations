@@ -33,7 +33,7 @@ impl Context {
             LExpr::String(s) => c(CVal::String(*s)),
 
             LExpr::Fn(var, body) => {
-                let f = self.gs.gensym("f");
+                let f = self.gs.gensym("lambda");
                 let k = self.gs.gensym("k");
                 CExpr::Fix(
                     list![(
@@ -176,8 +176,8 @@ impl Context {
 
             LExpr::App(f, e) => {
                 let e = *e;
-                let r = self.gs.gensym("r");
-                let x = self.gs.gensym("x");
+                let r = self.gs.gensym("ret");
+                let x = self.gs.gensym("val");
                 CExpr::Fix(
                     list![(r, list![x], Ref::new(c(CVal::Var(x))))],
                     Ref::new(self.convert(
@@ -594,15 +594,15 @@ mod tests {
         // mini_expr!(ineg) --> mini_expr!(fun x__0 = (ineg x__0))
         assert_eq!(
             convert_program(mini_expr!(ineg)),
-            cps_expr!(fix f__1(x__0 k__2)=(- x__0 [w__3] [(k__2 w__3)]) in (halt f__1))
+            cps_expr!(fix lambda__1(x__0 k__2)=(- x__0 [w__3] [(k__2 w__3)]) in (halt lambda__1))
         );
 
         assert_eq!(
             convert_program(mini_expr!(is_zero)),
             cps_expr!(
-                fix f__1(x__0 k__2)=(fix k__3(x__4)=(k__2 x__4)
+                fix lambda__1(x__0 k__2)=(fix k__3(x__4)=(k__2 x__4)
                                      in (is_zero x__0 [] [(k__3 (int 0)) (k__3 (int 1))]))
-                in (halt f__1))
+                in (halt lambda__1))
         );
     }
 
@@ -615,22 +615,22 @@ mod tests {
 
         assert_eq!(
             convert_program(mini_expr!(-)),
-            cps_expr!(fix f__1(r__0 k__2)=
+            cps_expr!(fix lambda__1(r__0 k__2)=
                 (select 0 r__0 w__4
                     (select 1 r__0 w__5
                         (- [w__4 w__5] [w__3] [(k__2 w__3)])))
-                in (halt f__1))
+                in (halt lambda__1))
         );
 
         assert_eq!(
             convert_program(mini_expr!(=)),
-            cps_expr!(fix f__1(r__0 k__2)=
+            cps_expr!(fix lambda__1(r__0 k__2)=
                 (select 0 r__0 w__5
                     (select 1 r__0 w__6
                         (fix k__3(x__4)=(k__2 x__4)
                         in
                             (= [w__5 w__6] [] [(k__3 (int 0)) (k__3 (int 1))]))))
-                in (halt f__1))
+                in (halt lambda__1))
         );
     }
 
@@ -658,7 +658,7 @@ mod tests {
     fn function_definition() {
         assert_eq!(
             convert_program(mini_expr!(fun x = x)),
-            cps_expr!(fix f__0(x k__1)=(k__1 x) in (halt f__0))
+            cps_expr!(fix lambda__0(x k__1)=(k__1 x) in (halt lambda__0))
         )
     }
 
@@ -666,7 +666,7 @@ mod tests {
     fn application() {
         assert_eq!(
             convert_program(mini_expr!(f e)),
-            cps_expr!(fix r__0(x__1)=(halt x__1) in (f e r__0))
+            cps_expr!(fix ret__0(val__1)=(halt val__1) in (f e ret__0))
         )
     }
 
@@ -675,8 +675,8 @@ mod tests {
         assert_eq!(
             convert_program(mini_expr!(fix fun foo x = (bar x) fun bar y = y in z)),
             cps_expr!(
-                fix foo(x w__0)=(fix r__1(x__2)=(w__0 x__2)
-                                 in (bar x r__1));
+                fix foo(x w__0)=(fix ret__1(val__2)=(w__0 val__2)
+                                 in (bar x ret__1));
                     bar(y w__3)=(w__3 y)
                 in (halt z))
         )
@@ -811,8 +811,8 @@ mod tests {
             convert_program(mini_expr!(callcc (fun k = (int 42)))),
             cps_expr!(
                 fix k__0(x__1)=(halt x__1)
-                in (fix f__2(k k__3)=(k__3 (int 42))
-                    in (f__2 k__0 k__0)))
+                in (fix lambda__2(k k__3)=(k__3 (int 42))
+                    in (lambda__2 k__0 k__0)))
         );
 
         assert_eq!(

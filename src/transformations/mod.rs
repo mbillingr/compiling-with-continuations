@@ -92,6 +92,7 @@ mod tests {
             .eta_reduce(&cps_expr);
 
         println!("η Reduced:");
+        let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
         cps_expr.pretty_print();
         println!("\n");
 

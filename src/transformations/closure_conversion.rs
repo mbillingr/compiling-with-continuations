@@ -259,8 +259,8 @@ mod tests {
     fn unknown_application() {
         let ctx = Box::leak(Box::new(Context::new("__".to_string())));
 
-        let x = cps_expr!((f x));
-        let y = cps_expr!(select 0 f f__0 (f__0 f x));
+        let x = cps_expr!((f c));
+        let y = cps_expr!(select 0 f f__0 (f__0 f c));
         assert_eq!(ctx.convert_closures(&x), y);
     }
 
@@ -268,8 +268,8 @@ mod tests {
     fn simple_conversion() {
         let ctx = Box::leak(Box::new(Context::new("__".to_string())));
 
-        let x = cps_expr!(record [] r (fix f(x)=(halt r) in (f f)));
-        let y = cps_expr!(record [] r (fix f__1(f x)=(select 1 f r (halt r)) in (record [(@f__1) r] cls__0 (offset 0 cls__0 f ((@f__1) f f)))));
+        let x = cps_expr!(record [] r (fix f(c)=(halt r) in (f f)));
+        let y = cps_expr!(record [] r (fix f__1(f c)=(select 1 f r (halt r)) in (record [(@f__1) r] cls__0 (offset 0 cls__0 f ((@f__1) f f)))));
         assert_eq!(ctx.convert_closures(&x), y);
     }
 
@@ -277,11 +277,11 @@ mod tests {
     fn mutual_recursion() {
         let ctx = Box::leak(Box::new(Context::new("__".to_string())));
 
-        let x = cps_expr!(record [] r (fix f(x)=(halt r); g(x)=(f g) in (g f)));
+        let x = cps_expr!(record [] r (fix f(c)=(halt r); g(c)=(f c) in (g f)));
         let y = cps_expr!(record [] r
             (fix
-                f__1(f x)=(select 2 f r (halt r));
-                g__2(g x)=(offset (-1) g f ((@f__1) f g))
+                f__1(f c)=(select 2 f r (halt r));
+                g__2(g c)=(offset (-1) g f ((@f__1) f c))
             in
                 (record [(@f__1) (@g__2) r] cls__0
                     (offset 1 cls__0 g
