@@ -2,17 +2,21 @@ use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
 use crate::transformations::GensymContext;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 const CLS_FUNC_INDEX: isize = 0;
 
 pub struct Context {
-    gs: GensymContext,
+    pub gs: Arc<GensymContext>,
 }
 
 impl Context {
-    pub fn new(sym_delim: String) -> Self {
+    pub fn new(gs: Arc<GensymContext>) -> Self {
+        Context { gs }
+    }
+    pub fn new_context(sym_delim: String) -> Self {
         Context {
-            gs: GensymContext::new(sym_delim),
+            gs: Arc::new(GensymContext::new(sym_delim)),
         }
     }
 }
@@ -257,7 +261,7 @@ mod tests {
 
     #[test]
     fn unknown_application() {
-        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
+        let ctx = Box::leak(Box::new(Context::new_context("__".to_string())));
 
         let x = cps_expr!((f c));
         let y = cps_expr!(select 0 f f__0 (f__0 f c));
@@ -266,7 +270,7 @@ mod tests {
 
     #[test]
     fn simple_conversion() {
-        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
+        let ctx = Box::leak(Box::new(Context::new_context("__".to_string())));
 
         let x = cps_expr!(record [] r (fix f(c)=(halt r) in (f f)));
         let y = cps_expr!(record [] r (fix f__1(f c)=(select 1 f r (halt r)) in (record [(@f__1) r] cls__0 (offset 0 cls__0 f ((@f__1) f f)))));
@@ -275,7 +279,7 @@ mod tests {
 
     #[test]
     fn mutual_recursion() {
-        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
+        let ctx = Box::leak(Box::new(Context::new_context("__".to_string())));
 
         let x = cps_expr!(record [] r (fix f(c)=(halt r); g(c)=(f c) in (g f)));
         let y = cps_expr!(record [] r
@@ -287,6 +291,15 @@ mod tests {
                     (offset 1 cls__0 g
                         (offset 0 cls__0 f
                             ((@g__2) g f))))));
+        assert_eq!(ctx.convert_closures(&x), y);
+    }
+
+    #[test]
+    fn bug() {
+        let ctx = Box::leak(Box::new(Context::new_context("__".to_string())));
+
+        let x = cps_expr!(fix lambda(k f)=(k f) in (halt lambda));
+        let y = cps_expr!(fix lambda__1(lambda k f)=(select 0 k f__2 (f__2 k f)) in (record [(@lambda__1)] cls__0 (offset 0 cls__0 lambda (halt lambda))));
         assert_eq!(ctx.convert_closures(&x), y);
     }
 }

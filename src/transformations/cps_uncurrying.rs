@@ -44,29 +44,28 @@ impl Context {
                     match &**fbody {
                         // uncurrying ... this is the transformation on top of page 77
                         Expr::Fix(
-                            Ref([(g, Ref([b, k]), gbody)]),
+                            Ref([(g, Ref([k, b]), gbody)]),
                             Ref(Expr::App(Value::Var(c), Ref([Value::Var(gg) | Value::Label(gg)]))),
-                        ) if Some(c) == params.last() && gg == g => {
+                        ) if Some(c) == params.first() && gg == g => {
                             let f_ = self.gs.gensym(f);
                             let fparams: Vec<_> =
                                 params.iter().map(|p| self.gs.gensym(p)).collect();
                             let c_ = *fparams
-                                .last()
+                                .first()
                                 .expect("functions need at least one parameter: the continuation");
                             let g_ = self.gs.gensym(g);
                             let b_ = self.gs.gensym(b);
                             let k_ = self.gs.gensym(k);
 
-                            let mut f_args: Vec<Value<_>> =
-                                fparams.iter().map(|p| Value::Var(*p)).collect();
+                            let mut f_args = vec![Value::Var(k_)];
+                            f_args.extend(fparams.iter().map(|p| Value::Var(*p)));
                             f_args.push(Value::Var(g_));
                             f_args.push(Value::Var(b_));
-                            f_args.push(Value::Var(k_));
 
                             let fbody_out = Expr::Fix(
                                 list![(
                                     g_,
-                                    list![b_, k_],
+                                    list![k_, b_],
                                     Expr::App(Value::Var(f_), Ref::array(f_args)).into()
                                 )],
                                 Expr::App(Value::Var(c_), list![Value::Var(g_)]).into(),
@@ -74,10 +73,10 @@ impl Context {
 
                             defs_out.push((f.clone(), Ref::array(fparams), fbody_out.into()));
 
-                            let mut f_params: Vec<_> = params.iter().copied().collect();
+                            let mut f_params = vec![*k];
+                            f_params.extend(params.iter().copied());
                             f_params.push(*g);
                             f_params.push(*b);
-                            f_params.push(*k);
 
                             defs_out.push((f_, Ref::array(f_params), self.uncurry(gbody).into()));
                         }
@@ -126,8 +125,8 @@ mod tests {
 
     #[test]
     fn uncurrying() {
-        let x = cps_expr!(fix f(x c)=(fix g(b k)=(+ [x b] [r] [(k r)]) in (c g)) in f);
-        let y = cps_expr!(fix f(x__1 c__2)=(fix g__3(b__4 k__5)=(f__0 x__1 c__2 g__3 b__4 k__5) in (c__2 g__3)); f__0(x c g b k)=(+ [x b] [r] [(k r)]) in f);
+        let x = cps_expr!(fix f(c x)=(fix g(k b)=(+ [x b] [r] [(k r)]) in (c g)) in f);
+        let y = cps_expr!(fix f(c__1 x__2)=(fix g__3(k__5 b__4)=(f__0 k__5 c__1 x__2 g__3 b__4) in (c__1 g__3)); f__0(k c x g b)=(+ [x b] [r] [(k r)]) in f);
         assert_eq!(uncurry(x), y);
     }
 }

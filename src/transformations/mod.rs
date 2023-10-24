@@ -81,7 +81,9 @@ mod tests {
         )))
         .convert(&expr, Box::new(|x| cps::Expr::Halt(x)));
 
-        let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
+        let gs = Arc::new(GensymContext::new("__"));
+
+        let cps_expr = make_all_names_unique::Context::new(gs.clone()).rename_all(&cps_expr);
 
         let cps_expr = label_fixrefs::Context::new().convert_labels(&cps_expr);
 
@@ -94,20 +96,21 @@ mod tests {
         let cps_expr = cps_uncurrying::Context::new("__").uncurry(&cps_expr);
 
         println!("η Reduced:");
-        let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
-        cps_expr.pretty_print();
+        make_all_names_unique::Context::new_context("__")
+            .rename_all(&cps_expr)
+            .pretty_print();
         println!("\n");
 
         let cps_expr = LabelsToVars.transform_expr(&cps_expr);
 
-        let cps_expr = Box::leak(Box::new(closure_conversion::Context::new("__".to_string())))
-            .convert_closures(&cps_expr);
+        let cps_expr = closure_conversion::Context::new(gs.clone()).convert_closures(&cps_expr);
 
         let cps_expr = lambda_lifting::lift_lambdas(&cps_expr);
 
         println!("Closure Conversion & Lambda Lifting:");
-        let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
-        cps_expr.pretty_print();
+        make_all_names_unique::Context::new_context("__")
+            .rename_all(&cps_expr)
+            .pretty_print();
         println!("\n");
 
         // Spilling does not work for less than 3 registers in some tests. Not sure if there is a bug
