@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod closure_conversion;
 pub mod cps_eta_reduction;
+pub mod cps_uncurrying;
 pub mod label_fixrefs;
 mod labels_to_vars;
 pub mod lambda_lifting;
@@ -88,8 +89,9 @@ mod tests {
         cps_expr.pretty_print();
         println!("\n");
 
-        let cps_expr = Box::leak(Box::new(cps_eta_reduction::Context::new("__".to_string())))
-            .eta_reduce(&cps_expr);
+        let cps_expr = cps_eta_reduction::Context.eta_reduce(&cps_expr);
+
+        let cps_expr = cps_uncurrying::Context::new("__").uncurry(&cps_expr);
 
         println!("η Reduced:");
         let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);

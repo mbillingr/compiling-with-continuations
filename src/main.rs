@@ -46,7 +46,7 @@ fn main() {
         }
         CliCmd::ToCps => to_cps(args.gensym_delimiter),
         CliCmd::ConvertLabels => convert_labels(),
-        CliCmd::EtaReduceCps => eta_reduce(args.gensym_delimiter),
+        CliCmd::EtaReduceCps => eta_reduce(),
     }
 }
 
@@ -93,18 +93,16 @@ fn to_cps(gensym_delimiter: String) {
     writeln!(stdout(), "{}", expr_out).unwrap();
 }
 
-fn eta_reduce(gensym_delimiter: String) {
+fn eta_reduce() {
     use crate::transformations::cps_eta_reduction::Context;
     type CExpr = crate::languages::cps_lang::ast::Expr<Ref<str>>;
-
-    let ctx = Box::leak(Box::new(Context::new(gensym_delimiter)));
 
     let mut src = String::new();
     stdin().read_to_string(&mut src).unwrap();
 
     let expr_in = CExpr::from_str(&src).unwrap();
 
-    let expr_out = ctx.eta_reduce(&expr_in);
+    let expr_out = Context.eta_reduce(&expr_in);
 
     writeln!(stdout(), "{}", expr_out).unwrap();
 }

@@ -1,20 +1,10 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
-use crate::list;
-use crate::transformations::GensymContext;
 use std::collections::HashMap;
 
-pub struct Context {
-    gs: GensymContext,
-}
+pub struct Context;
 
-impl Context {
-    pub fn new(sym_delim: String) -> Self {
-        Context {
-            gs: GensymContext::new(sym_delim),
-        }
-    }
-}
+impl Context {}
 
 impl Context {
     pub fn eta_reduce(&'static self, exp: &Expr<Ref<str>>) -> Expr<Ref<str>> {
@@ -50,52 +40,6 @@ impl Context {
                         // eta reduction
                         Expr::App(g, args) if args_equal_params(params, args) => {
                             substitutions.insert(f, g);
-                            continue;
-                        }
-
-                        // uncurrying ... this is the transformation on top of page 77
-                        Expr::Fix(
-                            Ref([(g, Ref([b, k]), gbody)]),
-                            Ref(Expr::App(Value::Var(c), Ref([Value::Var(gg) | Value::Label(gg)]))),
-                        ) if Some(c) == params.last() && gg == g => {
-                            let f_ = self.gs.gensym(f);
-                            let fparams: Vec<_> =
-                                params.iter().map(|p| self.gs.gensym(p)).collect();
-                            let c_ = *fparams
-                                .last()
-                                .expect("functions need at least one parameter: the continuation");
-                            let g_ = self.gs.gensym(g);
-                            let b_ = self.gs.gensym(b);
-                            let k_ = self.gs.gensym(k);
-
-                            let mut f_args: Vec<Value<_>> =
-                                fparams.iter().map(|p| Value::Var(*p)).collect();
-                            f_args.push(Value::Var(g_));
-                            f_args.push(Value::Var(b_));
-                            f_args.push(Value::Var(k_));
-
-                            let fbody_out = Expr::Fix(
-                                list![(
-                                    g_,
-                                    list![b_, k_],
-                                    Expr::App(Value::Var(f_), Ref::array(f_args)).into()
-                                )],
-                                Expr::App(Value::Var(c_), list![Value::Var(g_)]).into(),
-                            );
-
-                            defs_out.push((f.clone(), Ref::array(fparams), fbody_out.into()));
-
-                            let mut f_params: Vec<_> = params.iter().copied().collect();
-                            f_params.push(*g);
-                            f_params.push(*b);
-                            f_params.push(*k);
-
-                            defs_out.push((
-                                f_,
-                                Ref::array(f_params),
-                                self.eta_reduce(gbody).into(),
-                            ));
-
                             continue;
                         }
 
@@ -178,11 +122,10 @@ impl<'a> Substitution<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{cps_expr, cps_expr_list, cps_ident_list, cps_value, cps_value_list};
+    use crate::{cps_expr, cps_ident_list, cps_value};
 
     fn eta_reduce(exp: Expr<Ref<str>>) -> Expr<Ref<str>> {
-        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
-        ctx.eta_reduce(&exp)
+        Context.eta_reduce(&exp)
     }
 
     #[test]
@@ -226,13 +169,6 @@ mod tests {
 
         let x = cps_expr!(fix g(x)=(fix f(x)=(h x) in (f x)) in (g z));
         let y = cps_expr!((h z));
-        assert_eq!(eta_reduce(x), y);
-    }
-
-    #[test]
-    fn uncurrying() {
-        let x = cps_expr!(fix f(x c)=(fix g(b k)=(+ [x b] [r] [(k r)]) in (c g)) in f);
-        let y = cps_expr!(fix f(x__1 c__2)=(fix g__3(b__4 k__5)=(f__0 x__1 c__2 g__3 b__4 k__5) in (c__2 g__3)); f__0(x c g b k)=(+ [x b] [r] [(k r)]) in f);
         assert_eq!(eta_reduce(x), y);
     }
 }
