@@ -11,17 +11,27 @@ pub fn allocate(n_registers: usize, expr: &Expr<Ref<str>>) -> Expr<Ref<str>> {
 
 #[derive(Debug, Clone)]
 struct AllocationContext {
+    all_registers: Ref<[Ref<str>]>,
     available_registers: BinaryHeap<Reverse<Ref<str>>>,
     env: Env,
 }
 
 impl AllocationContext {
     pub fn new(n_registers: usize) -> Self {
+        let all_registers: Vec<_> = (0..n_registers)
+            .map(|r| Ref::from(format!("r{r}")))
+            .collect();
         AllocationContext {
-            available_registers: (0..n_registers)
-                .map(|r| Ref::from(format!("r{r}")))
-                .map(Reverse)
-                .collect(),
+            available_registers: all_registers.iter().copied().map(Reverse).collect(),
+            all_registers: Ref::array(all_registers),
+            env: Env::new(),
+        }
+    }
+
+    pub fn fresh(&self) -> Self {
+        AllocationContext {
+            all_registers: self.all_registers,
+            available_registers: self.all_registers.iter().copied().map(Reverse).collect(),
             env: Env::new(),
         }
     }
@@ -60,6 +70,32 @@ impl AllocationContext {
                 let rec_out = ctx_before.transform_value(rec);
                 let (r, ctx_after) = ctx_after.assign_register(var);
                 Expr::Offset(*idx, rec_out, r, Ref::new(ctx_after.allocate(cnt)))
+            }
+
+            Expr::App(rator, rands) => Expr::App(
+                ctx_before.transform_value(rator),
+                Ref::array(
+                    rands
+                        .iter()
+                        .map(|a| ctx_before.transform_value(a))
+                        .collect(),
+                ),
+            ),
+
+            Expr::Fix(defs, cnt) => {
+                let mut defs_out = vec![];
+                for (f, ps, bdy) in defs.iter() {
+                    let mut ctx_fn = ctx_before.fresh();
+                    let mut p_out = vec![];
+                    for p in ps.iter() {
+                        let (r, ctx_) = ctx_fn.assign_register(p);
+                        ctx_fn = ctx_;
+                        p_out.push(r);
+                    }
+                    let b_out = ctx_fn.allocate(bdy);
+                    defs_out.push((*f, Ref::array(p_out), Ref::new(b_out)))
+                }
+                Expr::Fix(Ref::array(defs_out), Ref::new(ctx_after.allocate(cnt)))
             }
 
             Expr::Switch(val, cnts) => {
@@ -101,13 +137,18 @@ impl AllocationContext {
 
             Expr::Halt(value) => Expr::Halt(ctx_before.transform_value(value)),
 
-            _ => todo!("{expr:?}"),
+            Expr::Panic(msg) => Expr::Panic(*msg),
         }
     }
 
     fn transform_value(&self, value: &Value<Ref<str>>) -> Value<Ref<str>> {
         match value {
-            Value::Var(v) => Value::Var(self.env.get(v).expect("unbound variable").clone()),
+            Value::Var(v) => Value::Var(
+                self.env
+                    .get(v)
+                    .unwrap_or_else(|| panic!("unbound variable {v:?}"))
+                    .clone(),
+            ),
             _ => value.clone(),
         }
     }
@@ -131,6 +172,7 @@ impl AllocationContext {
         }
 
         AllocationContext {
+            all_registers: self.all_registers,
             available_registers,
             env,
         }
@@ -188,6 +230,14 @@ mod tests {
         let x =
             Expr::from_str("(record () a (offset 0 a b (switch 0 (halt b) (halt a))))").unwrap();
         let y = Expr::from_str("(record () r0 (offset 0 r0 r1 (switch 0 (halt r1) (halt r0))))")
+            .unwrap();
+        assert_eq!(allocate(2, &x), y);
+    }
+
+    #[test]
+    fn functions_allocated_independently() {
+        let x = Expr::from_str("(fix ((f (x) (halt x)) (g (k x) (k x))) ((@ g) (@ f) 0))").unwrap();
+        let y = Expr::from_str("(fix ((f (r0) (halt r0)) (g (r0 r1) (r0 r1))) ((@ g) (@ f) 0))")
             .unwrap();
         assert_eq!(allocate(2, &x), y);
     }
