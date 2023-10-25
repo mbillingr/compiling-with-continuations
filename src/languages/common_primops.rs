@@ -11,6 +11,7 @@ pub enum PrimOp {
     BoxSet,
     BoxGet,
     ISame,
+    ILess,
     INeg,
     IAdd,
     ISub,
@@ -30,6 +31,7 @@ impl PrimOp {
             "box-set" => Some(PrimOp::BoxSet),
             "box-get" => Some(PrimOp::BoxGet),
             "=" => Some(PrimOp::ISame),
+            "<" => Some(PrimOp::ILess),
             "~" => Some(PrimOp::INeg),
             "+" => Some(PrimOp::IAdd),
             "-" => Some(PrimOp::ISub),
@@ -49,6 +51,7 @@ impl PrimOp {
             PrimOp::BoxSet => "box-set",
             PrimOp::BoxGet => "box-get",
             PrimOp::ISame => "=",
+            PrimOp::ILess => "<",
             PrimOp::INeg => "~",
             PrimOp::IAdd => "+",
             PrimOp::ISub => "-",
@@ -76,6 +79,9 @@ impl PrimOp {
             ISame => {
                 Answer::from_bool(args.next().unwrap().as_int() == args.next().unwrap().as_int())
             }
+            ILess => {
+                Answer::from_bool(args.next().unwrap().as_int() < args.next().unwrap().as_int())
+            }
             INeg => Answer::from_int(-args.next().unwrap().as_int()),
             IAdd => Answer::from_int(args.next().unwrap().as_int() + args.next().unwrap().as_int()),
             ISub => Answer::from_int(args.next().unwrap().as_int() - args.next().unwrap().as_int()),
@@ -100,7 +106,7 @@ impl PrimOp {
             MkBox => 1,
             BoxGet => 1,
             BoxSet => 2,
-            ISame => 2,
+            ISame | ILess => 2,
             INeg => 1,
             IAdd | ISub => 2,
             FSame => 2,
@@ -119,7 +125,7 @@ impl PrimOp {
             MkBox => 1,
             BoxGet => 1,
             BoxSet => 0,
-            ISame => 0,
+            ISame | ILess => 0,
             INeg => 1,
             IAdd | ISub => 1,
             FSame => 0,
@@ -132,7 +138,7 @@ impl PrimOp {
     pub fn is_branching(&self) -> bool {
         use PrimOp::*;
         match self {
-            CorP | IsZero | ISame | FSame | SSame => true,
+            CorP | IsZero | ISame | ILess | FSame | SSame => true,
             _ => false,
         }
     }

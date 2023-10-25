@@ -211,6 +211,22 @@ macro_rules! make_testsuite_for_mini_lambda {
             }
         }
 
+        #[test]
+        fn fibonacci() {
+            unsafe {
+                let expr = $crate::languages::mini_lambda::ast::Expr::from_str(
+                    "(fix ((fib n
+                             (switch ((primitive <) (record n 2)) () 
+                                     ((1 1) 
+                                      (0 ((primitive +) 
+                                          (record (fib ((primitive -) (record n 2)))
+                                                  (fib ((primitive -) (record n 1)))))))))) 
+                        (fib 5))"
+                ).unwrap();
+                assert_eq!($runner(&expr).as_int(), 8);
+            }
+        }
+
     };
 
     (continuation_tests $runner:ident) => {
