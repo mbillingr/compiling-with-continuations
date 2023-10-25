@@ -38,8 +38,6 @@ impl AllocationContext {
 
     fn allocate(self, expr: &Expr<Ref<str>>) -> Expr<Ref<str>> {
         let ctx_before = self;
-        println!("{expr:?}");
-        println!("    {ctx_before:?}");
         let free_after = expr
             .continuation_exprs()
             .into_iter()
@@ -48,7 +46,6 @@ impl AllocationContext {
             .reduce(|x, y| x.union(&y))
             .unwrap_or(Set::empty());
         let ctx_after = ctx_before.free_unused_registers(free_after);
-        println!("    {ctx_after:?}");
 
         match expr {
             Expr::Record(fields, var, cnt) => {

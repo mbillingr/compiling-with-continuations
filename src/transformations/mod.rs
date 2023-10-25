@@ -131,6 +131,11 @@ mod tests {
         cps_expr.pretty_print();
         println!("\n");
 
+        let cps_expr = register_allocation::allocate(n_registers, &cps_expr);
+        println!("Registers:");
+        cps_expr.pretty_print();
+        println!("\n");
+
         cps_lang::interpreter::exec(&cps_expr)
     }
 
