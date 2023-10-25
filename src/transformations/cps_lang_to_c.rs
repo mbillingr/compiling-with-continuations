@@ -1,6 +1,8 @@
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
+use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
+use std::ops::Deref;
 
 // special registers
 const CNT: &'static str = "cnt";
@@ -8,7 +10,9 @@ const TMP: &'static str = "tmp";
 
 const STANDARD_ARG_REGISTERS: &'static [&'static str] = &["r0", "r1", "r2"];
 
-pub fn program_to_c<V: Clone + Eq + Hash + std::fmt::Debug + std::fmt::Display>(
+pub fn program_to_c<
+    V: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
+>(
     expr: &Expr<V>,
 ) -> Vec<String> {
     let mut ctx = Context::new();
@@ -21,7 +25,10 @@ pub struct Context<V> {
     functions: HashMap<V, KnownFunction<V>>,
 }
 
-impl<V: Clone + Eq + Hash + std::fmt::Debug + std::fmt::Display> Context<V> {
+impl<
+        V: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
+    > Context<V>
+{
     pub fn new() -> Self {
         Context {
             registers: Default::default(),
@@ -55,7 +62,7 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug + std::fmt::Display> Context<V> {
 
             Expr::App(Value::Label(f), rands) => {
                 let arg_registers = self.functions[f].arg_registers.as_ref();
-                stmts = self.shuffle_registers(arg_registers, rands, stmts);
+                stmts = self.shuffle_registers2(arg_registers, rands, stmts);
                 self.c_static_tailcall(f, stmts)
             }
 
@@ -109,11 +116,58 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug + std::fmt::Display> Context<V> {
 
     fn shuffle_registers(
         &self,
-        targets: &[impl std::fmt::Display],
+        targets: &[&str],
+        values: &[Value<V>],
+        mut stmts: Vec<String>,
+    ) -> Vec<String>
+    where
+        V: Borrow<str>,
+    {
+        todo!()
+    }
+
+    fn shuffle_registers2(
+        &self,
+        targets: &[V],
         values: &[Value<V>],
         mut stmts: Vec<String>,
     ) -> Vec<String> {
-        todo!()
+        let mut uncopied_registers: HashMap<V, _> = HashMap::new();
+
+        for (tgt, v) in targets.iter().zip(values) {
+            match v {
+                Value::Var(r) => {
+                    uncopied_registers.insert(r.clone(), tgt);
+                }
+                _ => {
+                    stmts = self.c_set_register(tgt, self.generate_value(v), stmts);
+                }
+            }
+        }
+
+        while !uncopied_registers.is_empty() {
+            let (mut s, mut t) = pop(&mut uncopied_registers).unwrap();
+
+            while uncopied_registers.contains_key(t) {
+                stmts = self.c_set_register(TMP, t.to_string(), stmts);
+                stmts = self.c_set_register(t.to_string(), s.to_string(), stmts);
+                let (s_, t_) = pop(&mut uncopied_registers).unwrap();
+                s = s_;
+                t = t_;
+            }
+        }
+
+        stmts
+    }
+
+    fn c_set_register(
+        &self,
+        r: impl std::fmt::Display,
+        src: String,
+        mut stmts: Vec<String>,
+    ) -> Vec<String> {
+        stmts.push(format!("{r} = {src};"));
+        stmts
     }
 
     fn c_halt(&self, value: String, mut stmts: Vec<String>) -> Vec<String> {
@@ -189,4 +243,10 @@ impl<V: Clone> KnownFunction<V> {
             arg_registers: params.to_vec(),
         }
     }
+}
+
+fn pop<K: Eq + Hash + Clone, V>(map: &mut HashMap<K, V>) -> Option<(K, V)> {
+    let (k, _) = map.iter().next()?;
+    let k = k.clone();
+    map.remove(&k).map(|v| (k, v))
 }
