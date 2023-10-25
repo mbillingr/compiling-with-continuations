@@ -1,64 +1,75 @@
 use crate::core::reference::Ref;
+use crate::core::sets::Set;
 use crate::languages::cps_lang::ast::{Expr, Value};
-use std::borrow::Borrow;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
 
 pub fn allocate(n_registers: usize, expr: &Expr<Ref<str>>) -> Expr<Ref<str>> {
     let ctx = AllocationContext::new(n_registers);
-    ctx.allocate(expr, Env::Empty)
+    ctx.allocate(expr)
 }
 
+#[derive(Debug, Clone)]
 struct AllocationContext {
-    register_names: Vec<Ref<str>>,
+    available_registers: BinaryHeap<Reverse<Ref<str>>>,
+    env: Env,
 }
 
 impl AllocationContext {
     pub fn new(n_registers: usize) -> Self {
         AllocationContext {
-            register_names: (0..n_registers)
+            available_registers: (0..n_registers)
                 .map(|r| Ref::from(format!("r{r}")))
+                .map(Reverse)
                 .collect(),
+            env: Env::new(),
         }
     }
 
-    fn allocate(&self, expr: &Expr<Ref<str>>, mut env: Env) -> Expr<Ref<str>> {
+    fn allocate(self, expr: &Expr<Ref<str>>) -> Expr<Ref<str>> {
+        let ctx_before = self;
+        println!("{expr:?}");
+        println!("    {ctx_before:?}");
+        let free_after = expr
+            .continuation_exprs()
+            .into_iter()
+            .map(Expr::free_vars)
+            .map(Set::from)
+            .reduce(|x, y| x.union(&y))
+            .unwrap_or(Set::empty());
+        let ctx_after = ctx_before.free_unused_registers(free_after);
+        println!("    {ctx_after:?}");
+
         match expr {
             Expr::Record(fields, var, cnt) => {
-                let (r, env) = self.assign_register(var, env);
-                Expr::Record(
-                    Ref::array(
-                        fields
-                            .iter()
-                            .map(|(f, ap)| (self.transform_value(f, env), ap.clone()))
-                            .collect(),
-                    ),
-                    r,
-                    Ref::new(self.allocate(cnt, env)),
-                )
+                let fields_out = fields
+                    .iter()
+                    .map(|(f, ap)| (ctx_before.transform_value(f), ap.clone()))
+                    .collect();
+                let (r, ctx_after) = ctx_after.assign_register(var);
+                Expr::Record(Ref::array(fields_out), r, Ref::new(ctx_after.allocate(cnt)))
             }
 
             Expr::Select(idx, rec, var, cnt) => {
-                let (r, env) = self.assign_register(var, env);
-                Expr::Select(
-                    *idx,
-                    self.transform_value(rec, env),
-                    r,
-                    Ref::new(self.allocate(cnt, env)),
-                )
+                let rec_out = ctx_before.transform_value(rec);
+                let (r, ctx_after) = ctx_after.assign_register(var);
+                Expr::Select(*idx, rec_out, r, Ref::new(ctx_after.allocate(cnt)))
             }
 
             Expr::PrimOp(op, args, vars, cnts) => {
-                let args_out: Vec<_> = args.iter().map(|a| self.transform_value(a, env)).collect();
+                let args_out: Vec<_> = args.iter().map(|a| ctx_before.transform_value(a)).collect();
 
+                let mut ctx_after = ctx_after;
                 let mut vars_out = vec![];
                 for v in vars.iter() {
-                    let (r, env_) = self.assign_register(v, env);
-                    env = env_;
+                    let (r, ctx_) = ctx_after.assign_register(v);
+                    ctx_after = ctx_;
                     vars_out.push(r);
                 }
 
                 let cnts_out: Vec<_> = cnts
                     .iter()
-                    .map(|c| self.allocate(c, env))
+                    .map(|c| ctx_after.clone().allocate(c))
                     .map(Ref::new)
                     .collect();
 
@@ -70,61 +81,45 @@ impl AllocationContext {
                 )
             }
 
-            Expr::Halt(value) => Expr::Halt(self.transform_value(value, env)),
+            Expr::Halt(value) => Expr::Halt(ctx_before.transform_value(value)),
 
             _ => todo!("{expr:?}"),
         }
     }
 
-    fn transform_value(&self, value: &Value<Ref<str>>, env: Env) -> Value<Ref<str>> {
+    fn transform_value(&self, value: &Value<Ref<str>>) -> Value<Ref<str>> {
         match value {
-            Value::Var(v) => Value::Var(env.lookup(v).clone()),
+            Value::Var(v) => Value::Var(self.env.get(v).expect("unbound variable").clone()),
             _ => value.clone(),
         }
     }
 
-    fn assign_register(&self, var: &Ref<str>, env: Env) -> (Ref<str>, Env) {
-        let r = self.register_names[0];
-        (r, env.extend(var.clone(), r))
+    fn assign_register(mut self, var: &Ref<str>) -> (Ref<str>, Self) {
+        let r = self.available_registers.pop().unwrap().0;
+        self.env.insert(var.clone(), r);
+        (r, self)
     }
-}
 
-type Env = Environment<Ref<str>, Ref<str>>;
+    fn free_unused_registers(&self, free_vars: Set<Ref<str>>) -> Self {
+        let mut available_registers = self.available_registers.clone();
 
-#[derive(Debug)]
-enum Environment<K: 'static, V: 'static> {
-    Empty,
-    Binding(Ref<(K, V, Self)>),
-}
+        let mut env = Env::new();
+        for (k, v) in self.env.iter() {
+            if free_vars.contains(k) {
+                env.insert(*k, *v);
+            } else {
+                available_registers.push(Reverse(*v));
+            }
+        }
 
-impl<K, V> Copy for Environment<K, V> {}
-
-impl<K, V> Clone for Environment<K, V> {
-    fn clone(&self) -> Self {
-        match self {
-            Environment::Empty => Environment::Empty,
-            Environment::Binding(b) => Environment::Binding(*b),
+        AllocationContext {
+            available_registers,
+            env,
         }
     }
 }
 
-impl<K, V> Environment<K, V> {
-    fn extend(&self, key: K, value: V) -> Self {
-        Environment::Binding(Ref::new((key, value, *self)))
-    }
-
-    fn lookup<T>(&self, key: T) -> &V
-    where
-        K: PartialEq,
-        T: Borrow<K>,
-    {
-        match self {
-            Environment::Empty => panic!("Key not found"),
-            Environment::Binding(Ref((k, v, _))) if k == key.borrow() => v,
-            Environment::Binding(Ref((_, _, next))) => next.lookup(key),
-        }
-    }
-}
+type Env = HashMap<Ref<str>, Ref<str>>;
 
 #[cfg(test)]
 mod tests {
