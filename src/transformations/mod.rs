@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod closure_conversion;
 pub mod cps_eta_reduction;
+pub mod cps_lang_to_c;
 pub mod cps_uncurrying;
 pub mod label_fixrefs;
 mod labels_to_vars;
@@ -134,6 +135,10 @@ mod tests {
         let cps_expr = register_allocation::allocate(n_registers, &cps_expr);
         println!("Registers:");
         cps_expr.pretty_print();
+        println!("\n");
+
+        println!("C:");
+        println!("{}", cps_lang_to_c::program_to_c(&cps_expr).join("\n"));
         println!("\n");
 
         cps_lang::interpreter::exec(&cps_expr)
