@@ -104,7 +104,6 @@ impl Expr<Ref<str>> {
         match fap {
             List(Ref([f, ap])) => Ok((Value::from_sexpr(f)?, AccessPath::from_sexpr(ap)?)),
             f => Ok((Value::from_sexpr(f)?, AccessPath::Ref(0))),
-            _ => Err(Error::Syntax(fap.clone())),
         }
     }
 
