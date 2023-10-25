@@ -103,6 +103,7 @@ impl Expr<Ref<str>> {
         use S::*;
         match fap {
             List(Ref([f, ap])) => Ok((Value::from_sexpr(f)?, AccessPath::from_sexpr(ap)?)),
+            f => Ok((Value::from_sexpr(f)?, AccessPath::Ref(0))),
             _ => Err(Error::Syntax(fap.clone())),
         }
     }
@@ -132,12 +133,7 @@ impl Expr<Ref<str>> {
         match self {
             Expr::Record(fields, var, cnt) => S::list(vec![
                 S::symbol("record"),
-                S::list(
-                    fields
-                        .iter()
-                        .map(|(f, ap)| S::list(vec![f.to_sexpr(), ap.to_sexpr()]))
-                        .collect(),
-                ),
+                S::list(fields.iter().map(|(f, ap)| ap.to_sexpr(f)).collect()),
                 S::Symbol(*var),
                 cnt.to_sexpr(),
             ]),
@@ -225,11 +221,18 @@ impl Value<Ref<str>> {
 }
 
 impl AccessPath {
-    pub fn to_sexpr(&self) -> S {
+    pub fn to_sexpr(&self, val: &Value<Ref<str>>) -> S {
+        match self {
+            AccessPath::Ref(0) => val.to_sexpr(),
+            _ => S::list(vec![val.to_sexpr(), self.to_sexpr_()]),
+        }
+    }
+
+    fn to_sexpr_(&self) -> S {
         match self {
             AccessPath::Ref(i) => S::list(vec![S::symbol("ref"), S::Int(*i as i64)]),
             AccessPath::Sel(i, ap) => {
-                S::list(vec![S::symbol("sel"), S::Int(*i as i64), ap.to_sexpr()])
+                S::list(vec![S::symbol("sel"), S::Int(*i as i64), ap.to_sexpr_()])
             }
         }
     }
@@ -266,9 +269,18 @@ mod tests {
 
     #[test]
     fn record() {
-        let repr = "(record ((1 (ref 0)) (2 (ref 0))) r (halt r))";
+        let repr = "(record ((11 (ref 1)) (22 (ref 2))) r (halt r))";
         let expr: Expr<Ref<str>> = Expr::Record(
-            list![(Value::Int(1), AP::Ref(0)), (Value::Int(2), AP::Ref(0))],
+            list![(Value::Int(11), AP::Ref(1)), (Value::Int(22), AP::Ref(2))],
+            "r".into(),
+            Expr::Halt(Value::Var("r".into())).into(),
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+
+        let repr = "(record (11 22) r (halt r))";
+        let expr: Expr<Ref<str>> = Expr::Record(
+            list![(Value::Int(11), AP::Ref(0)), (Value::Int(22), AP::Ref(0))],
             "r".into(),
             Expr::Halt(Value::Var("r".into())).into(),
         );
