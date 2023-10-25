@@ -56,6 +56,24 @@ impl AllocationContext {
                 Expr::Select(*idx, rec_out, r, Ref::new(ctx_after.allocate(cnt)))
             }
 
+            Expr::Offset(idx, rec, var, cnt) => {
+                let rec_out = ctx_before.transform_value(rec);
+                let (r, ctx_after) = ctx_after.assign_register(var);
+                Expr::Offset(*idx, rec_out, r, Ref::new(ctx_after.allocate(cnt)))
+            }
+
+            Expr::Switch(val, cnts) => {
+                let val_out = ctx_before.transform_value(val);
+
+                let cnts_out: Vec<_> = cnts
+                    .iter()
+                    .map(|c| ctx_after.clone().allocate(c))
+                    .map(Ref::new)
+                    .collect();
+
+                Expr::Switch(val_out, Ref::array(cnts_out))
+            }
+
             Expr::PrimOp(op, args, vars, cnts) => {
                 let args_out: Vec<_> = args.iter().map(|a| ctx_before.transform_value(a)).collect();
 
@@ -154,6 +172,23 @@ mod tests {
             "(record (1 2) r0 (select 0 r0 r1 (select 1 r0 r0 (primop + (r1 r0) (r0) ((halt r0))))))",
         )
         .unwrap();
+        assert_eq!(allocate(2, &x), y);
+    }
+
+    #[test]
+    fn unused_variables_give_back_their_registers() {
+        let x = Expr::from_str("(record () a (offset 0 a b (offset 0 b c (halt c))))").unwrap();
+        let y =
+            Expr::from_str("(record () r0 (offset 0 r0 r0 (offset 0 r0 r0 (halt r0))))").unwrap();
+        assert_eq!(allocate(2, &x), y);
+    }
+
+    #[test]
+    fn register_usage_considers_all_switch_branches() {
+        let x =
+            Expr::from_str("(record () a (offset 0 a b (switch 0 (halt b) (halt a))))").unwrap();
+        let y = Expr::from_str("(record () r0 (offset 0 r0 r1 (switch 0 (halt r1) (halt r0))))")
+            .unwrap();
         assert_eq!(allocate(2, &x), y);
     }
 }
