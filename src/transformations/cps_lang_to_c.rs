@@ -79,7 +79,7 @@ impl<
 
                 let mut stmts = self.generate_c(cnt, stmts);
 
-                for (f, p, body) in defs.iter() {
+                for (f, _, body) in defs.iter() {
                     stmts = self.c_begin_function(f, stmts);
                     stmts = self.generate_c(body, stmts);
                 }
@@ -102,14 +102,13 @@ impl<
             Value::String(s) => format!("{:?}", s),
             Value::Var(v) => v.to_string(),
             Value::Label(v) => format!("&&{v}"),
-            _ => todo!("{value:?}"),
         }
     }
 
     fn generate_access(&self, value: &Value<V>, ap: &AccessPath) -> String {
         match ap {
             AccessPath::Ref(0) => self.generate_value(value),
-            AccessPath::Ref(i) => todo!(),
+            AccessPath::Ref(i) => format!("({} + {})", self.generate_value(value), i),
             AccessPath::Sel(i, ap) => format!("{}[{}]", self.generate_access(value, ap), i),
         }
     }
@@ -159,7 +158,7 @@ impl<
                     actual_copies.push((src.clone(), tgt.clone()));
 
                     // make src available as target by replacing all other occurrences of src
-                    for (s, t) in pending_copies.iter_mut() {
+                    for (s, _) in pending_copies.iter_mut() {
                         if s == &src {
                             *s = tgt.clone();
                         }
@@ -171,14 +170,21 @@ impl<
             }
 
             if pending_copies.len() > 0 {
+                assert!(pending_copies.iter().find(|(s, _)| s == TMP).is_none());
+
                 let (src, tgt) = pending_copies.pop().unwrap();
-                pending_copies.push((TMP.to_string(), tgt.to_string()));
                 actual_copies.push((tgt.clone(), TMP.to_string()));
                 actual_copies.push((src.clone(), tgt.clone()));
                 // make src available as target by replacing all other occurrences of src
-                for (s, t) in pending_copies.iter_mut() {
+                for (s, _) in pending_copies.iter_mut() {
                     if s == &src {
                         *s = tgt.clone();
+                    }
+                }
+                // make tgt available as target by replacing all its source occurrences
+                for (s, _) in pending_copies.iter_mut() {
+                    if s == &tgt {
+                        *s = TMP.to_string();
                     }
                 }
             }
@@ -271,15 +277,32 @@ impl<V: Clone> KnownFunction<V> {
     }
 }
 
-fn pop<K: Eq + Hash + Clone, V>(map: &mut HashMap<K, V>) -> Option<(K, V)> {
-    let (k, _) = map.iter().next()?;
-    let k = k.clone();
-    map.remove(&k).map(|v| (k, v))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn check_shuffler(input: &[(&str, &str)]) {
+        let inputs: Vec<_> = input
+            .iter()
+            .map(|(s, t)| (s.to_string(), t.to_string()))
+            .collect();
+        let assignments = Context::<&str>::shuffle_registers(inputs.clone());
+
+        let mut outputs: HashMap<String, String> =
+            inputs.iter().map(|(s, _)| (s.clone(), s.clone())).collect();
+        for (src, tgt) in assignments {
+            let val = outputs[&src].clone();
+            outputs.insert(tgt, val);
+        }
+        let outputs: HashMap<String, String> = inputs
+            .iter()
+            .map(|(_, t)| (t.clone(), outputs.remove(t).unwrap()))
+            .collect();
+
+        let expected: HashMap<_, _> = inputs.into_iter().map(|(s, t)| (t, s)).collect();
+
+        assert_eq!(outputs, expected);
+    }
 
     #[test]
     fn no_shuffling_to_do() {
@@ -288,27 +311,36 @@ mod tests {
 
     #[test]
     fn shuffle_into_multiple_registers() {
-        assert_eq!(
-            Context::<&str>::shuffle_registers(
-                [("a", "b"), ("a", "c"), ("a", "d")]
-                    .iter()
-                    .map(|(s, t)| (s.to_string(), t.to_string()))
-                    .collect(),
-            ),
-            [("a", "b"), ("b", "d"), ("d", "c")]
-                .iter()
-                .map(|(s, t)| (s.to_string(), t.to_string()))
-                .collect::<Vec<_>>()
-        )
+        check_shuffler(&[("a", "b"), ("a", "c"), ("a", "d")]);
     }
 
     #[test]
     fn shuffle_cycle() {
-        todo!()
+        check_shuffler(&[("a", "b"), ("b", "c"), ("c", "a")]);
     }
 
     #[test]
     fn shuffle_multiple_cycle() {
-        todo!()
+        check_shuffler(&[
+            ("a", "b"),
+            ("b", "c"),
+            ("c", "a"),
+            ("d", "e"),
+            ("e", "f"),
+            ("f", "d"),
+        ]);
+    }
+
+    #[test]
+    fn shuffle_mixed() {
+        check_shuffler(&[
+            ("a", "b"),
+            ("a", "c"),
+            ("b", "a"),
+            ("b", "d"),
+            ("e", "f"),
+            ("f", "e"),
+            ("g", "g"),
+        ]);
     }
 }
