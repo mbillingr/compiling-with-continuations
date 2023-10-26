@@ -62,12 +62,12 @@ impl<
 
             Expr::App(Value::Label(f), rands) => {
                 let arg_registers = self.functions[f].arg_registers.as_ref();
-                stmts = self.shuffle_registers2(arg_registers, rands, stmts);
+                stmts = self.set_values(arg_registers, rands, stmts);
                 self.c_static_tailcall(f, stmts)
             }
 
             Expr::App(rator, rands) => {
-                stmts = self.shuffle_registers(STANDARD_ARG_REGISTERS, rands, stmts);
+                stmts = self.set_values(STANDARD_ARG_REGISTERS, rands, stmts);
                 let f = self.generate_value(rator);
                 self.c_dynamic_tailcall(f, stmts)
             }
@@ -114,30 +114,22 @@ impl<
         }
     }
 
-    fn shuffle_registers(
+    fn set_values(
         &self,
-        targets: &[&str],
-        values: &[Value<V>],
-        mut stmts: Vec<String>,
-    ) -> Vec<String>
-    where
-        V: Borrow<str>,
-    {
-        todo!()
-    }
-
-    fn shuffle_registers2(
-        &self,
-        targets: &[V],
+        targets: &[impl std::fmt::Display],
         values: &[Value<V>],
         mut stmts: Vec<String>,
     ) -> Vec<String> {
-        let mut uncopied_registers: HashMap<V, _> = HashMap::new();
+        let mut pending_copies: Vec<_> = Default::default();
 
         for (tgt, v) in targets.iter().zip(values) {
             match v {
                 Value::Var(r) => {
-                    uncopied_registers.insert(r.clone(), tgt);
+                    let r = r.to_string();
+                    let tgt = tgt.to_string();
+                    if r != tgt {
+                        pending_copies.push((r, tgt));
+                    }
                 }
                 _ => {
                     stmts = self.c_set_register(tgt, self.generate_value(v), stmts);
@@ -145,25 +137,59 @@ impl<
             }
         }
 
-        while !uncopied_registers.is_empty() {
-            let (mut s, mut t) = pop(&mut uncopied_registers).unwrap();
+        let actual_copies = Self::shuffle_registers(pending_copies);
 
-            while uncopied_registers.contains_key(t) {
-                stmts = self.c_set_register(TMP, t.to_string(), stmts);
-                stmts = self.c_set_register(t.to_string(), s.to_string(), stmts);
-                let (s_, t_) = pop(&mut uncopied_registers).unwrap();
-                s = s_;
-                t = t_;
-            }
+        for (src, tgt) in actual_copies {
+            stmts = self.c_set_register(tgt, src, stmts);
         }
 
         stmts
     }
 
+    fn shuffle_registers(mut pending_copies: Vec<(String, String)>) -> Vec<(String, String)> {
+        let mut actual_copies = vec![];
+
+        while pending_copies.len() > 0 {
+            // copy into all unoccupied target registers
+            let mut i = 0;
+            while i < pending_copies.len() {
+                let (_, tgt) = &pending_copies[i];
+                if pending_copies.iter().find(|(s, _)| s == tgt).is_none() {
+                    let (src, tgt) = pending_copies.swap_remove(i);
+                    actual_copies.push((src.clone(), tgt.clone()));
+
+                    // make src available as target by replacing all other occurrences of src
+                    for (s, t) in pending_copies.iter_mut() {
+                        if s == &src {
+                            *s = tgt.clone();
+                        }
+                    }
+                    i = 0;
+                } else {
+                    i += 1;
+                }
+            }
+
+            if pending_copies.len() > 0 {
+                let (src, tgt) = pending_copies.pop().unwrap();
+                pending_copies.push((TMP.to_string(), tgt.to_string()));
+                actual_copies.push((tgt.clone(), TMP.to_string()));
+                actual_copies.push((src.clone(), tgt.clone()));
+                // make src available as target by replacing all other occurrences of src
+                for (s, t) in pending_copies.iter_mut() {
+                    if s == &src {
+                        *s = tgt.clone();
+                    }
+                }
+            }
+        }
+        actual_copies
+    }
+
     fn c_set_register(
         &self,
         r: impl std::fmt::Display,
-        src: String,
+        src: impl std::fmt::Display,
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{r} = {src};"));
@@ -249,4 +275,40 @@ fn pop<K: Eq + Hash + Clone, V>(map: &mut HashMap<K, V>) -> Option<(K, V)> {
     let (k, _) = map.iter().next()?;
     let k = k.clone();
     map.remove(&k).map(|v| (k, v))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_shuffling_to_do() {
+        assert_eq!(Context::<&str>::shuffle_registers(vec![]), vec![]);
+    }
+
+    #[test]
+    fn shuffle_into_multiple_registers() {
+        assert_eq!(
+            Context::<&str>::shuffle_registers(
+                [("a", "b"), ("a", "c"), ("a", "d")]
+                    .iter()
+                    .map(|(s, t)| (s.to_string(), t.to_string()))
+                    .collect(),
+            ),
+            [("a", "b"), ("b", "d"), ("d", "c")]
+                .iter()
+                .map(|(s, t)| (s.to_string(), t.to_string()))
+                .collect::<Vec<_>>()
+        )
+    }
+
+    #[test]
+    fn shuffle_cycle() {
+        todo!()
+    }
+
+    #[test]
+    fn shuffle_multiple_cycle() {
+        todo!()
+    }
 }
