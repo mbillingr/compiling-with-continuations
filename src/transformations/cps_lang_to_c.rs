@@ -1,3 +1,5 @@
+use crate::core::reference::Ref;
+use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
 use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
@@ -84,6 +86,28 @@ impl<
                     stmts = self.generate_c(body, stmts);
                 }
                 stmts
+            }
+
+            Expr::PrimOp(PrimOp::IAdd, Ref([a, b]), Ref([var]), Ref([cnt])) => {
+                let stmts = self.c_binop(
+                    "+",
+                    self.generate_value(a),
+                    self.generate_value(b),
+                    var,
+                    stmts,
+                );
+                self.generate_c(cnt, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::ISub, Ref([a, b]), Ref([var]), Ref([cnt])) => {
+                let stmts = self.c_binop(
+                    "-",
+                    self.generate_value(a),
+                    self.generate_value(b),
+                    var,
+                    stmts,
+                );
+                self.generate_c(cnt, stmts)
             }
 
             Expr::Halt(value) => {
@@ -261,6 +285,18 @@ impl<
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("goto {label};"));
+        stmts
+    }
+
+    fn c_binop(
+        &self,
+        op: &str,
+        a: impl std::fmt::Display,
+        b: impl std::fmt::Display,
+        out: impl std::fmt::Display,
+        mut stmts: Vec<String>,
+    ) -> Vec<String> {
+        stmts.push(format!("{out} = {a} {op} {b};"));
         stmts
     }
 }
