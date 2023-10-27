@@ -12,6 +12,9 @@ const TMP: &'static str = "tmp";
 
 const STANDARD_ARG_REGISTERS: &'static [&'static str] = &["r0", "r1", "r2"];
 
+const T_INT: &str = "T";
+const T_REAL: &str = "R";
+
 pub fn program_to_c<
     V: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
 >(
@@ -91,21 +94,21 @@ impl<
             }
 
             Expr::Switch(val, cnts) => {
-                let value = self.generate_value(val);
+                let value = self.generate_typed(val, T_INT);
                 let branches = cnts.iter().map(|c| self.generate_c(c, vec![])).collect();
                 self.c_switch(value, branches, stmts)
             }
 
             Expr::PrimOp(PrimOp::INeg, Ref([a]), Ref([var]), Ref([cnt])) => {
-                let stmts = self.c_binop("-", "", self.generate_value(a), var, stmts);
+                let stmts = self.c_binop("-", "", self.generate_typed(a, T_INT), var, stmts);
                 self.generate_c(cnt, stmts)
             }
 
             Expr::PrimOp(PrimOp::IAdd, Ref([a, b]), Ref([var]), Ref([cnt])) => {
                 let stmts = self.c_binop(
                     "+",
-                    self.generate_value(a),
-                    self.generate_value(b),
+                    self.generate_typed(a, T_INT),
+                    self.generate_typed(b, T_INT),
                     var,
                     stmts,
                 );
@@ -115,8 +118,8 @@ impl<
             Expr::PrimOp(PrimOp::ISub, Ref([a, b]), Ref([var]), Ref([cnt])) => {
                 let stmts = self.c_binop(
                     "-",
-                    self.generate_value(a),
-                    self.generate_value(b),
+                    self.generate_typed(a, T_INT),
+                    self.generate_typed(b, T_INT),
                     var,
                     stmts,
                 );
@@ -124,21 +127,40 @@ impl<
             }
 
             Expr::PrimOp(PrimOp::IsZero, Ref([a]), Ref([]), Ref([else_cnt, then_cnt])) => {
-                let op = self.c_binexpr("==", self.generate_value(a), 0);
+                let op = self.c_binexpr("==", self.generate_typed(a, T_INT), 0);
                 let then_branch = self.generate_c(then_cnt, vec![]);
                 let else_branch = self.generate_c(else_cnt, vec![]);
                 self.c_branch(op, then_branch, else_branch, stmts)
             }
 
             Expr::PrimOp(PrimOp::ISame, Ref([a, b]), Ref([]), Ref([else_cnt, then_cnt])) => {
-                let op = self.c_binexpr("==", self.generate_value(a), self.generate_value(b));
+                let op = self.c_binexpr(
+                    "==",
+                    self.generate_typed(a, T_INT),
+                    self.generate_typed(b, T_INT),
+                );
                 let then_branch = self.generate_c(then_cnt, vec![]);
                 let else_branch = self.generate_c(else_cnt, vec![]);
                 self.c_branch(op, then_branch, else_branch, stmts)
             }
 
             Expr::PrimOp(PrimOp::ILess, Ref([a, b]), Ref([]), Ref([else_cnt, then_cnt])) => {
-                let op = self.c_binexpr("<", self.generate_value(a), self.generate_value(b));
+                let op = self.c_binexpr(
+                    "<",
+                    self.generate_typed(a, T_INT),
+                    self.generate_typed(b, T_INT),
+                );
+                let then_branch = self.generate_c(then_cnt, vec![]);
+                let else_branch = self.generate_c(else_cnt, vec![]);
+                self.c_branch(op, then_branch, else_branch, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::FSame, Ref([a, b]), Ref([]), Ref([else_cnt, then_cnt])) => {
+                let op = self.c_binexpr(
+                    "==",
+                    self.generate_typed(a, T_REAL),
+                    self.generate_typed(b, T_REAL),
+                );
                 let then_branch = self.generate_c(then_cnt, vec![]);
                 let else_branch = self.generate_c(else_cnt, vec![]);
                 self.c_branch(op, then_branch, else_branch, stmts)
@@ -158,11 +180,16 @@ impl<
     fn generate_value(&self, value: &Value<V>) -> String {
         match value {
             Value::Int(i) => i.to_string(),
-            Value::Real(r) => r.to_string(),
+            Value::Real(r) => format!("{:e}", r),
             Value::String(s) => format!("{:?}", s),
             Value::Var(v) => v.to_string(),
             Value::Label(v) => format!("&&{v}"),
         }
+    }
+
+    fn generate_typed(&self, value: &Value<V>, ty: impl std::fmt::Display) -> String {
+        let val = self.generate_value(value);
+        format!("({ty}){val}")
     }
 
     fn generate_access(&self, value: &Value<V>, ap: &AccessPath) -> String {
