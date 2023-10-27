@@ -146,16 +146,19 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env, out: &mut impl Write) -> Answe
             Expr::Select(idx, rec) => return eval(rec, env, out).get_item(*idx),
 
             Expr::ShowInt(value) => {
-                let v = eval(value, env, out).as_int();
-                write!(out, "{}", v).unwrap()
+                let v = eval(value, env, out);
+                write!(out, "{}", v.as_int()).unwrap();
+                return v;
             }
             Expr::ShowReal(value) => {
-                let v = eval(value, env, out).as_float();
-                write!(out, "{}", v).unwrap()
+                let v = eval(value, env, out);
+                write!(out, "{}", v.as_float()).unwrap();
+                return v;
             }
             Expr::ShowStr(value) => {
                 let v = eval(value, env, out);
-                write!(out, "{}", v.as_str()).unwrap()
+                write!(out, "{}", v.as_str()).unwrap();
+                return v;
             }
 
             Expr::Prim(_) => {
