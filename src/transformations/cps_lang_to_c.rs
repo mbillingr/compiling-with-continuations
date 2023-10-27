@@ -14,6 +14,7 @@ const STANDARD_ARG_REGISTERS: &'static [&'static str] = &["r0", "r1", "r2"];
 
 const T_INT: &str = "T";
 const T_REAL: &str = "R";
+const T_STR: &str = "S";
 
 pub fn program_to_c<
     V: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
@@ -161,6 +162,14 @@ impl<
                     self.generate_typed(a, T_REAL),
                     self.generate_typed(b, T_REAL),
                 );
+                let then_branch = self.generate_c(then_cnt, vec![]);
+                let else_branch = self.generate_c(else_cnt, vec![]);
+                self.c_branch(op, then_branch, else_branch, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::SSame, Ref([a, b]), Ref([]), Ref([else_cnt, then_cnt])) => {
+                let op =
+                    self.c_strcmp(self.generate_typed(a, T_STR), self.generate_typed(b, T_STR));
                 let then_branch = self.generate_c(then_cnt, vec![]);
                 let else_branch = self.generate_c(else_cnt, vec![]);
                 self.c_branch(op, then_branch, else_branch, stmts)
@@ -371,6 +380,10 @@ impl<
 
     fn c_binexpr(&self, op: &str, a: impl std::fmt::Display, b: impl std::fmt::Display) -> String {
         format!("({a} {op} {b})")
+    }
+
+    fn c_strcmp(&self, a: impl std::fmt::Display, b: impl std::fmt::Display) -> String {
+        format!("(strcmp({a}, {b}) == 0)")
     }
 
     fn c_branch(
