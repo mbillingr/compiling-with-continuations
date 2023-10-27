@@ -72,7 +72,6 @@ mod tests {
     use uuid::Uuid;
 
     use crate::core::answer::Answer;
-    use crate::languages::cps_lang;
     use crate::languages::cps_lang::ast as cps;
     use crate::languages::cps_lang::ast::Transform;
     use crate::languages::mini_lambda::ast as ml;
@@ -153,21 +152,13 @@ mod tests {
         println!("{}", c_code);
         println!("\n");
 
-        /*let bin = compile_c(c_code);
+        let bin = compile_c(c_code);
         let result = String::from_utf8(Command::new(bin).output().unwrap().stdout).unwrap();
         let result = result.trim();
-        /*
-                if let Ok(x) = result.parse::<_>() {
-                    return Answer::from_int(x);
-                };
+        write!(out, "{}", result).unwrap();
 
-                if let Ok(x) = result.parse::<_>() {
-                    return Answer::from_float(x);
-                };
-
-                return Answer::from_str(result.to_string().into());
-        */*/
-        cps_lang::interpreter::exec(&cps_expr, out)
+        //cps_lang::interpreter::exec(&cps_expr, out)
+        Answer::from_usize(0)
     }
 
     fn compile_c(src: String) -> String {

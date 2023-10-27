@@ -9,13 +9,14 @@ use std::ops::Deref;
 // special registers
 const CNT: &'static str = "cnt"; // counter
 const TMP: &'static str = "tmp"; // generic temporary register
+const TMP2: &'static str = "tmp2"; // generic temporary register
 const JMP: &'static str = "jmp"; // jump target
 
 const STANDARD_ARG_REGISTERS: &'static [&'static str] = &["r0", "r1", "r2"];
 
-const T_INT: &str = "T";
-const T_REAL: &str = "R";
-const T_STR: &str = "S";
+const T_INT: &str = "(T)";
+const T_REAL: &str = "*(R*)&";
+const T_STR: &str = "(S)";
 
 const PREAMBLE: &str = "
 #include <stdio.h>
@@ -44,7 +45,7 @@ pub fn program_to_c<
         "T main() {",
         &format!("size_t {CNT};"),
         &format!("void *{JMP};"),
-        &format!("T {TMP};"),
+        &format!("T {TMP}, {TMP2};"),
         &format!("T {};", regs.join(", ")),
     ]
     .into_iter()
@@ -100,7 +101,7 @@ impl<
             }
 
             Expr::App(Value::Var(f), rands) => {
-                stmts = self.c_set_register(JMP, self.c_cast("void*", f), stmts);
+                stmts = self.c_set_register(JMP, self.c_cast("(void*)", f), stmts);
                 stmts = self.set_values(STANDARD_ARG_REGISTERS, rands, stmts);
                 self.c_dynamic_tailcall(JMP, stmts)
             }
@@ -194,11 +195,9 @@ impl<
             }
 
             Expr::PrimOp(PrimOp::FSame, Ref([a, b]), Ref([]), Ref([else_cnt, then_cnt])) => {
-                let op = self.c_binexpr(
-                    "==",
-                    self.generate_typed(a, T_REAL),
-                    self.generate_typed(b, T_REAL),
-                );
+                let stmts = self.c_set_register(TMP, self.generate_value(a), stmts);
+                let stmts = self.c_set_register(TMP2, self.generate_value(b), stmts);
+                let op = self.c_binexpr("==", self.c_cast(T_REAL, TMP), self.c_cast(T_REAL, TMP2));
                 let then_branch = self.generate_c(then_cnt, vec![]);
                 let else_branch = self.generate_c(else_cnt, vec![]);
                 self.c_branch(op, then_branch, else_branch, stmts)
@@ -256,7 +255,7 @@ impl<
 
     fn generate_typed(&self, value: &Value<V>, ty: impl std::fmt::Display) -> String {
         let val = self.generate_value(value);
-        format!("({ty}){val}")
+        format!("({ty}{val})")
     }
 
     fn generate_access(&self, value: &Value<V>, ap: &AccessPath) -> String {
@@ -347,7 +346,7 @@ impl<
     }
 
     fn c_cast(&self, ty: impl std::fmt::Display, val: impl std::fmt::Display) -> String {
-        format!("({ty}){val}")
+        format!("{ty}{val}")
     }
 
     fn c_set_register(
@@ -366,7 +365,7 @@ impl<
     }
 
     fn c_print_real(&self, value: impl std::fmt::Display, mut stmts: Vec<String>) -> Vec<String> {
-        stmts.push(format!("printf(\"%f\\n\", {value});"));
+        stmts.push(format!("printf(\"%f\\n\", {T_REAL}{value});"));
         stmts
     }
 
