@@ -79,7 +79,10 @@ mod tests {
     use crate::make_testsuite_for_mini_lambda;
     use crate::transformations::labels_to_vars::LabelsToVars;
 
-    unsafe fn run_in_optimized_cps(mini_lambda_expr: &ml::Expr<Ref<str>>) -> Answer {
+    unsafe fn run_in_optimized_cps(
+        mini_lambda_expr: &ml::Expr<Ref<str>>,
+        out: impl Write,
+    ) -> Answer {
         let expr = mini_lambda_expr.clone();
 
         println!("Source:");
@@ -151,7 +154,19 @@ mod tests {
         println!("\n");
 
         let bin = compile_c(c_code);
+        let result = String::from_utf8(Command::new(bin).output().unwrap().stdout).unwrap();
+        let result = result.trim();
+        /*
+                if let Ok(x) = result.parse::<_>() {
+                    return Answer::from_int(x);
+                };
 
+                if let Ok(x) = result.parse::<_>() {
+                    return Answer::from_float(x);
+                };
+
+                return Answer::from_str(result.to_string().into());
+        */
         cps_lang::interpreter::exec(&cps_expr)
     }
 

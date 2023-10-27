@@ -294,6 +294,8 @@ impl Context {
             }
 
             LExpr::Panic(msg) => CExpr::Panic(*msg),
+
+            LExpr::ShowInt(value) | LExpr::ShowReal(value) | LExpr::ShowStr(value) => todo!(),
         }
     }
 
@@ -520,6 +522,7 @@ impl Context {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     use crate::core::answer::Answer;
     use crate::languages::cps_lang;
@@ -823,7 +826,7 @@ mod tests {
         );
     }
 
-    unsafe fn run_in_cps(mini_lambda_expr: &LExpr) -> Answer {
+    unsafe fn run_in_cps(mini_lambda_expr: &LExpr, out: impl Write) -> Answer {
         let cps_expr = convert_program(mini_lambda_expr.clone());
         cps_lang::interpreter::exec(&cps_expr)
     }

@@ -18,9 +18,12 @@ const T_REAL: &str = "R";
 const T_STR: &str = "S";
 
 const PREAMBLE: &str = "
+#include <stdio.h>
 #include <stdlib.h>
 
 #define T long
+#define S char*
+#define R double
 #define NEW_RECORD(n) (T)malloc(n * sizeof(T))
 ";
 
@@ -337,7 +340,8 @@ impl<
     }
 
     fn c_halt(&self, value: String, mut stmts: Vec<String>) -> Vec<String> {
-        stmts.push(format!("return {value};"));
+        stmts.push(format!("printf(\"%ld\\n\", {value});"));
+        stmts.push(format!("return 0;"));
         stmts
     }
 
@@ -414,7 +418,7 @@ impl<
         out: impl std::fmt::Display,
         mut stmts: Vec<String>,
     ) -> Vec<String> {
-        stmts.push(format!("{out} = ({a} - 1) / 2"));
+        stmts.push(format!("{out} = ({a} - 1) / 2;"));
         stmts
     }
 

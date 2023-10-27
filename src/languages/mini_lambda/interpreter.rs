@@ -3,6 +3,7 @@ use crate::core::env::Env;
 use crate::core::reference::Ref;
 use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
+use std::io::Write;
 
 type Expr = ast::Expr<Ref<str>>;
 
@@ -12,11 +13,11 @@ pub struct Closure {
     body: Ref<Expr>,
 }
 
-pub unsafe fn exec(expr: &Expr) -> Answer {
-    eval(expr, Env::Empty)
+pub unsafe fn exec(expr: &Expr, out: &mut impl Write) {
+    eval(expr, Env::Empty, out);
 }
 
-pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
+pub unsafe fn eval(mut expr: &Expr, mut env: Env, out: &mut impl Write) -> Answer {
     loop {
         match expr {
             Expr::Var(v) => return env.lookup(&**v),
@@ -61,18 +62,18 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
 
             Expr::App(rator, rand) => match (&**rator, &**rand) {
                 (Expr::Prim(op), _) if op.n_args() == 1 => {
-                    return op.apply(std::iter::once(eval(&**rand, env)))
+                    return op.apply(std::iter::once(eval(&**rand, env, out)))
                 }
                 (Expr::Prim(op), Expr::Record(args)) => {
-                    return op.apply((0..op.n_args()).map(|i| eval(&args[i], env)))
+                    return op.apply((0..op.n_args()).map(|i| eval(&args[i], env, out)))
                 }
                 (Expr::Prim(op), _) => {
-                    let arg = eval(rand, env);
+                    let arg = eval(rand, env, out);
                     return op.apply((0..op.n_args()).map(|i| arg.get_item(i as isize)));
                 }
                 _ => {
-                    let f = eval(&**rator, env);
-                    let a = eval(&**rand, env);
+                    let f = eval(&**rator, env, out);
+                    let a = eval(&**rand, env, out);
                     let cls = f.as_ref::<Closure>();
                     env = cls.captured_env.extend(cls.var, a);
                     expr = &cls.body;
@@ -86,7 +87,7 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
             Expr::String(s) => return Answer::from_str(*s),
 
             Expr::Switch(x, _conrep, branches, default) => {
-                let val = eval(x, env);
+                let val = eval(x, env, out);
                 let mut cont = None;
                 for (cnd, branch) in &**branches {
                     if matches(val, cnd) {
@@ -102,11 +103,11 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
             }
 
             Expr::Con(ConRep::Tagged(tag), val) => {
-                return Answer::tuple(vec![eval(val, env), Answer::from_usize(*tag)])
+                return Answer::tuple(vec![eval(val, env, out), Answer::from_usize(*tag)])
             }
 
             Expr::DeCon(ConRep::Tagged(tag), val) => {
-                let value = eval(val, env);
+                let value = eval(val, env, out);
                 if value.get_item(1).as_usize() != *tag {
                     panic!(
                         "expected tag {}, but got {}",
@@ -137,12 +138,25 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env) -> Answer {
             Expr::Record(fields) => {
                 let mut data = Vec::with_capacity(fields.len());
                 for f in &**fields {
-                    data.push(eval(f, env));
+                    data.push(eval(f, env, out));
                 }
                 return Answer::tuple(data);
             }
 
-            Expr::Select(idx, rec) => return eval(rec, env).get_item(*idx),
+            Expr::Select(idx, rec) => return eval(rec, env, out).get_item(*idx),
+
+            Expr::ShowInt(value) => {
+                let v = eval(value, env, out).as_int();
+                write!(out, "{}", v).unwrap()
+            }
+            Expr::ShowReal(value) => {
+                let v = eval(value, env, out).as_float();
+                write!(out, "{}", v).unwrap()
+            }
+            Expr::ShowStr(value) => {
+                let v = eval(value, env, out);
+                write!(out, "{}", v.as_str()).unwrap()
+            }
 
             Expr::Prim(_) => {
                 let var: Ref<str> = "_x_".into();

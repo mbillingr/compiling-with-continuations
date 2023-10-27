@@ -25,6 +25,9 @@ pub enum Expr<V: 'static> {
     Record(Ref<[Expr<V>]>),
     Select(isize, Ref<Expr<V>>),
     Prim(PrimOp),
+    ShowInt(Ref<Expr<V>>),
+    ShowReal(Ref<Expr<V>>),
+    ShowStr(Ref<Expr<V>>),
     Panic(Ref<str>),
 }
 
@@ -109,6 +112,9 @@ impl Expr<Ref<str>> {
                 S::Int(*idx as i64),
                 rec.to_sexpr(),
             ]),
+            Expr::ShowInt(value) => S::list(vec![S::symbol("show-int"), value.to_sexpr()]),
+            Expr::ShowReal(value) => S::list(vec![S::symbol("show-real"), value.to_sexpr()]),
+            Expr::ShowStr(value) => S::list(vec![S::symbol("show-string"), value.to_sexpr()]),
             Expr::Prim(op) => S::list(vec![S::symbol("primitive"), S::symbol(op.to_str())]),
             Expr::Panic(msg) => {
                 S::list(vec![S::symbol("panic!"), S::String(msg.to_string().into())])
