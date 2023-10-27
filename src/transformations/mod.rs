@@ -66,7 +66,10 @@ impl GenSym for &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
     use std::sync::Arc;
+    use uuid::Uuid;
 
     use crate::core::answer::Answer;
     use crate::languages::cps_lang;
@@ -141,14 +144,31 @@ mod tests {
         cps_expr.pretty_print();
         println!("\n");
 
+        let c_code = cps_lang_to_c::program_to_c(n_registers, &cps_expr).join("\n");
+
         println!("C:");
-        println!(
-            "{}",
-            cps_lang_to_c::program_to_c(n_registers, &cps_expr).join("\n")
-        );
+        println!("{}", c_code);
         println!("\n");
 
+        let bin = compile_c(c_code);
+
         cps_lang::interpreter::exec(&cps_expr)
+    }
+
+    fn compile_c(src: String) -> String {
+        let binary = format!("/tmp/{}", Uuid::new_v4());
+        let mut gcc = Command::new("gcc")
+            .arg("-xc")
+            .arg("-o")
+            .arg(&binary)
+            .arg("-")
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        write!(gcc.stdin.as_mut().unwrap(), "{}", src).unwrap();
+        let output = gcc.wait_with_output().unwrap();
+        println!("{:?}", output);
+        binary
     }
 
     make_testsuite_for_mini_lambda!(run_in_optimized_cps continuation_tests);
