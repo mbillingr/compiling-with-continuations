@@ -180,7 +180,7 @@ impl<
     fn generate_value(&self, value: &Value<V>) -> String {
         match value {
             Value::Int(i) => i.to_string(),
-            Value::Real(r) => format!("{:e}", r),
+            Value::Real(r) => format!("0x{:016x} /*{r}*/", r.to_bits()),
             Value::String(s) => format!("{:?}", s),
             Value::Var(v) => v.to_string(),
             Value::Label(v) => format!("&&{v}"),
