@@ -19,7 +19,7 @@ struct CliApp {
 #[derive(Debug, Clone, Subcommand)]
 enum CliCmd {
     /// Interpret CPS
-    InterpretCps { output_type: String },
+    InterpretCps,
 
     /// Convert mini-lambda into CPS language
     ToCps,
@@ -35,29 +35,14 @@ fn main() {
     let args = CliApp::parse();
 
     match args.command {
-        CliCmd::InterpretCps { output_type } => {
-            interpret_cps(match output_type.to_lowercase().as_str() {
-                "bool" => AnswerType::Bool,
-                "int" => AnswerType::Int,
-                "float" => AnswerType::Float,
-                "str" => AnswerType::Str,
-                _ => panic!("Invalid output type"),
-            })
-        }
+        CliCmd::InterpretCps => interpret_cps(),
         CliCmd::ToCps => to_cps(args.gensym_delimiter),
         CliCmd::ConvertLabels => convert_labels(),
         CliCmd::EtaReduceCps => eta_reduce(),
     }
 }
 
-enum AnswerType {
-    Bool,
-    Int,
-    Float,
-    Str,
-}
-
-fn interpret_cps(answer_type: AnswerType) {
+fn interpret_cps() {
     type Expr = crate::languages::cps_lang::ast::Expr<Ref<str>>;
 
     let mut src = String::new();
@@ -66,13 +51,7 @@ fn interpret_cps(answer_type: AnswerType) {
     let expr_in = Expr::from_str(&src).unwrap();
 
     unsafe {
-        let answer = crate::languages::cps_lang::interpreter::exec(&expr_in);
-        match answer_type {
-            AnswerType::Bool => writeln!(stdout(), "{}", answer.as_bool()).unwrap(),
-            AnswerType::Int => writeln!(stdout(), "{}", answer.as_int()).unwrap(),
-            AnswerType::Float => writeln!(stdout(), "{}", answer.as_float()).unwrap(),
-            AnswerType::Str => writeln!(stdout(), "{}", answer.as_str()).unwrap(),
-        }
+        crate::languages::cps_lang::interpreter::exec(&expr_in, &mut stdout());
     }
 }
 

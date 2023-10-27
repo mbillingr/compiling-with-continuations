@@ -295,7 +295,35 @@ impl Context {
 
             LExpr::Panic(msg) => CExpr::Panic(*msg),
 
-            LExpr::ShowInt(value) | LExpr::ShowReal(value) | LExpr::ShowStr(value) => todo!(),
+            LExpr::ShowInt(value) => {
+                let w = self.gs.gensym("w");
+                self.convert(
+                    value,
+                    Box::new(move |v| {
+                        CExpr::PrimOp(PrimOp::ShowInt, list![v], list![w], list![Ref::new(c(CVal::Var(w)))])
+                    }),
+                )
+            }
+
+            LExpr::ShowReal(value) => {
+                let w = self.gs.gensym("w");
+                self.convert(
+                    value,
+                    Box::new(move |v| {
+                        CExpr::PrimOp(PrimOp::ShowReal, list![v], list![w], list![Ref::new(c(CVal::Var(w)))])
+                    }),
+                )
+            }
+
+            LExpr::ShowStr(value) => {
+                let w = self.gs.gensym("w");
+                self.convert(
+                    value,
+                    Box::new(move |v| {
+                        CExpr::PrimOp(PrimOp::ShowStr, list![v], list![w], list![Ref::new(c(CVal::Var(w)))])
+                    }),
+                )
+            }
         }
     }
 
@@ -826,9 +854,9 @@ mod tests {
         );
     }
 
-    unsafe fn run_in_cps(mini_lambda_expr: &LExpr, out: impl Write) -> Answer {
+    unsafe fn run_in_cps(mini_lambda_expr: &LExpr, out: &mut impl Write) -> Answer {
         let cps_expr = convert_program(mini_lambda_expr.clone());
-        cps_lang::interpreter::exec(&cps_expr)
+        cps_lang::interpreter::exec(&cps_expr, out)
     }
 
     make_testsuite_for_mini_lambda!(run_in_cps continuation_tests);

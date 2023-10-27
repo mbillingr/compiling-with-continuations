@@ -2,6 +2,7 @@ use crate::core::answer::Answer;
 use crate::core::env::Env;
 use crate::languages::cps_lang::ast::Expr;
 use crate::languages::cps_lang::interpreter::{eval_expr, exec};
+use std::io::Cursor;
 
 #[test]
 fn count_subexprs() {
@@ -26,26 +27,34 @@ fn count_subexprs() {
 
 #[test]
 fn test_halt() {
+    let mut cc = Cursor::new(vec![]);
     unsafe {
-        assert_eq!(exec(&cps_expr!(halt (int 42))).as_int(), 42);
-        assert_eq!(exec(&cps_expr!(halt (real 4.2))).as_float(), 4.2);
+        assert_eq!(exec(&cps_expr!(halt (int 42)), &mut cc).as_int(), 42);
+        assert_eq!(exec(&cps_expr!(halt (real 4.2)), &mut cc).as_float(), 4.2);
     }
 }
 
 #[test]
 fn test_record() {
+    let mut cc = Cursor::new(vec![]);
     unsafe {
-        let rec = exec(&cps_expr!(record [(int 1) (int 20) (int 300)] r (halt r)));
+        let rec = exec(
+            &cps_expr!(record [(int 1) (int 20) (int 300)] r (halt r)),
+            &mut cc,
+        );
         assert_eq!(rec.get_item(0).as_int(), 1);
         assert_eq!(rec.get_item(1).as_int(), 20);
         assert_eq!(rec.get_item(2).as_int(), 300);
 
-        let rec =
-            exec(&cps_expr!(record [(int 1) (int 20) (int 300)] r (record [(@ 1 r)] s (halt s))));
+        let rec = exec(
+            &cps_expr!(record [(int 1) (int 20) (int 300)] r (record [(@ 1 r)] s (halt s))),
+            &mut cc,
+        );
         assert_eq!(rec.get_item(0).as_int(), 20);
 
         let rec = exec(
             &cps_expr!(record [(int 1) (int 20) (int 300)] r (record [(.. 1 r) (int 99)] s (halt s))),
+            &mut cc,
         );
         assert_eq!(rec.get_item(0).get_item(0).as_int(), 20);
         assert_eq!(rec.get_item(0).get_item(1).as_int(), 300);
@@ -55,17 +64,18 @@ fn test_record() {
 
 #[test]
 fn test_select() {
+    let mut cc = Cursor::new(vec![]);
     unsafe {
         let env = Env::Empty.extend(
             "rec".into(),
             Answer::tuple(vec![Answer::from_int(11), Answer::from_int(33)]),
         );
         assert_eq!(
-            eval_expr(&cps_expr!(select 0 rec out (halt out)), env).as_int(),
+            eval_expr(&cps_expr!(select 0 rec out (halt out)), env, &mut cc).as_int(),
             11
         );
         assert_eq!(
-            eval_expr(&cps_expr!(select 1 rec out (halt out)), env).as_int(),
+            eval_expr(&cps_expr!(select 1 rec out (halt out)), env, &mut cc).as_int(),
             33
         );
     }
@@ -73,6 +83,7 @@ fn test_select() {
 
 #[test]
 fn test_offset() {
+    let mut cc = Cursor::new(vec![]);
     unsafe {
         let env = Env::Empty.extend(
             "rec".into(),
@@ -85,7 +96,8 @@ fn test_offset() {
         assert_eq!(
             eval_expr(
                 &cps_expr!(offset 2 rec sub (select 0 sub out (halt out))),
-                env
+                env,
+                &mut cc
             )
             .as_int(),
             33
@@ -93,7 +105,8 @@ fn test_offset() {
         assert_eq!(
             eval_expr(
                 &cps_expr!(offset 2 rec sub (offset (-1) sub sub (select 0 sub out (halt out)))),
-                env
+                env,
+                &mut cc
             )
             .as_int(),
             22
@@ -103,10 +116,15 @@ fn test_offset() {
 
 #[test]
 fn test_functions() {
+    let mut cc = Cursor::new(vec![]);
     unsafe {
-        assert_eq!(exec(&cps_expr!(fix in (halt (int 0)))).as_int(), 0);
+        assert_eq!(exec(&cps_expr!(fix in (halt (int 0))), &mut cc).as_int(), 0);
         assert_eq!(
-            exec(&cps_expr!(fix h(x)=(halt x); foo(c)=(c (int 42)) in (foo h))).as_int(),
+            exec(
+                &cps_expr!(fix h(x)=(halt x); foo(c)=(c (int 42)) in (foo h)),
+                &mut cc
+            )
+            .as_int(),
             42
         );
     }
@@ -114,10 +132,14 @@ fn test_functions() {
 
 #[test]
 fn test_mutual_recursion() {
+    let mut cc = Cursor::new(vec![]);
     unsafe {
         assert_eq!(
-            exec(&cps_expr!(fix h(x)=(halt x); foo(c)=(bar (int 42) c); bar(x c)=(c x) in (foo h)))
-                .as_int(),
+            exec(
+                &cps_expr!(fix h(x)=(halt x); foo(c)=(bar (int 42) c); bar(x c)=(c x) in (foo h)),
+                &mut cc
+            )
+            .as_int(),
             42
         );
     }
@@ -125,20 +147,30 @@ fn test_mutual_recursion() {
 
 #[test]
 fn test_switch() {
+    let mut cc = Cursor::new(vec![]);
     unsafe {
         assert_eq!(
-            exec(&cps_expr!(switch (int 0) [(halt (int 11)) (halt (int 22)) (halt (int 33))]))
-                .as_int(),
+            exec(
+                &cps_expr!(switch (int 0) [(halt (int 11)) (halt (int 22)) (halt (int 33))]),
+                &mut cc
+            )
+            .as_int(),
             11
         );
         assert_eq!(
-            exec(&cps_expr!(switch (int 1) [(halt (int 11)) (halt (int 22)) (halt (int 33))]))
-                .as_int(),
+            exec(
+                &cps_expr!(switch (int 1) [(halt (int 11)) (halt (int 22)) (halt (int 33))]),
+                &mut cc
+            )
+            .as_int(),
             22
         );
         assert_eq!(
-            exec(&cps_expr!(switch (int 2) [(halt (int 11)) (halt (int 22)) (halt (int 33))]))
-                .as_int(),
+            exec(
+                &cps_expr!(switch (int 2) [(halt (int 11)) (halt (int 22)) (halt (int 33))]),
+                &mut cc
+            )
+            .as_int(),
             33
         );
     }
@@ -146,22 +178,34 @@ fn test_switch() {
 
 #[test]
 fn test_primops() {
+    let mut cc = Cursor::new(vec![]);
     unsafe {
-        assert_eq!(exec(&cps_expr!(- (int 2) [r] [(halt r)])).as_int(), -2);
         assert_eq!(
-            exec(&cps_expr!(- [(int 7) (int 2)] [r] [(halt r)])).as_int(),
+            exec(&cps_expr!(- (int 2) [r] [(halt r)]), &mut cc).as_int(),
+            -2
+        );
+        assert_eq!(
+            exec(&cps_expr!(- [(int 7) (int 2)] [r] [(halt r)]), &mut cc).as_int(),
             5
         );
         assert_eq!(
-            exec(&cps_expr!(+ [(int 7) (int 2)] [r] [(halt r)])).as_int(),
+            exec(&cps_expr!(+ [(int 7) (int 2)] [r] [(halt r)]), &mut cc).as_int(),
             9
         );
         assert_eq!(
-            exec(&cps_expr!(is_zero (int 0) [] [(halt (int 5)) (halt (int 9))])).as_int(),
+            exec(
+                &cps_expr!(is_zero (int 0) [] [(halt (int 5)) (halt (int 9))]),
+                &mut cc
+            )
+            .as_int(),
             9
         );
         assert_eq!(
-            exec(&cps_expr!(is_zero (int 1) [] [(halt (int 5)) (halt (int 9))])).as_int(),
+            exec(
+                &cps_expr!(is_zero (int 1) [] [(halt (int 5)) (halt (int 9))]),
+                &mut cc
+            )
+            .as_int(),
             5
         );
     }

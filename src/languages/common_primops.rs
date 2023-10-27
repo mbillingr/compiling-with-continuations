@@ -1,6 +1,7 @@
 use crate::core::answer::Answer;
 use crate::core::ptr_tagging::{maybe_pointer, untag};
 use crate::core::reference::Ref;
+use std::io::Write;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PrimOp {
@@ -19,6 +20,9 @@ pub enum PrimOp {
     SSame,
     CallCC, // call with current continuation
     Throw,  // throw a value to a continuation
+    ShowInt,
+    ShowReal,
+    ShowStr,
 }
 
 impl PrimOp {
@@ -59,41 +63,51 @@ impl PrimOp {
             PrimOp::SSame => "=s",
             PrimOp::CallCC => "call/cc",
             PrimOp::Throw => "throw",
+            PrimOp::ShowInt => "show-int",
+            PrimOp::ShowReal => "show-real",
+            PrimOp::ShowStr => "show-string",
         }
     }
 
-    pub unsafe fn apply(&self, mut args: impl Iterator<Item = Answer>) -> Answer {
+    pub unsafe fn apply(&self, args: Vec<Answer>, out: &mut impl Write) -> Answer {
         use PrimOp::*;
         match self {
-            CorP => Answer::from_bool(maybe_pointer(args.next().unwrap().repr())),
-            Untag => Answer::from_usize(untag(args.next().unwrap().repr())),
-            IsZero => Answer::from_bool(args.next().unwrap().repr() == 0),
-            MkBox => Answer::from_ref(Ref::new(args.next().unwrap())),
-            BoxGet => *args.next().unwrap().as_ref(),
+            CorP => Answer::from_bool(maybe_pointer(args[0].repr())),
+            Untag => Answer::from_usize(untag(args[0].repr())),
+            IsZero => Answer::from_bool(args[0].repr() == 0),
+            MkBox => Answer::from_ref(Ref::new(args[0])),
+            BoxGet => *args[0].as_ref(),
             BoxSet => {
-                let the_box = args.next().unwrap().as_mut();
-                let value = args.next().unwrap();
+                let the_box = args[0].as_mut();
+                let value = args[1];
                 *the_box = value;
                 Answer::from_int(0)
             }
-            ISame => {
-                Answer::from_bool(args.next().unwrap().as_int() == args.next().unwrap().as_int())
-            }
-            ILess => {
-                Answer::from_bool(args.next().unwrap().as_int() < args.next().unwrap().as_int())
-            }
-            INeg => Answer::from_int(-args.next().unwrap().as_int()),
-            IAdd => Answer::from_int(args.next().unwrap().as_int() + args.next().unwrap().as_int()),
-            ISub => Answer::from_int(args.next().unwrap().as_int() - args.next().unwrap().as_int()),
-            FSame => Answer::from_bool(
-                args.next().unwrap().as_float() == args.next().unwrap().as_float(),
-            ),
-            SSame => {
-                Answer::from_bool(args.next().unwrap().as_str() == args.next().unwrap().as_str())
-            }
+            ISame => Answer::from_bool(args[0].as_int() == args[1].as_int()),
+            ILess => Answer::from_bool(args[0].as_int() < args[1].as_int()),
+            INeg => Answer::from_int(-args[0].as_int()),
+            IAdd => Answer::from_int(args[0].as_int() + args[1].as_int()),
+            ISub => Answer::from_int(args[0].as_int() - args[1].as_int()),
+            FSame => Answer::from_bool(args[0].as_float() == args[1].as_float()),
+            SSame => Answer::from_bool(args[0].as_str() == args[1].as_str()),
             CallCC | Throw => panic!(
                 "Cannot apply continuation primitives. They need special CPS transformation."
             ),
+            ShowInt => {
+                let x = args[0];
+                write!(out, "{}", x.as_int()).unwrap();
+                x
+            }
+            ShowReal => {
+                let x = args[0];
+                write!(out, "{}", x.as_float()).unwrap();
+                x
+            }
+            ShowStr => {
+                let x = args[0];
+                write!(out, "{}", x.as_str()).unwrap();
+                x
+            }
         }
     }
 
@@ -113,6 +127,7 @@ impl PrimOp {
             SSame => 2,
             CallCC => 1,
             Throw => 2,
+            ShowInt | ShowReal | ShowStr => 1,
         }
     }
 
@@ -132,6 +147,7 @@ impl PrimOp {
             SSame => 0,
             CallCC => 1,
             Throw => 0,
+            ShowInt | ShowReal | ShowStr => 1,
         }
     }
 
@@ -147,13 +163,15 @@ impl PrimOp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
     #[test]
     fn boxes() {
+        let mut cc = Cursor::new(vec![]);
         unsafe {
-            let boxed = PrimOp::MkBox.apply(vec![Answer::from_int(123)].into_iter());
-            assert_eq!(PrimOp::BoxGet.apply(vec![boxed].into_iter()).as_int(), 123);
-            PrimOp::BoxSet.apply(vec![boxed, Answer::from_int(42)].into_iter());
-            assert_eq!(PrimOp::BoxGet.apply(vec![boxed].into_iter()).as_int(), 42);
+            let boxed = PrimOp::MkBox.apply(vec![Answer::from_int(123)], &mut cc);
+            assert_eq!(PrimOp::BoxGet.apply(vec![boxed], &mut cc).as_int(), 123);
+            PrimOp::BoxSet.apply(vec![boxed, Answer::from_int(42)], &mut cc);
+            assert_eq!(PrimOp::BoxGet.apply(vec![boxed], &mut cc).as_int(), 42);
         }
     }
 }

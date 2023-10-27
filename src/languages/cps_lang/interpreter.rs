@@ -2,15 +2,16 @@ use crate::core::answer::Answer;
 use crate::core::env::Env;
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast;
+use std::io::Write;
 
 type Expr = ast::Expr<Ref<str>>;
 type Value = ast::Value<Ref<str>>;
 
-pub unsafe fn exec(expr: &Expr) -> Answer {
-    eval_expr(expr, Env::Empty)
+pub unsafe fn exec(expr: &Expr, out: &mut impl Write) -> Answer {
+    eval_expr(expr, Env::Empty, out)
 }
 
-pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
+pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env, out: &mut impl Write) -> Answer {
     loop {
         match expr {
             Expr::Record(items, outvar, cnt) => {
@@ -81,14 +82,14 @@ pub unsafe fn eval_expr(mut expr: &Expr, mut env: Env) -> Answer {
             }
 
             Expr::PrimOp(op, args, _, cnts) if op.is_branching() => {
-                let x = (0..op.n_args()).map(|i| eval_val(&args[i], env));
-                let p = op.apply(x);
+                let x = (0..op.n_args()).map(|i| eval_val(&args[i], env)).collect();
+                let p = op.apply(x, out);
                 expr = &cnts[p.repr()];
             }
 
             Expr::PrimOp(op, args, vars, cnts) => {
-                let x = (0..op.n_args()).map(|i| eval_val(&args[i], env));
-                env = env.extend(vars[0], op.apply(x));
+                let x = (0..op.n_args()).map(|i| eval_val(&args[i], env)).collect();
+                env = env.extend(vars[0], op.apply(x, out));
                 expr = &cnts[0];
             }
 

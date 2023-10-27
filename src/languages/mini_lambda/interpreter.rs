@@ -62,14 +62,18 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env, out: &mut impl Write) -> Answe
 
             Expr::App(rator, rand) => match (&**rator, &**rand) {
                 (Expr::Prim(op), _) if op.n_args() == 1 => {
-                    return op.apply(std::iter::once(eval(&**rand, env, out)))
+                    return op.apply(vec![eval(&**rand, env, out)], out)
                 }
                 (Expr::Prim(op), Expr::Record(args)) => {
-                    return op.apply((0..op.n_args()).map(|i| eval(&args[i], env, out)))
+                    let args = (0..op.n_args()).map(|i| eval(&args[i], env, out)).collect();
+                    return op.apply(args, out);
                 }
                 (Expr::Prim(op), _) => {
                     let arg = eval(rand, env, out);
-                    return op.apply((0..op.n_args()).map(|i| arg.get_item(i as isize)));
+                    return op.apply(
+                        (0..op.n_args()).map(|i| arg.get_item(i as isize)).collect(),
+                        out,
+                    );
                 }
                 _ => {
                     let f = eval(&**rator, env, out);

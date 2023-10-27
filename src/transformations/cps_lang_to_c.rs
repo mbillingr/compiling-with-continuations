@@ -212,6 +212,27 @@ impl<
                 self.c_branch(op, then_branch, else_branch, stmts)
             }
 
+            Expr::PrimOp(PrimOp::ShowInt, Ref([a]), Ref([var]), Ref([cnt])) => {
+                let val = self.generate_value(a);
+                let stmts = self.c_set_register(var, val, stmts);
+                let stmts = self.c_print_int(var, stmts);
+                self.generate_c(cnt, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::ShowReal, Ref([a]), Ref([var]), Ref([cnt])) => {
+                let val = self.generate_value(a);
+                let stmts = self.c_set_register(var, val, stmts);
+                let stmts = self.c_print_real(var, stmts);
+                self.generate_c(cnt, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::ShowStr, Ref([a]), Ref([var]), Ref([cnt])) => {
+                let val = self.generate_value(a);
+                let stmts = self.c_set_register(var, val, stmts);
+                let stmts = self.c_print_str(var, stmts);
+                self.generate_c(cnt, stmts)
+            }
+
             Expr::Halt(value) => {
                 let value = self.generate_value(value);
                 self.c_halt(value, stmts)
@@ -339,8 +360,22 @@ impl<
         stmts
     }
 
-    fn c_halt(&self, value: String, mut stmts: Vec<String>) -> Vec<String> {
+    fn c_print_int(&self, value: impl std::fmt::Display, mut stmts: Vec<String>) -> Vec<String> {
         stmts.push(format!("printf(\"%ld\\n\", {value});"));
+        stmts
+    }
+
+    fn c_print_real(&self, value: impl std::fmt::Display, mut stmts: Vec<String>) -> Vec<String> {
+        stmts.push(format!("printf(\"%f\\n\", {value});"));
+        stmts
+    }
+
+    fn c_print_str(&self, value: impl std::fmt::Display, mut stmts: Vec<String>) -> Vec<String> {
+        stmts.push(format!("printf(\"%s\\n\", {value});"));
+        stmts
+    }
+
+    fn c_halt(&self, _value: String, mut stmts: Vec<String>) -> Vec<String> {
         stmts.push(format!("return 0;"));
         stmts
     }

@@ -81,7 +81,7 @@ mod tests {
 
     unsafe fn run_in_optimized_cps(
         mini_lambda_expr: &ml::Expr<Ref<str>>,
-        out: impl Write,
+        out: &mut impl Write,
     ) -> Answer {
         let expr = mini_lambda_expr.clone();
 
@@ -153,7 +153,7 @@ mod tests {
         println!("{}", c_code);
         println!("\n");
 
-        let bin = compile_c(c_code);
+        /*let bin = compile_c(c_code);
         let result = String::from_utf8(Command::new(bin).output().unwrap().stdout).unwrap();
         let result = result.trim();
         /*
@@ -166,8 +166,8 @@ mod tests {
                 };
 
                 return Answer::from_str(result.to_string().into());
-        */
-        cps_lang::interpreter::exec(&cps_expr)
+        */*/
+        cps_lang::interpreter::exec(&cps_expr, out)
     }
 
     fn compile_c(src: String) -> String {
