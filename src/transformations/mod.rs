@@ -138,7 +138,10 @@ mod tests {
         println!("\n");
 
         println!("C:");
-        println!("{}", cps_lang_to_c::program_to_c(&cps_expr).join("\n"));
+        println!(
+            "{}",
+            cps_lang_to_c::program_to_c(n_registers, &cps_expr).join("\n")
+        );
         println!("\n");
 
         cps_lang::interpreter::exec(&cps_expr)

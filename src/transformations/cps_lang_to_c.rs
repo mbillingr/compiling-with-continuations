@@ -2,7 +2,7 @@ use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
 use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::ops::Deref;
 
@@ -19,17 +19,30 @@ const T_STR: &str = "S";
 pub fn program_to_c<
     V: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
 >(
+    n_registers: usize,
     expr: &Expr<V>,
 ) -> Vec<String> {
     let mut ctx = Context::new();
-    let stmts = vec!["T main() {".to_string()];
-    let mut stmts = ctx.generate_c(expr, stmts);
-    stmts.push("}".to_string());
-    stmts
+    let body = ctx.generate_c(expr, vec![]);
+    let regs: Vec<_> = (0..n_registers)
+        .into_iter()
+        .map(|r| format!("*r{r}"))
+        .collect();
+    let mut prog: Vec<_> = [
+        "T main() {",
+        &format!("size_t {CNT};"),
+        &format!("T *{TMP};"),
+        &format!("T {};", regs.join(", ")),
+    ]
+    .into_iter()
+    .map(ToString::to_string)
+    .collect();
+    prog.extend(body);
+    prog.push("}".to_string());
+    prog
 }
 
 pub struct Context<V> {
-    registers: HashSet<V>,
     functions: HashMap<V, KnownFunction<V>>,
 }
 
@@ -39,7 +52,6 @@ impl<
 {
     pub fn new() -> Self {
         Context {
-            registers: Default::default(),
             functions: Default::default(),
         }
     }
@@ -98,6 +110,18 @@ impl<
                 let value = self.generate_typed(val, T_INT);
                 let branches = cnts.iter().map(|c| self.generate_c(c, vec![])).collect();
                 self.c_switch(value, branches, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::CorP, Ref([a]), Ref([]), Ref([const_cnt, ptr_cnt])) => {
+                let op = self.c_ptr_or_const(self.generate_value(a));
+                let ptr_branch = self.generate_c(ptr_cnt, vec![]);
+                let const_branch = self.generate_c(const_cnt, vec![]);
+                self.c_branch(op, ptr_branch, const_branch, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::Untag, Ref([a]), Ref([var]), Ref([cnt])) => {
+                let stmts = self.c_untag(self.generate_value(a), var, stmts);
+                self.generate_c(cnt, stmts)
             }
 
             Expr::PrimOp(PrimOp::INeg, Ref([a]), Ref([var]), Ref([cnt])) => {
@@ -363,6 +387,20 @@ impl<
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("goto {label};"));
+        stmts
+    }
+
+    fn c_ptr_or_const(&self, a: impl std::fmt::Display) -> String {
+        format!("(({a} & 0x1) == 0)")
+    }
+
+    fn c_untag(
+        &self,
+        a: impl std::fmt::Display,
+        out: impl std::fmt::Display,
+        mut stmts: Vec<String>,
+    ) -> Vec<String> {
+        stmts.push(format!("{out} = ({a} - 1) / 2"));
         stmts
     }
 
