@@ -79,6 +79,10 @@ mod tests {
     unsafe fn run_in_optimized_cps(mini_lambda_expr: &ml::Expr<Ref<str>>) -> Answer {
         let expr = mini_lambda_expr.clone();
 
+        println!("Source:");
+        println!("{}", expr.to_string());
+        println!("\n");
+
         let cps_expr = Box::leak(Box::new(mini_lambda_to_cps_lang::Context::new(
             "__".to_string(),
         )))

@@ -7,14 +7,22 @@ use std::hash::Hash;
 use std::ops::Deref;
 
 // special registers
-const CNT: &'static str = "cnt";
-const TMP: &'static str = "tmp";
+const CNT: &'static str = "cnt"; // counter
+const TMP: &'static str = "tmp"; // generic temporary register
+const JMP: &'static str = "jmp"; // jump target
 
 const STANDARD_ARG_REGISTERS: &'static [&'static str] = &["r0", "r1", "r2"];
 
 const T_INT: &str = "T";
 const T_REAL: &str = "R";
 const T_STR: &str = "S";
+
+const PREAMBLE: &str = "
+#include <stdlib.h>
+
+#define T long
+#define NEW_RECORD(n) (T)malloc(n * sizeof(T))
+";
 
 pub fn program_to_c<
     V: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
@@ -26,12 +34,14 @@ pub fn program_to_c<
     let body = ctx.generate_c(expr, vec![]);
     let regs: Vec<_> = (0..n_registers)
         .into_iter()
-        .map(|r| format!("*r{r}"))
+        .map(|r| format!("r{r}"))
         .collect();
     let mut prog: Vec<_> = [
+        PREAMBLE,
         "T main() {",
         &format!("size_t {CNT};"),
-        &format!("T *{TMP};"),
+        &format!("void *{JMP};"),
+        &format!("T {TMP};"),
         &format!("T {};", regs.join(", ")),
     ]
     .into_iter()
@@ -86,10 +96,10 @@ impl<
                 self.c_static_tailcall(f, stmts)
             }
 
-            Expr::App(rator, rands) => {
+            Expr::App(Value::Var(f), rands) => {
+                stmts = self.c_set_register(JMP, self.c_cast("void*", f), stmts);
                 stmts = self.set_values(STANDARD_ARG_REGISTERS, rands, stmts);
-                let f = self.generate_value(rator);
-                self.c_dynamic_tailcall(f, stmts)
+                self.c_dynamic_tailcall(JMP, stmts)
             }
 
             Expr::Fix(defs, cnt) => {
@@ -216,7 +226,7 @@ impl<
             Value::Real(r) => format!("0x{:016x} /*{r}*/", r.to_bits()),
             Value::String(s) => format!("{:?}", s),
             Value::Var(v) => v.to_string(),
-            Value::Label(v) => format!("&&{v}"),
+            Value::Label(v) => format!("(T) &&{v}"),
         }
     }
 
@@ -312,6 +322,10 @@ impl<
         actual_copies
     }
 
+    fn c_cast(&self, ty: impl std::fmt::Display, val: impl std::fmt::Display) -> String {
+        format!("({ty}){val}")
+    }
+
     fn c_set_register(
         &self,
         r: impl std::fmt::Display,
@@ -345,7 +359,7 @@ impl<
     }
 
     fn c_push_field(&self, value: String, mut stmts: Vec<String>) -> Vec<String> {
-        stmts.push(format!("{TMP}[{CNT}++] = {value};"));
+        stmts.push(format!("((T*){TMP})[{CNT}++] = {value};"));
         stmts
     }
 
@@ -361,7 +375,7 @@ impl<
         var: impl std::fmt::Display,
         mut stmts: Vec<String>,
     ) -> Vec<String> {
-        stmts.push(format!("{var} = {rec}[{idx}];"));
+        stmts.push(format!("{var} = ((T*){rec})[{idx}];"));
         stmts
     }
 
@@ -376,7 +390,7 @@ impl<
         stmts
     }
 
-    fn c_dynamic_tailcall(&self, f: String, mut stmts: Vec<String>) -> Vec<String> {
+    fn c_dynamic_tailcall(&self, f: impl std::fmt::Display, mut stmts: Vec<String>) -> Vec<String> {
         stmts.push(format!("goto *{f};"));
         stmts
     }
