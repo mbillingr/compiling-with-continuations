@@ -18,8 +18,10 @@ pub fn program_to_c<
     expr: &Expr<V>,
 ) -> Vec<String> {
     let mut ctx = Context::new();
-    let main = ctx.generate_c(expr, vec![]);
-    main
+    let stmts = vec!["T main() {".to_string()];
+    let mut stmts = ctx.generate_c(expr, stmts);
+    stmts.push("}".to_string());
+    stmts
 }
 
 pub struct Context<V> {
@@ -88,6 +90,11 @@ impl<
                 stmts
             }
 
+            Expr::PrimOp(PrimOp::INeg, Ref([a]), Ref([var]), Ref([cnt])) => {
+                let stmts = self.c_binop("-", "", self.generate_value(a), var, stmts);
+                self.generate_c(cnt, stmts)
+            }
+
             Expr::PrimOp(PrimOp::IAdd, Ref([a, b]), Ref([var]), Ref([cnt])) => {
                 let stmts = self.c_binop(
                     "+",
@@ -110,10 +117,33 @@ impl<
                 self.generate_c(cnt, stmts)
             }
 
+            Expr::PrimOp(PrimOp::IsZero, Ref([a]), Ref([]), Ref([else_cnt, then_cnt])) => {
+                let op = self.c_binexpr("==", self.generate_value(a), 0);
+                let then_branch = self.generate_c(then_cnt, vec![]);
+                let else_branch = self.generate_c(else_cnt, vec![]);
+                self.c_branch(op, then_branch, else_branch, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::ISame, Ref([a, b]), Ref([]), Ref([else_cnt, then_cnt])) => {
+                let op = self.c_binexpr("==", self.generate_value(a), self.generate_value(b));
+                let then_branch = self.generate_c(then_cnt, vec![]);
+                let else_branch = self.generate_c(else_cnt, vec![]);
+                self.c_branch(op, then_branch, else_branch, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::ILess, Ref([a, b]), Ref([]), Ref([else_cnt, then_cnt])) => {
+                let op = self.c_binexpr("<", self.generate_value(a), self.generate_value(b));
+                let then_branch = self.generate_c(then_cnt, vec![]);
+                let else_branch = self.generate_c(else_cnt, vec![]);
+                self.c_branch(op, then_branch, else_branch, stmts)
+            }
+
             Expr::Halt(value) => {
                 let value = self.generate_value(value);
                 self.c_halt(value, stmts)
             }
+
+            Expr::Panic(msg) => self.c_panic(msg, stmts),
 
             _ => todo!("{expr:?}"),
         }
@@ -231,6 +261,12 @@ impl<
         stmts
     }
 
+    fn c_panic(&self, msg: &str, mut stmts: Vec<String>) -> Vec<String> {
+        stmts.push(format!("puts({msg:?});"));
+        stmts.push(format!("return -1;"));
+        stmts
+    }
+
     fn c_begin_function(&self, name: &V, mut stmts: Vec<String>) -> Vec<String> {
         stmts.push(format!("{name}:"));
         stmts
@@ -297,6 +333,25 @@ impl<
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{out} = {a} {op} {b};"));
+        stmts
+    }
+
+    fn c_binexpr(&self, op: &str, a: impl std::fmt::Display, b: impl std::fmt::Display) -> String {
+        format!("({a} {op} {b})")
+    }
+
+    fn c_branch(
+        &self,
+        condition: impl std::fmt::Display,
+        then_branch: Vec<String>,
+        else_branch: Vec<String>,
+        mut stmts: Vec<String>,
+    ) -> Vec<String> {
+        stmts.push(format!("if ({condition}) {{"));
+        stmts.extend(then_branch);
+        stmts.push("} else {".to_string());
+        stmts.extend(else_branch);
+        stmts.push("}".to_string());
         stmts
     }
 }
