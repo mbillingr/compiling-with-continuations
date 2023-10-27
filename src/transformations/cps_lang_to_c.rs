@@ -90,6 +90,12 @@ impl<
                 stmts
             }
 
+            Expr::Switch(val, cnts) => {
+                let value = self.generate_value(val);
+                let branches = cnts.iter().map(|c| self.generate_c(c, vec![])).collect();
+                self.c_switch(value, branches, stmts)
+            }
+
             Expr::PrimOp(PrimOp::INeg, Ref([a]), Ref([var]), Ref([cnt])) => {
                 let stmts = self.c_binop("-", "", self.generate_value(a), var, stmts);
                 self.generate_c(cnt, stmts)
@@ -351,6 +357,21 @@ impl<
         stmts.extend(then_branch);
         stmts.push("} else {".to_string());
         stmts.extend(else_branch);
+        stmts.push("}".to_string());
+        stmts
+    }
+
+    fn c_switch(
+        &self,
+        condition: impl std::fmt::Display,
+        branches: Vec<Vec<String>>,
+        mut stmts: Vec<String>,
+    ) -> Vec<String> {
+        stmts.push(format!("switch ({condition}) {{"));
+        for (i, branch) in branches.into_iter().enumerate() {
+            stmts.push(format!("case {i}:"));
+            stmts.extend(branch);
+        }
         stmts.push("}".to_string());
         stmts
     }
