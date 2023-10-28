@@ -17,14 +17,11 @@ impl Context {
         Context {}
     }
 
-    pub fn convert_labels<V: std::fmt::Debug + Clone + Eq + Hash>(
-        &mut self,
-        expr: &Expr<V>,
-    ) -> Expr<V> {
+    pub fn convert_labels<V: Clone + Eq + Hash>(&mut self, expr: &Expr<V>) -> Expr<V> {
         self.convert_exp(expr, &HashMap::new())
     }
 
-    fn convert_exp<V: std::fmt::Debug + Clone + Eq + Hash>(
+    fn convert_exp<V: Clone + Eq + Hash>(
         &mut self,
         expr: &Expr<V>,
         bindings: &HashMap<V, Binding>,
@@ -100,7 +97,7 @@ impl Context {
         }
     }
 
-    fn convert_with<V: std::fmt::Debug + Clone + Eq + Hash>(
+    fn convert_with<V: Clone + Eq + Hash>(
         &mut self,
         expr: &Expr<V>,
         bindings: &HashMap<V, Binding>,
@@ -111,7 +108,7 @@ impl Context {
         self.convert_exp(expr, &bindings)
     }
 
-    fn convert_val<V: std::fmt::Debug + Clone + Eq + Hash>(
+    fn convert_val<V: Clone + Eq + Hash>(
         &mut self,
         val: &Value<V>,
         bindings: &HashMap<V, Binding>,
@@ -124,7 +121,7 @@ impl Context {
         val.clone()
     }
 
-    fn convert_vals<V: std::fmt::Debug + Clone + Eq + Hash>(
+    fn convert_vals<V: Clone + Eq + Hash>(
         &mut self,
         vals: &[Value<V>],
         bindings: &HashMap<V, Binding>,

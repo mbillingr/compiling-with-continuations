@@ -8,6 +8,7 @@ const DEFAULT_GENSYM_DELIMITER: &str = "__";
 pub struct RestrictedAst<V: 'static> {
     ast: Expr<V>,
     all_names_unique: bool,
+    funcs_referred_by_labels: bool,
     gensym_context: Arc<GensymContext>,
 }
 
@@ -16,6 +17,7 @@ impl<V> RestrictedAst<V> {
         RestrictedAst {
             ast,
             all_names_unique: false,
+            funcs_referred_by_labels: false,
             gensym_context: Arc::new(GensymContext::new(DEFAULT_GENSYM_DELIMITER)),
         }
     }
@@ -38,7 +40,7 @@ impl<V> RestrictedAst<V> {
         }
     }
 
-    pub fn rename_uniquely(&self, new_delimiter: impl ToString) -> Self
+    pub fn rename_uniquely(self, new_delimiter: impl ToString) -> Self
     where
         V: std::fmt::Debug + Clone + Eq + Hash + GenSym,
     {
@@ -49,7 +51,19 @@ impl<V> RestrictedAst<V> {
             ast,
             gensym_context,
             all_names_unique: true,
-            ..*self
+            ..self
+        }
+    }
+
+    pub fn ensure_funcref_labels(self) -> Self
+    where
+        V: Clone + Eq + Hash + GenSym,
+    {
+        let ast = super::label_fixrefs::Context::new().convert_labels(&self.ast);
+        RestrictedAst {
+            ast,
+            funcs_referred_by_labels: true,
+            ..self
         }
     }
 }
