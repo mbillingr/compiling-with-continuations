@@ -13,6 +13,7 @@ pub mod limit_args;
 pub mod make_all_names_unique;
 pub mod mini_lambda_to_cps_lang;
 pub mod register_allocation;
+pub mod restrictions;
 pub mod spill_phase;
 
 #[derive(Debug)]
