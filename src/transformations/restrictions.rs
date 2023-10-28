@@ -1,10 +1,12 @@
 use crate::languages::cps_lang::ast::Expr;
 use crate::transformations::{GenSym, GensymContext};
 use std::hash::Hash;
+use std::ops::Deref;
 use std::sync::Arc;
 
 const DEFAULT_GENSYM_DELIMITER: &str = "__";
 
+#[derive(Clone)]
 pub struct RestrictedAst<V: 'static> {
     ast: Expr<V>,
     all_names_unique: bool,
@@ -76,6 +78,15 @@ impl<V> RestrictedAst<V> {
         V: Clone + Eq + Hash,
     {
         let ast = super::cps_eta_reduction::Context.eta_reduce(&self.ast);
+        RestrictedAst { ast, ..self }
+    }
+
+    pub fn uncurry(self) -> Self
+    where
+        V: Clone + PartialEq + Deref<Target = str> + GenSym,
+    {
+        let ast =
+            super::cps_uncurrying::Context::new(self.gensym_context.clone()).uncurry(&self.ast);
         RestrictedAst { ast, ..self }
     }
 }

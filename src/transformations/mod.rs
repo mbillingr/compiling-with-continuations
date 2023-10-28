@@ -97,7 +97,6 @@ mod tests {
 
         let cps = RestrictedAst::new(cps_expr);
         let cps = cps.rename_uniquely("__");
-        let cps = cps.assert_all_names_unique();
         let cps = cps.ensure_funcref_labels();
 
         println!("Initial CPS:");
@@ -105,16 +104,13 @@ mod tests {
         println!("\n");
 
         let cps = cps.eta_reduce();
-
-        let (cps_expr, gs) = cps.deconstruct();
-
-        let cps_expr = cps_uncurrying::Context::new("__").uncurry(&cps_expr);
+        let cps = cps.uncurry();
 
         println!("η Reduced:");
-        make_all_names_unique::Context::new_context("__")
-            .rename_all(&cps_expr)
-            .pretty_print();
+        cps.clone().rename_uniquely("__").expr().pretty_print();
         println!("\n");
+
+        let (cps_expr, gs) = cps.deconstruct();
 
         let n_registers = 5;
         let max_args = n_registers - 2; // reserve two registers for closure and continuation

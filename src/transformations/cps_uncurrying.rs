@@ -1,22 +1,31 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use crate::list;
-use crate::transformations::GensymContext;
+use crate::transformations::{GenSym, GensymContext};
+use std::ops::Deref;
+use std::sync::Arc;
 
 pub struct Context {
-    gs: GensymContext,
+    gs: Arc<GensymContext>,
 }
 
 impl Context {
-    pub fn new(sym_delim: impl ToString) -> Self {
+    pub fn new(gs: Arc<GensymContext>) -> Self {
+        Context { gs }
+    }
+
+    pub fn new_context(sym_delim: impl ToString) -> Self {
         Context {
-            gs: GensymContext::new(sym_delim),
+            gs: Arc::new(GensymContext::new(sym_delim)),
         }
     }
 }
 
 impl Context {
-    pub fn uncurry(&self, exp: &Expr<Ref<str>>) -> Expr<Ref<str>> {
+    pub fn uncurry<V: Clone + PartialEq + Deref<Target = str> + GenSym>(
+        &self,
+        exp: &Expr<V>,
+    ) -> Expr<V> {
         match exp {
             Expr::Record(fields, r, cnt) => {
                 Expr::Record(*fields, r.clone(), self.uncurry(cnt).into())
@@ -33,7 +42,7 @@ impl Context {
             Expr::App(rator, rands) => Expr::App(rator.clone(), *rands),
 
             Expr::Fix(defs, body) => {
-                let mut defs_out: Vec<(Ref<str>, Ref<[Ref<str>]>, Ref<Expr<Ref<str>>>)> = vec![];
+                let mut defs_out: Vec<(V, Ref<[V]>, Ref<Expr<V>>)> = vec![];
 
                 let reduced_bodies: Vec<_> = defs
                     .iter()
@@ -47,36 +56,37 @@ impl Context {
                             Ref([(g, Ref([k, b]), gbody)]),
                             Ref(Expr::App(Value::Var(c), Ref([Value::Var(gg) | Value::Label(gg)]))),
                         ) if Some(c) == params.first() && gg == g => {
-                            let f_ = self.gs.gensym(f);
-                            let fparams: Vec<_> =
+                            let f_: V = self.gs.gensym(f);
+                            let fparams: Vec<V> =
                                 params.iter().map(|p| self.gs.gensym(p)).collect();
-                            let c_ = *fparams
+                            let c_ = fparams
                                 .first()
-                                .expect("functions need at least one parameter: the continuation");
-                            let g_ = self.gs.gensym(g);
-                            let b_ = self.gs.gensym(b);
-                            let k_ = self.gs.gensym(k);
+                                .expect("functions need at least one parameter: the continuation")
+                                .clone();
+                            let g_: V = self.gs.gensym(g);
+                            let b_: V = self.gs.gensym(b);
+                            let k_: V = self.gs.gensym(k);
 
-                            let mut f_args = vec![Value::Var(k_)];
-                            f_args.extend(fparams.iter().map(|p| Value::Var(*p)));
-                            f_args.push(Value::Var(g_));
-                            f_args.push(Value::Var(b_));
+                            let mut f_args = vec![Value::Var(k_.clone())];
+                            f_args.extend(fparams.iter().map(|p| Value::Var(p.clone())));
+                            f_args.push(Value::Var(g_.clone()));
+                            f_args.push(Value::Var(b_.clone()));
 
                             let fbody_out = Expr::Fix(
                                 list![(
-                                    g_,
+                                    g_.clone(),
                                     list![k_, b_],
-                                    Expr::App(Value::Var(f_), Ref::array(f_args)).into()
+                                    Expr::App(Value::Var(f_.clone()), Ref::array(f_args)).into()
                                 )],
                                 Expr::App(Value::Var(c_), list![Value::Var(g_)]).into(),
                             );
 
                             defs_out.push((f.clone(), Ref::array(fparams), fbody_out.into()));
 
-                            let mut f_params = vec![*k];
-                            f_params.extend(params.iter().copied());
-                            f_params.push(*g);
-                            f_params.push(*b);
+                            let mut f_params = vec![k.clone()];
+                            f_params.extend(params.iter().cloned());
+                            f_params.push(g.clone());
+                            f_params.push(b.clone());
 
                             defs_out.push((f_, Ref::array(f_params), self.uncurry(gbody).into()));
                         }
@@ -119,7 +129,7 @@ mod tests {
     use crate::{cps_expr, cps_expr_list, cps_ident_list, cps_value, cps_value_list};
 
     fn uncurry(exp: Expr<Ref<str>>) -> Expr<Ref<str>> {
-        let ctx = Box::leak(Box::new(Context::new("__".to_string())));
+        let ctx = Box::leak(Box::new(Context::new_context("__".to_string())));
         ctx.uncurry(&exp)
     }
 
