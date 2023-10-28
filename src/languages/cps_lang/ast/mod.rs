@@ -12,9 +12,9 @@ use crate::languages::common_primops::PrimOp;
 pub use transform::{Transform, Transformed};
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Value<V: 'static> {
+pub enum Value<V: 'static, F = V> {
     Var(V),
-    Label(V),
+    Label(F),
     Int(i64),
     Real(f64),
     String(Ref<String>),
@@ -23,15 +23,15 @@ pub enum Value<V: 'static> {
 type List<T> = Ref<[T]>;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Expr<V: 'static> {
-    Record(List<(Value<V>, AccessPath)>, V, Ref<Expr<V>>),
-    Select(isize, Value<V>, V, Ref<Expr<V>>),
-    Offset(isize, Value<V>, V, Ref<Expr<V>>),
-    App(Value<V>, List<Value<V>>),
-    Fix(List<(V, List<V>, Ref<Expr<V>>)>, Ref<Expr<V>>),
-    Switch(Value<V>, List<Ref<Expr<V>>>),
-    PrimOp(PrimOp, List<Value<V>>, List<V>, List<Ref<Expr<V>>>),
-    Halt(Value<V>),
+pub enum Expr<V: 'static, F: 'static = V> {
+    Record(List<(Value<V, F>, AccessPath)>, V, Ref<Expr<V, F>>),
+    Select(isize, Value<V, F>, V, Ref<Expr<V, F>>),
+    Offset(isize, Value<V, F>, V, Ref<Expr<V, F>>),
+    App(Value<V, F>, List<Value<V, F>>),
+    Fix(List<(F, List<V>, Ref<Expr<V, F>>)>, Ref<Expr<V, F>>),
+    Switch(Value<V, F>, List<Ref<Expr<V, F>>>),
+    PrimOp(PrimOp, List<Value<V, F>>, List<V>, List<Ref<Expr<V, F>>>),
+    Halt(Value<V, F>),
     Panic(Ref<str>),
 }
 

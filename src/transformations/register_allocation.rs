@@ -4,23 +4,23 @@ use crate::languages::cps_lang::ast::{Expr, Value};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 
-pub fn allocate(n_registers: usize, expr: &Expr<Ref<str>>) -> Expr<Ref<str>> {
+pub type R = usize;
+
+pub fn allocate(n_registers: usize, expr: &Expr<Ref<str>>) -> Expr<R, Ref<str>> {
     let ctx = AllocationContext::new(n_registers);
     ctx.allocate(expr)
 }
 
 #[derive(Debug, Clone)]
 struct AllocationContext {
-    all_registers: Ref<[Ref<str>]>,
-    available_registers: BinaryHeap<Reverse<Ref<str>>>,
+    all_registers: Ref<[R]>,
+    available_registers: BinaryHeap<Reverse<R>>,
     env: Env,
 }
 
 impl AllocationContext {
     pub fn new(n_registers: usize) -> Self {
-        let all_registers: Vec<_> = (0..n_registers)
-            .map(|r| Ref::from(format!("r{r}")))
-            .collect();
+        let all_registers: Vec<_> = (0..n_registers).collect();
         AllocationContext {
             available_registers: all_registers.iter().copied().map(Reverse).collect(),
             all_registers: Ref::array(all_registers),
@@ -36,7 +36,7 @@ impl AllocationContext {
         }
     }
 
-    fn allocate(self, expr: &Expr<Ref<str>>) -> Expr<Ref<str>> {
+    fn allocate(self, expr: &Expr<Ref<str>>) -> Expr<R, Ref<str>> {
         let ctx_before = self;
         let free_after = expr
             .continuation_exprs()
@@ -138,7 +138,7 @@ impl AllocationContext {
         }
     }
 
-    fn transform_value(&self, value: &Value<Ref<str>>) -> Value<Ref<str>> {
+    fn transform_value(&self, value: &Value<Ref<str>>) -> Value<R, Ref<str>> {
         match value {
             Value::Var(v) => Value::Var(
                 self.env
@@ -146,11 +146,14 @@ impl AllocationContext {
                     .unwrap_or_else(|| panic!("unbound variable {v:?}"))
                     .clone(),
             ),
-            _ => value.clone(),
+            Value::Label(l) => Value::Label(*l),
+            Value::Int(x) => Value::Int(*x),
+            Value::Real(x) => Value::Real(*x),
+            Value::String(x) => Value::String(*x),
         }
     }
 
-    fn assign_register(mut self, var: &Ref<str>) -> (Ref<str>, Self) {
+    fn assign_register(mut self, var: &Ref<str>) -> (R, Self) {
         let r = self.available_registers.pop().unwrap().0;
         self.env.insert(var.clone(), r);
         (r, self)
@@ -176,7 +179,7 @@ impl AllocationContext {
     }
 }
 
-type Env = HashMap<Ref<str>, Ref<str>>;
+type Env = HashMap<Ref<str>, R>;
 
 #[cfg(test)]
 mod tests {
@@ -197,8 +200,8 @@ mod tests {
     #[test]
     fn simple_allocate() {
         let x = Expr::from_str("(record (1 2) r (halt r))").unwrap();
-        let y = Expr::from_str("(record (1 2) r0 (halt r0))").unwrap();
-        assert_eq!(allocate(1, &x), y);
+        let y = "(record (1 2) 0 (halt 0))";
+        assert_eq!(allocate(1, &x).to_string(), y);
     }
 
     #[test]
@@ -207,35 +210,29 @@ mod tests {
             "(record (1 2) r (select 0 r a (select 1 r b (primop + (a b) (c) ((halt c))))))",
         )
         .unwrap();
-        let y = Expr::from_str(
-            "(record (1 2) r0 (select 0 r0 r1 (select 1 r0 r0 (primop + (r1 r0) (r0) ((halt r0))))))",
-        )
-        .unwrap();
-        assert_eq!(allocate(2, &x), y);
+        let y = "(record (1 2) 0 (select 0 0 1 (select 1 0 0 (primop + (1 0) (0) ((halt 0))))))";
+        assert_eq!(allocate(2, &x).to_string(), y);
     }
 
     #[test]
     fn unused_variables_give_back_their_registers() {
         let x = Expr::from_str("(record () a (offset 0 a b (offset 0 b c (halt c))))").unwrap();
-        let y =
-            Expr::from_str("(record () r0 (offset 0 r0 r0 (offset 0 r0 r0 (halt r0))))").unwrap();
-        assert_eq!(allocate(2, &x), y);
+        let y = "(record () 0 (offset 0 0 0 (offset 0 0 0 (halt 0))))";
+        assert_eq!(allocate(2, &x).to_string(), y);
     }
 
     #[test]
     fn register_usage_considers_all_switch_branches() {
         let x =
             Expr::from_str("(record () a (offset 0 a b (switch 0 (halt b) (halt a))))").unwrap();
-        let y = Expr::from_str("(record () r0 (offset 0 r0 r1 (switch 0 (halt r1) (halt r0))))")
-            .unwrap();
-        assert_eq!(allocate(2, &x), y);
+        let y = "(record () 0 (offset 0 0 1 (switch 0 (halt 1) (halt 0))))";
+        assert_eq!(allocate(2, &x).to_string(), y);
     }
 
     #[test]
     fn functions_allocated_independently() {
         let x = Expr::from_str("(fix ((f (x) (halt x)) (g (k x) (k x))) ((@ g) (@ f) 0))").unwrap();
-        let y = Expr::from_str("(fix ((f (r0) (halt r0)) (g (r0 r1) (r0 r1))) ((@ g) (@ f) 0))")
-            .unwrap();
-        assert_eq!(allocate(2, &x), y);
+        let y = "(fix ((f (0) (halt 0)) (g (0 1) (0 1))) ((@ g) (@ f) 0))";
+        assert_eq!(allocate(2, &x).to_string(), y);
     }
 }

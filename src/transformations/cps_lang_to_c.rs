@@ -4,6 +4,7 @@ use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::marker::PhantomData;
 use std::ops::Deref;
 
 // special registers
@@ -12,7 +13,7 @@ const TMP: &'static str = "tmp"; // generic temporary register
 const TMP2: &'static str = "tmp2"; // generic temporary register
 const JMP: &'static str = "jmp"; // jump target
 
-const STANDARD_ARG_REGISTERS: &'static [&'static str] = &["r0", "r1", "r2"];
+const STANDARD_ARG_REGISTERS: &'static [usize] = &[0, 1, 2];
 
 const T_INT: &str = "(T)";
 const T_REAL: &str = "*(R*)&";
@@ -29,10 +30,11 @@ const PREAMBLE: &str = "
 ";
 
 pub fn program_to_c<
-    V: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
+    V: Clone + std::fmt::Debug + std::fmt::Display,
+    F: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
 >(
     n_registers: usize,
-    expr: &Expr<V>,
+    expr: &Expr<V, F>,
 ) -> Vec<String> {
     let mut ctx = Context::new();
     let body = ctx.generate_c(expr, vec![]);
@@ -56,21 +58,24 @@ pub fn program_to_c<
     prog
 }
 
-pub struct Context<V> {
-    functions: HashMap<V, KnownFunction<V>>,
+pub struct Context<V, F> {
+    functions: HashMap<F, KnownFunction<V>>,
+    _p: PhantomData<(V, F)>,
 }
 
 impl<
-        V: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
-    > Context<V>
+        V: Clone + std::fmt::Debug + std::fmt::Display,
+        F: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + std::fmt::Display,
+    > Context<V, F>
 {
     pub fn new() -> Self {
         Context {
             functions: Default::default(),
+            _p: PhantomData,
         }
     }
 
-    fn generate_c(&mut self, expr: &Expr<V>, mut stmts: Vec<String>) -> Vec<String> {
+    fn generate_c(&mut self, expr: &Expr<V, F>, mut stmts: Vec<String>) -> Vec<String> {
         match expr {
             Expr::Record(fields, var, cnt) => {
                 stmts = self.c_begin_record(fields.len(), stmts);
@@ -78,19 +83,19 @@ impl<
                     let x = self.generate_access(val, ap);
                     stmts = self.c_push_field(x, stmts);
                 }
-                stmts = self.c_end_record(var, stmts);
+                stmts = self.c_end_record(register(var), stmts);
                 self.generate_c(cnt, stmts)
             }
 
             Expr::Select(idx, rec, var, cnt) => {
                 let r = self.generate_value(rec);
-                stmts = self.c_select(*idx, r, var, stmts);
+                stmts = self.c_select(*idx, r, register(var), stmts);
                 self.generate_c(cnt, stmts)
             }
 
             Expr::Offset(idx, rec, var, cnt) => {
                 let r = self.generate_value(rec);
-                stmts = self.c_offset(*idx, r, var, stmts);
+                stmts = self.c_offset(*idx, r, register(var), stmts);
                 self.generate_c(cnt, stmts)
             }
 
@@ -101,7 +106,11 @@ impl<
             }
 
             Expr::App(Value::Var(f), rands) => {
-                stmts = self.c_set_register(JMP, self.c_cast("(void*)", f), stmts);
+                stmts = self.c_set_register(
+                    JMP.to_string(),
+                    self.c_cast("(void*)", register(f)),
+                    stmts,
+                );
                 stmts = self.set_values(STANDARD_ARG_REGISTERS, rands, stmts);
                 self.c_dynamic_tailcall(JMP, stmts)
             }
@@ -134,12 +143,13 @@ impl<
             }
 
             Expr::PrimOp(PrimOp::Untag, Ref([a]), Ref([var]), Ref([cnt])) => {
-                let stmts = self.c_untag(self.generate_value(a), var, stmts);
+                let stmts = self.c_untag(self.generate_value(a), register(var), stmts);
                 self.generate_c(cnt, stmts)
             }
 
             Expr::PrimOp(PrimOp::INeg, Ref([a]), Ref([var]), Ref([cnt])) => {
-                let stmts = self.c_binop("-", "", self.generate_typed(a, T_INT), var, stmts);
+                let stmts =
+                    self.c_binop("-", "", self.generate_typed(a, T_INT), register(var), stmts);
                 self.generate_c(cnt, stmts)
             }
 
@@ -148,7 +158,7 @@ impl<
                     "+",
                     self.generate_typed(a, T_INT),
                     self.generate_typed(b, T_INT),
-                    var,
+                    register(var),
                     stmts,
                 );
                 self.generate_c(cnt, stmts)
@@ -159,7 +169,7 @@ impl<
                     "-",
                     self.generate_typed(a, T_INT),
                     self.generate_typed(b, T_INT),
-                    var,
+                    register(var),
                     stmts,
                 );
                 self.generate_c(cnt, stmts)
@@ -195,8 +205,8 @@ impl<
             }
 
             Expr::PrimOp(PrimOp::FSame, Ref([a, b]), Ref([]), Ref([else_cnt, then_cnt])) => {
-                let stmts = self.c_set_register(TMP, self.generate_value(a), stmts);
-                let stmts = self.c_set_register(TMP2, self.generate_value(b), stmts);
+                let stmts = self.c_set_register(TMP.to_string(), self.generate_value(a), stmts);
+                let stmts = self.c_set_register(TMP2.to_string(), self.generate_value(b), stmts);
                 let op = self.c_binexpr("==", self.c_cast(T_REAL, TMP), self.c_cast(T_REAL, TMP2));
                 let then_branch = self.generate_c(then_cnt, vec![]);
                 let else_branch = self.generate_c(else_cnt, vec![]);
@@ -213,22 +223,22 @@ impl<
 
             Expr::PrimOp(PrimOp::ShowInt, Ref([a]), Ref([var]), Ref([cnt])) => {
                 let val = self.generate_value(a);
-                let stmts = self.c_set_register(var, val, stmts);
-                let stmts = self.c_print_int(var, stmts);
+                let stmts = self.c_set_register(register(var), val, stmts);
+                let stmts = self.c_print_int(register(var), stmts);
                 self.generate_c(cnt, stmts)
             }
 
             Expr::PrimOp(PrimOp::ShowReal, Ref([a]), Ref([var]), Ref([cnt])) => {
                 let val = self.generate_value(a);
-                let stmts = self.c_set_register(var, val, stmts);
-                let stmts = self.c_print_real(var, stmts);
+                let stmts = self.c_set_register(register(var), val, stmts);
+                let stmts = self.c_print_real(register(var), stmts);
                 self.generate_c(cnt, stmts)
             }
 
             Expr::PrimOp(PrimOp::ShowStr, Ref([a]), Ref([var]), Ref([cnt])) => {
                 let val = self.generate_value(a);
-                let stmts = self.c_set_register(var, val, stmts);
-                let stmts = self.c_print_str(var, stmts);
+                let stmts = self.c_set_register(register(var), val, stmts);
+                let stmts = self.c_print_str(register(var), stmts);
                 self.generate_c(cnt, stmts)
             }
 
@@ -243,22 +253,22 @@ impl<
         }
     }
 
-    fn generate_value(&self, value: &Value<V>) -> String {
+    fn generate_value(&self, value: &Value<V, F>) -> String {
         match value {
             Value::Int(i) => i.to_string(),
             Value::Real(r) => format!("0x{:016x} /*{r}*/", r.to_bits()),
             Value::String(s) => format!("{:?}", s),
-            Value::Var(v) => v.to_string(),
+            Value::Var(v) => format!("r{v}"),
             Value::Label(v) => format!("(T) &&{v}"),
         }
     }
 
-    fn generate_typed(&self, value: &Value<V>, ty: impl std::fmt::Display) -> String {
+    fn generate_typed(&self, value: &Value<V, F>, ty: impl std::fmt::Display) -> String {
         let val = self.generate_value(value);
         format!("({ty}{val})")
     }
 
-    fn generate_access(&self, value: &Value<V>, ap: &AccessPath) -> String {
+    fn generate_access(&self, value: &Value<V, F>, ap: &AccessPath) -> String {
         match ap {
             AccessPath::Ref(0) => self.generate_value(value),
             AccessPath::Ref(i) => format!("({} + {})", self.generate_value(value), i),
@@ -269,7 +279,7 @@ impl<
     fn set_values(
         &self,
         targets: &[impl std::fmt::Display],
-        values: &[Value<V>],
+        values: &[Value<V, F>],
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         let mut pending_copies: Vec<_> = Default::default();
@@ -277,14 +287,14 @@ impl<
         for (tgt, v) in targets.iter().zip(values) {
             match v {
                 Value::Var(r) => {
-                    let r = r.to_string();
-                    let tgt = tgt.to_string();
+                    let r = register(r);
+                    let tgt = register(tgt);
                     if r != tgt {
                         pending_copies.push((r, tgt));
                     }
                 }
                 _ => {
-                    stmts = self.c_set_register(tgt, self.generate_value(v), stmts);
+                    stmts = self.c_set_register(register(tgt), self.generate_value(v), stmts);
                 }
             }
         }
@@ -351,7 +361,7 @@ impl<
 
     fn c_set_register(
         &self,
-        r: impl std::fmt::Display,
+        r: String,
         src: impl std::fmt::Display,
         mut stmts: Vec<String>,
     ) -> Vec<String> {
@@ -385,7 +395,7 @@ impl<
         stmts
     }
 
-    fn c_begin_function(&self, name: &V, mut stmts: Vec<String>) -> Vec<String> {
+    fn c_begin_function(&self, name: &F, mut stmts: Vec<String>) -> Vec<String> {
         stmts.push(format!("{name}:"));
         stmts
     }
@@ -401,7 +411,7 @@ impl<
         stmts
     }
 
-    fn c_end_record(&self, r: impl std::fmt::Display, mut stmts: Vec<String>) -> Vec<String> {
+    fn c_end_record(&self, r: String, mut stmts: Vec<String>) -> Vec<String> {
         stmts.push(format!("{r} = {TMP};"));
         stmts
     }
@@ -410,7 +420,7 @@ impl<
         &self,
         idx: isize,
         rec: String,
-        var: impl std::fmt::Display,
+        var: String,
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{var} = ((T*){rec})[{idx}];"));
@@ -421,7 +431,7 @@ impl<
         &self,
         idx: isize,
         rec: String,
-        var: impl std::fmt::Display,
+        var: String,
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{var} = {rec} + {idx};"));
@@ -449,7 +459,7 @@ impl<
     fn c_untag(
         &self,
         a: impl std::fmt::Display,
-        out: impl std::fmt::Display,
+        out: String,
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{out} = ({a} - 1) / 2;"));
@@ -461,7 +471,7 @@ impl<
         op: &str,
         a: impl std::fmt::Display,
         b: impl std::fmt::Display,
-        out: impl std::fmt::Display,
+        out: String,
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{out} = {a} {op} {b};"));
@@ -507,6 +517,10 @@ impl<
     }
 }
 
+fn register<V: std::fmt::Display>(r: V) -> String {
+    format!("r{r}")
+}
+
 struct KnownFunction<V> {
     arg_registers: Vec<V>,
 }
@@ -528,7 +542,7 @@ mod tests {
             .iter()
             .map(|(s, t)| (s.to_string(), t.to_string()))
             .collect();
-        let assignments = Context::<&str>::shuffle_registers(inputs.clone());
+        let assignments = Context::<&str, &str>::shuffle_registers(inputs.clone());
 
         let mut outputs: HashMap<String, String> =
             inputs.iter().map(|(s, _)| (s.clone(), s.clone())).collect();
@@ -548,7 +562,7 @@ mod tests {
 
     #[test]
     fn no_shuffling_to_do() {
-        assert_eq!(Context::<&str>::shuffle_registers(vec![]), vec![]);
+        assert_eq!(Context::<&str, &str>::shuffle_registers(vec![]), vec![]);
     }
 
     #[test]

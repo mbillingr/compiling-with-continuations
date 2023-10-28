@@ -73,6 +73,18 @@ impl S {
     }
 }
 
+impl From<Ref<str>> for S {
+    fn from(value: Ref<str>) -> Self {
+        S::Symbol(value)
+    }
+}
+
+impl From<usize> for S {
+    fn from(value: usize) -> Self {
+        S::Int(value as i64)
+    }
+}
+
 impl std::fmt::Display for S {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

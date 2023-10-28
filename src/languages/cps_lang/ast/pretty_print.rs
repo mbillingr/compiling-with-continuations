@@ -2,7 +2,7 @@ use crate::languages::cps_lang::ast::{Expr, Value};
 
 const INDENT: usize = 2;
 
-impl<V: std::fmt::Display> Expr<V> {
+impl<V: std::fmt::Display, F: std::fmt::Display> Expr<V, F> {
     pub fn pretty_print(&self) {
         self.pretty_print_(0);
     }
@@ -116,7 +116,7 @@ impl<V: std::fmt::Display> Expr<V> {
     }
 }
 
-impl<V: std::fmt::Display> Value<V> {
+impl<V: std::fmt::Display, F: std::fmt::Display> Value<V, F> {
     pub fn pretty_print(&self) {
         match self {
             Value::Var(x) => print!("{}", x),

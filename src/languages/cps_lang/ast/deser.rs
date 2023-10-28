@@ -4,7 +4,11 @@ use crate::core::sexpr::{S, SF};
 use crate::languages::common_primops::PrimOp;
 use sexpr_parser::Parser;
 
-impl std::fmt::Display for Expr<Ref<str>> {
+impl<V: Clone, F: Clone> std::fmt::Display for Expr<V, F>
+where
+    S: From<V>,
+    S: From<F>,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_sexpr())
     }
@@ -127,13 +131,19 @@ impl Expr<Ref<str>> {
             _ => Err(Error::Syntax(d.clone())),
         }
     }
+}
 
+impl<V: Clone, F: Clone> Expr<V, F>
+where
+    S: From<V>,
+    S: From<F>,
+{
     pub fn to_sexpr(&self) -> S {
         match self {
             Expr::Record(fields, var, cnt) => S::list(vec![
                 S::symbol("record"),
                 S::list(fields.iter().map(|(f, ap)| ap.to_sexpr(f)).collect()),
-                S::Symbol(*var),
+                S::from(var.clone()),
                 cnt.to_sexpr(),
             ]),
 
@@ -141,7 +151,7 @@ impl Expr<Ref<str>> {
                 S::symbol("select"),
                 S::Int(*idx as i64),
                 rec.to_sexpr(),
-                S::Symbol(*var),
+                S::from(var.clone()),
                 cnt.to_sexpr(),
             ]),
 
@@ -149,7 +159,7 @@ impl Expr<Ref<str>> {
                 S::symbol("offset"),
                 S::Int(*idx as i64),
                 rec.to_sexpr(),
-                S::Symbol(*var),
+                S::from(var.clone()),
                 cnt.to_sexpr(),
             ]),
 
@@ -164,8 +174,8 @@ impl Expr<Ref<str>> {
                     .iter()
                     .map(|(fname, fargs, fbody)| {
                         S::list(vec![
-                            S::Symbol(*fname),
-                            S::list(fargs.iter().copied().map(S::Symbol).collect()),
+                            S::from(fname.clone()),
+                            S::list(fargs.iter().cloned().map(S::from).collect()),
                             fbody.to_sexpr(),
                         ])
                     })
@@ -183,7 +193,7 @@ impl Expr<Ref<str>> {
                 S::symbol("primop"),
                 S::Symbol(Ref(op.to_str())),
                 S::list(args.iter().map(Value::to_sexpr).collect()),
-                S::list(vars.iter().copied().map(S::Symbol).collect()),
+                S::list(vars.iter().cloned().map(S::from).collect()),
                 S::list(cnts.iter().map(|c| c.to_sexpr()).collect()),
             ]),
 
@@ -197,16 +207,6 @@ impl Expr<Ref<str>> {
 }
 
 impl Value<Ref<str>> {
-    pub fn to_sexpr(&self) -> S {
-        match self {
-            Value::Var(v) => S::Symbol(*v),
-            Value::Label(v) => S::list(vec![S::symbol("@"), S::Symbol(*v)]),
-            Value::Int(v) => S::Int(*v),
-            Value::Real(v) => S::Float(*v),
-            Value::String(v) => S::String(*v),
-        }
-    }
-
     pub fn from_sexpr(s: &S) -> Result<Self, Error<'static>> {
         match s {
             S::Symbol(v) => Ok(Value::Var(*v)),
@@ -219,8 +219,28 @@ impl Value<Ref<str>> {
     }
 }
 
+impl<V: Clone, F: Clone> Value<V, F>
+where
+    S: From<V>,
+    S: From<F>,
+{
+    pub fn to_sexpr(&self) -> S {
+        match self {
+            Value::Var(v) => S::from(v.clone()),
+            Value::Label(v) => S::list(vec![S::symbol("@"), S::from(v.clone())]),
+            Value::Int(v) => S::Int(*v),
+            Value::Real(v) => S::Float(*v),
+            Value::String(v) => S::String(*v),
+        }
+    }
+}
+
 impl AccessPath {
-    pub fn to_sexpr(&self, val: &Value<Ref<str>>) -> S {
+    pub fn to_sexpr<V: Clone, F: Clone>(&self, val: &Value<V, F>) -> S
+    where
+        S: From<V>,
+        S: From<F>,
+    {
         match self {
             AccessPath::Ref(0) => val.to_sexpr(),
             _ => S::list(vec![val.to_sexpr(), self.to_sexpr_()]),
