@@ -26,6 +26,10 @@ impl<V> RestrictedAst<V> {
         (self.ast, self.gensym_context)
     }
 
+    pub fn expr(&self) -> &Expr<V> {
+        &self.ast
+    }
+
     pub fn assert_all_names_unique(self) -> Self
     where
         V: Clone + Eq + Hash + std::fmt::Debug,
@@ -65,5 +69,13 @@ impl<V> RestrictedAst<V> {
             funcs_referred_by_labels: true,
             ..self
         }
+    }
+
+    pub fn eta_reduce(self) -> Self
+    where
+        V: Clone + Eq + Hash,
+    {
+        let ast = super::cps_eta_reduction::Context.eta_reduce(&self.ast);
+        RestrictedAst { ast, ..self }
     }
 }

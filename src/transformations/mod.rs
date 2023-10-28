@@ -99,13 +99,14 @@ mod tests {
         let cps = cps.rename_uniquely("__");
         let cps = cps.assert_all_names_unique();
         let cps = cps.ensure_funcref_labels();
-        let (cps_expr, gs) = cps.deconstruct();
 
         println!("Initial CPS:");
-        cps_expr.pretty_print();
+        cps.expr().pretty_print();
         println!("\n");
 
-        let cps_expr = cps_eta_reduction::Context.eta_reduce(&cps_expr);
+        let cps = cps.eta_reduce();
+
+        let (cps_expr, gs) = cps.deconstruct();
 
         let cps_expr = cps_uncurrying::Context::new("__").uncurry(&cps_expr);
 

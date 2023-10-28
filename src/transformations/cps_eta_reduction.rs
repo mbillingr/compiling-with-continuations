@@ -1,13 +1,14 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use std::collections::HashMap;
+use std::hash::Hash;
 
 pub struct Context;
 
 impl Context {}
 
 impl Context {
-    pub fn eta_reduce(&'static self, exp: &Expr<Ref<str>>) -> Expr<Ref<str>> {
+    pub fn eta_reduce<V: Clone + Eq + Hash>(&'static self, exp: &Expr<V>) -> Expr<V> {
         match exp {
             Expr::Record(fields, r, cnt) => {
                 Expr::Record(*fields, r.clone(), self.eta_reduce(cnt).into())
@@ -24,7 +25,7 @@ impl Context {
             Expr::App(rator, rands) => Expr::App(rator.clone(), *rands),
 
             Expr::Fix(defs, body) => {
-                let mut defs_out: Vec<(Ref<str>, Ref<[Ref<str>]>, Ref<Expr<Ref<str>>>)> = vec![];
+                let mut defs_out: Vec<(V, Ref<[V]>, Ref<Expr<V>>)> = vec![];
 
                 let mut substitutions = Substitution::new();
 
@@ -92,14 +93,14 @@ fn args_equal_params<V: PartialEq>(params: &Ref<[V]>, args: &Ref<[Value<V>]>) ->
         })
 }
 
-struct Substitution<'a>(HashMap<&'a Ref<str>, &'a Value<Ref<str>>>);
+struct Substitution<'a, V: 'static>(HashMap<&'a V, &'a Value<V>>);
 
-impl<'a> Substitution<'a> {
+impl<'a, V: Eq + Hash> Substitution<'a, V> {
     fn new() -> Self {
         Substitution(HashMap::new())
     }
 
-    fn insert(&mut self, key: &'a Ref<str>, value: &'a Value<Ref<str>>) {
+    fn insert(&mut self, key: &'a V, value: &'a Value<V>) {
         for (_, g_) in &mut self.0 {
             match g_ {
                 Value::Var(v) | Value::Label(v) if v == key => *g_ = value,
@@ -114,7 +115,7 @@ impl<'a> Substitution<'a> {
         };
     }
 
-    fn iter(&self) -> impl Iterator<Item = (&&Ref<str>, &&Value<Ref<str>>)> + '_ {
+    fn iter(&self) -> impl Iterator<Item = (&&V, &&Value<V>)> + '_ {
         self.0.iter()
     }
 }
