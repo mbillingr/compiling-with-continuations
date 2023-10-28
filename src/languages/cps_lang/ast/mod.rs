@@ -1,4 +1,5 @@
 mod accessors;
+mod check_bindings_unique;
 mod count_nodes;
 mod deser;
 mod free_vars;

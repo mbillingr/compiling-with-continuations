@@ -20,6 +20,24 @@ impl<V> RestrictedAst<V> {
         }
     }
 
+    pub fn deconstruct(self) -> (Expr<V>, Arc<GensymContext>) {
+        (self.ast, self.gensym_context)
+    }
+
+    pub fn assert_all_names_unique(self) -> Self
+    where
+        V: Clone + Eq + Hash + std::fmt::Debug,
+    {
+        let bindings = self.ast.check_all_bindings_unique();
+        if !bindings.duplicates.is_empty() {
+            panic!("Duplicate bindings {:?}", bindings.duplicates);
+        }
+        RestrictedAst {
+            all_names_unique: true,
+            ..self
+        }
+    }
+
     pub fn rename_uniquely(&self, new_delimiter: impl ToString) -> Self
     where
         V: std::fmt::Debug + Clone + Eq + Hash + GenSym,

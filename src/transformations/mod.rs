@@ -78,6 +78,7 @@ mod tests {
     use crate::languages::mini_lambda::ast as ml;
     use crate::make_testsuite_for_mini_lambda;
     use crate::transformations::labels_to_vars::LabelsToVars;
+    use crate::transformations::restrictions::RestrictedAst;
 
     unsafe fn run_in_optimized_cps(
         mini_lambda_expr: &ml::Expr<Ref<str>>,
@@ -94,9 +95,10 @@ mod tests {
         )))
         .convert(&expr, Box::new(|x| cps::Expr::Halt(x)));
 
-        let gs = Arc::new(GensymContext::new("__"));
-
-        let cps_expr = make_all_names_unique::Context::new(gs.clone()).rename_all(&cps_expr);
+        let cps = RestrictedAst::new(cps_expr);
+        let cps = cps.rename_uniquely("__");
+        let cps = cps.assert_all_names_unique();
+        let (cps_expr, gs) = cps.deconstruct();
 
         let cps_expr = label_fixrefs::Context::new().convert_labels(&cps_expr);
 
