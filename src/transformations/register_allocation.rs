@@ -3,22 +3,24 @@ use crate::core::sets::Set;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
+use std::fmt::Debug;
+use std::hash::Hash;
 
 pub type R = usize;
 
-pub fn allocate(n_registers: usize, expr: &Expr<Ref<str>>) -> Expr<R, Ref<str>> {
+pub fn allocate<V: Clone + Eq + Hash + Debug>(n_registers: usize, expr: &Expr<V>) -> Expr<R, V> {
     let ctx = AllocationContext::new(n_registers);
     ctx.allocate(expr)
 }
 
 #[derive(Debug, Clone)]
-struct AllocationContext {
+struct AllocationContext<V> {
     all_registers: Ref<[R]>,
     available_registers: BinaryHeap<Reverse<R>>,
-    env: Env,
+    env: Env<V>,
 }
 
-impl AllocationContext {
+impl<V: Clone + Eq + Hash + Debug> AllocationContext<V> {
     pub fn new(n_registers: usize) -> Self {
         let all_registers: Vec<_> = (0..n_registers).collect();
         AllocationContext {
@@ -36,7 +38,7 @@ impl AllocationContext {
         }
     }
 
-    fn allocate(self, expr: &Expr<Ref<str>>) -> Expr<R, Ref<str>> {
+    fn allocate(self, expr: &Expr<V, V>) -> Expr<R, V> {
         let ctx_before = self;
         let free_after = expr
             .continuation_exprs()
@@ -90,7 +92,7 @@ impl AllocationContext {
                         p_out.push(r);
                     }
                     let b_out = ctx_fn.allocate(bdy);
-                    defs_out.push((*f, Ref::array(p_out), Ref::new(b_out)))
+                    defs_out.push((f.clone(), Ref::array(p_out), Ref::new(b_out)))
                 }
                 Expr::Fix(Ref::array(defs_out), Ref::new(ctx_after.allocate(cnt)))
             }
@@ -138,7 +140,7 @@ impl AllocationContext {
         }
     }
 
-    fn transform_value(&self, value: &Value<Ref<str>>) -> Value<R, Ref<str>> {
+    fn transform_value(&self, value: &Value<V, V>) -> Value<R, V> {
         match value {
             Value::Var(v) => Value::Var(
                 self.env
@@ -146,26 +148,26 @@ impl AllocationContext {
                     .unwrap_or_else(|| panic!("unbound variable {v:?}"))
                     .clone(),
             ),
-            Value::Label(l) => Value::Label(*l),
+            Value::Label(l) => Value::Label(l.clone()),
             Value::Int(x) => Value::Int(*x),
             Value::Real(x) => Value::Real(*x),
             Value::String(x) => Value::String(*x),
         }
     }
 
-    fn assign_register(mut self, var: &Ref<str>) -> (R, Self) {
+    fn assign_register(mut self, var: &V) -> (R, Self) {
         let r = self.available_registers.pop().unwrap().0;
         self.env.insert(var.clone(), r);
         (r, self)
     }
 
-    fn free_unused_registers(&self, free_vars: Set<Ref<str>>) -> Self {
+    fn free_unused_registers(&self, free_vars: Set<V>) -> Self {
         let mut available_registers = self.available_registers.clone();
 
         let mut env = Env::new();
         for (k, v) in self.env.iter() {
             if free_vars.contains(k) {
-                env.insert(*k, *v);
+                env.insert(k.clone(), *v);
             } else {
                 available_registers.push(Reverse(*v));
             }
@@ -179,7 +181,7 @@ impl AllocationContext {
     }
 }
 
-type Env = HashMap<Ref<str>, R>;
+type Env<V> = HashMap<V, R>;
 
 #[cfg(test)]
 mod tests {

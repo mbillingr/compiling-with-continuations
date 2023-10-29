@@ -2,8 +2,8 @@ use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use std::iter::once;
 
-impl<V> Expr<V> {
-    pub fn continuation_exprs(&self) -> Vec<&Expr<V>> {
+impl<V, F> Expr<V, F> {
+    pub fn continuation_exprs(&self) -> Vec<&Expr<V, F>> {
         match self {
             Expr::Record(_, _, cnt)
             | Expr::Select(_, _, _, cnt)
@@ -16,9 +16,10 @@ impl<V> Expr<V> {
         }
     }
 
-    pub fn replace_continuations(&self, cnts: impl Iterator<Item = Expr<V>>) -> Expr<V>
+    pub fn replace_continuations(&self, cnts: impl Iterator<Item = Expr<V, F>>) -> Expr<V, F>
     where
         V: Clone,
+        F: Clone,
     {
         let mut cnts = cnts.map(Ref::new);
         let expr_ = match self {
@@ -49,7 +50,7 @@ impl<V> Expr<V> {
         expr_
     }
 
-    pub fn operands(&self) -> Vec<&Value<V>> {
+    pub fn operands(&self) -> Vec<&Value<V, F>> {
         match self {
             Expr::Record(fields, _, _) => fields.iter().map(|(f, _)| f).collect(),
             Expr::Select(_, v, _, _) | Expr::Offset(_, v, _, _) => vec![v],

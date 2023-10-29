@@ -69,7 +69,6 @@ mod tests {
     use super::*;
     use std::io::Write;
     use std::process::{Command, Stdio};
-    use std::sync::Arc;
     use uuid::Uuid;
 
     use crate::core::answer::Answer;
@@ -122,18 +121,19 @@ mod tests {
 
         let cps = cps.spill(n_registers);
 
-        let (cps_expr, gs) = cps.deconstruct();
+        let cps = cps.rename_uniquely("__");
 
-        // finally, get rid of multiple __ parts
-        let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);
         println!("Final:");
-        cps_expr.pretty_print();
+        cps.expr().pretty_print();
         println!("\n");
 
-        let cps_expr = register_allocation::allocate(n_registers, &cps_expr);
+        let cps = cps.allocate_registers();
+
         println!("Registers:");
-        cps_expr.pretty_print();
+        cps.expr().pretty_print();
         println!("\n");
+
+        let (cps_expr, _) = cps.deconstruct();
 
         let c_code = cps_lang_to_c::program_to_c(n_registers, &cps_expr).join("\n");
 

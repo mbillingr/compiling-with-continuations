@@ -8,8 +8,8 @@ use std::sync::Arc;
 const DEFAULT_GENSYM_DELIMITER: &str = "__";
 
 #[derive(Clone)]
-pub struct RestrictedAst<V: 'static> {
-    ast: Expr<V>,
+pub struct RestrictedAst<V: 'static, F: 'static> {
+    ast: Expr<V, F>,
     all_names_unique: bool,
     ref_usage: RefUsage,
     max_args: Option<usize>,
@@ -28,8 +28,8 @@ enum RefUsage {
     LabelsAndVars,
 }
 
-impl<V> RestrictedAst<V> {
-    pub fn new(ast: Expr<V>) -> Self {
+impl<V, F> RestrictedAst<V, F> {
+    pub fn new(ast: Expr<V, F>) -> Self {
         RestrictedAst {
             ast,
             all_names_unique: false,
@@ -42,14 +42,16 @@ impl<V> RestrictedAst<V> {
         }
     }
 
-    pub fn deconstruct(self) -> (Expr<V>, Arc<GensymContext>) {
+    pub fn deconstruct(self) -> (Expr<V, F>, Arc<GensymContext>) {
         (self.ast, self.gensym_context)
     }
 
-    pub fn expr(&self) -> &Expr<V> {
+    pub fn expr(&self) -> &Expr<V, F> {
         &self.ast
     }
+}
 
+impl<V> RestrictedAst<V, V> {
     pub fn assert_all_names_unique(self) -> Self
     where
         V: Clone + Eq + Hash + std::fmt::Debug,
@@ -181,6 +183,8 @@ impl<V> RestrictedAst<V> {
         V: Clone + Eq + Hash + Ord + GenSym + Debug,
     {
         assert!(self.toplevel_structure);
+        assert!(self.max_args.is_some());
+        assert!(self.max_args.unwrap() <= n_registers);
 
         let ast =
             super::spill_phase::spill_toplevel(&self.ast, n_registers, self.gensym_context.clone());
@@ -189,6 +193,28 @@ impl<V> RestrictedAst<V> {
             ast,
             max_free_vars: Some(n_registers),
             ..self
+        }
+    }
+
+    /// Assign variables to registers
+    pub fn allocate_registers(self) -> RestrictedAst<usize, V>
+    where
+        V: Clone + Eq + Hash + Debug,
+    {
+        assert!(self.max_free_vars.is_some());
+        let n_registers = self.max_free_vars.unwrap();
+
+        let ast = super::register_allocation::allocate(n_registers, &self.ast);
+
+        RestrictedAst {
+            ast,
+            all_names_unique: self.all_names_unique,
+            explicit_closures: self.explicit_closures,
+            max_args: self.max_args,
+            max_free_vars: self.max_free_vars,
+            ref_usage: self.ref_usage,
+            toplevel_structure: self.toplevel_structure,
+            gensym_context: self.gensym_context,
         }
     }
 }
