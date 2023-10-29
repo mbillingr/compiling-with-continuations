@@ -120,12 +120,9 @@ mod tests {
         cps.clone().rename_uniquely("__").expr().pretty_print();
         println!("\n");
 
-        let (cps_expr, gs) = cps.deconstruct();
+        let cps = cps.spill(n_registers);
 
-        // Spilling does not work for less than 3 registers in some tests. Not sure if there is a bug
-        // or if it simply can't work with that few registers...
-        let cps_expr =
-            spill_phase::spill_toplevel(&cps_expr, n_registers, Arc::new(GensymContext::new("__")));
+        let (cps_expr, gs) = cps.deconstruct();
 
         // finally, get rid of multiple __ parts
         let cps_expr = make_all_names_unique::Context::new_context("__").rename_all(&cps_expr);

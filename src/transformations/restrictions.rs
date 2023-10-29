@@ -14,6 +14,8 @@ pub struct RestrictedAst<V: 'static> {
     ref_usage: RefUsage,
     max_args: Option<usize>,
     explicit_closures: bool,
+    toplevel_structure: bool,
+    max_free_vars: Option<usize>,
     gensym_context: Arc<GensymContext>,
 }
 
@@ -34,6 +36,8 @@ impl<V> RestrictedAst<V> {
             ref_usage: RefUsage::Unknown,
             max_args: None,
             explicit_closures: false,
+            toplevel_structure: false,
+            max_free_vars: None,
             gensym_context: Arc::new(GensymContext::new(DEFAULT_GENSYM_DELIMITER)),
         }
     }
@@ -164,6 +168,27 @@ impl<V> RestrictedAst<V> {
 
         let ast = super::lambda_lifting::lift_lambdas(&self.ast);
 
-        RestrictedAst { ast, ..self }
+        RestrictedAst {
+            ast,
+            toplevel_structure: true,
+            ..self
+        }
+    }
+
+    /// Make sure the number of free variables never exceeds available registers
+    pub fn spill(self, n_registers: usize) -> Self
+    where
+        V: Clone + Eq + Hash + Ord + GenSym + Debug,
+    {
+        assert!(self.toplevel_structure);
+
+        let ast =
+            super::spill_phase::spill_toplevel(&self.ast, n_registers, self.gensym_context.clone());
+
+        RestrictedAst {
+            ast,
+            max_free_vars: Some(n_registers),
+            ..self
+        }
     }
 }
