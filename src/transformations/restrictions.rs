@@ -145,6 +145,7 @@ impl<V> RestrictedAst<V> {
 
         let ast = super::closure_conversion::Context::new(self.gensym_context.clone())
             .convert_closures(&self.ast);
+
         RestrictedAst {
             ast,
             max_args: self.max_args.map(|n| n + 1), // the closure becomes an extra argument
@@ -152,5 +153,17 @@ impl<V> RestrictedAst<V> {
             explicit_closures: true,
             ..self
         }
+    }
+
+    /// Move all function definitions to the top level
+    pub fn lift_lambdas(self) -> Self
+    where
+        V: Clone + Eq + Hash + Debug,
+    {
+        assert!(self.explicit_closures);
+
+        let ast = super::lambda_lifting::lift_lambdas(&self.ast);
+
+        RestrictedAst { ast, ..self }
     }
 }

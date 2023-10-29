@@ -94,7 +94,7 @@ mod tests {
         .convert(&expr, Box::new(|x| cps::Expr::Halt(x)));
 
         let cps = RestrictedAst::new(cps_expr);
-        let cps = cps.rename_uniquely("__");
+        //let cps = cps.rename_uniquely("__");
         let cps = cps.analyze_refs();
 
         println!("Initial CPS:");
@@ -114,16 +114,13 @@ mod tests {
         let cps = cps.limit_args(max_args);
         let cps = cps.reset_refs();
         let cps = cps.convert_closures();
-
-        let (cps_expr, gs) = cps.deconstruct();
-
-        let cps_expr = lambda_lifting::lift_lambdas(&cps_expr);
+        let cps = cps.lift_lambdas();
 
         println!("Closure Conversion & Lambda Lifting:");
-        make_all_names_unique::Context::new_context("__")
-            .rename_all(&cps_expr)
-            .pretty_print();
+        cps.clone().rename_uniquely("__").expr().pretty_print();
         println!("\n");
+
+        let (cps_expr, gs) = cps.deconstruct();
 
         // Spilling does not work for less than 3 registers in some tests. Not sure if there is a bug
         // or if it simply can't work with that few registers...
