@@ -74,10 +74,8 @@ mod tests {
 
     use crate::core::answer::Answer;
     use crate::languages::cps_lang::ast as cps;
-    use crate::languages::cps_lang::ast::Transform;
     use crate::languages::mini_lambda::ast as ml;
     use crate::make_testsuite_for_mini_lambda;
-    use crate::transformations::labels_to_vars::LabelsToVars;
     use crate::transformations::restrictions::RestrictedAst;
 
     unsafe fn run_in_optimized_cps(
@@ -111,15 +109,13 @@ mod tests {
         println!("\n");
 
         let n_registers = 5;
-        let max_args = n_registers - 2; // reserve two registers for closure and continuation
+        let max_args = n_registers - 1; // reserve one more register for the closure
 
         let cps = cps.limit_args(max_args);
+        let cps = cps.reset_refs();
+        let cps = cps.convert_closures();
 
         let (cps_expr, gs) = cps.deconstruct();
-
-        let cps_expr = LabelsToVars.transform_expr(&cps_expr);
-
-        let cps_expr = closure_conversion::Context::new(gs.clone()).convert_closures(&cps_expr);
 
         let cps_expr = lambda_lifting::lift_lambdas(&cps_expr);
 

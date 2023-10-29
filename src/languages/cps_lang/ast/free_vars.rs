@@ -5,7 +5,7 @@ use map_macro::hash_set;
 use std::collections::HashSet;
 use std::hash::Hash;
 
-impl<V: Clone + PartialEq + Eq + Hash> Expr<V> {
+impl<V: Clone + Eq + Hash> Expr<V> {
     pub fn free_vars(&self) -> FreeVars<V> {
         match self {
             Expr::Record(fields, r, cnt) => cnt

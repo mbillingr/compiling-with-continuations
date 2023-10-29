@@ -1,5 +1,6 @@
 use crate::languages::cps_lang::ast::{Expr, Transform};
 use crate::transformations::{GenSym, GensymContext};
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -10,10 +11,19 @@ const DEFAULT_GENSYM_DELIMITER: &str = "__";
 pub struct RestrictedAst<V: 'static> {
     ast: Expr<V>,
     all_names_unique: bool,
-    vars_refer_to_values_only: bool,
-    labels_refer_to_funcs_only: bool,
+    ref_usage: RefUsage,
     max_args: Option<usize>,
+    explicit_closures: bool,
     gensym_context: Arc<GensymContext>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum RefUsage {
+    Unknown,
+    /// Value::Var refers to both, values and functions
+    VarsOnly,
+    /// Value::Var refers to values and Value::Label refers to functions
+    LabelsAndVars,
 }
 
 impl<V> RestrictedAst<V> {
@@ -21,9 +31,9 @@ impl<V> RestrictedAst<V> {
         RestrictedAst {
             ast,
             all_names_unique: false,
-            vars_refer_to_values_only: false,
-            labels_refer_to_funcs_only: false,
+            ref_usage: RefUsage::Unknown,
             max_args: None,
+            explicit_closures: false,
             gensym_context: Arc::new(GensymContext::new(DEFAULT_GENSYM_DELIMITER)),
         }
     }
@@ -74,8 +84,20 @@ impl<V> RestrictedAst<V> {
         let ast = super::label_fixrefs::Context::new().analyze_refs(&self.ast);
         RestrictedAst {
             ast,
-            vars_refer_to_values_only: true,
-            labels_refer_to_funcs_only: true,
+            ref_usage: RefUsage::LabelsAndVars,
+            ..self
+        }
+    }
+
+    /// Use only Value::Var for both, values and functions
+    pub fn reset_refs(self) -> Self
+    where
+        V: Clone + PartialEq,
+    {
+        let ast = super::labels_to_vars::LabelsToVars.transform_expr(&self.ast);
+        RestrictedAst {
+            ast,
+            ref_usage: RefUsage::VarsOnly,
             ..self
         }
     }
@@ -100,7 +122,7 @@ impl<V> RestrictedAst<V> {
         RestrictedAst { ast, ..self }
     }
 
-    /// Ensure that no function takes mon than `max_args` arguments.
+    /// Ensure that no function takes more than `max_args` arguments.
     pub fn limit_args(self, max_args: usize) -> Self
     where
         V: Clone + PartialEq + GenSym,
@@ -110,6 +132,24 @@ impl<V> RestrictedAst<V> {
         RestrictedAst {
             ast,
             max_args: Some(max_args),
+            ..self
+        }
+    }
+
+    /// Change all functions no accept their closure as an argument
+    pub fn convert_closures(self) -> Self
+    where
+        V: Clone + Ord + Eq + Hash + GenSym + Debug,
+    {
+        assert_eq!(self.ref_usage, RefUsage::VarsOnly);
+
+        let ast = super::closure_conversion::Context::new(self.gensym_context.clone())
+            .convert_closures(&self.ast);
+        RestrictedAst {
+            ast,
+            max_args: self.max_args.map(|n| n + 1), // the closure becomes an extra argument
+            ref_usage: RefUsage::LabelsAndVars, // the conversion uses Value::Label to put functions into closure records
+            explicit_closures: true,
             ..self
         }
     }
