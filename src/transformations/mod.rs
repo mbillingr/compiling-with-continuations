@@ -110,12 +110,12 @@ mod tests {
         cps.clone().rename_uniquely("__").expr().pretty_print();
         println!("\n");
 
-        let (cps_expr, gs) = cps.deconstruct();
-
         let n_registers = 5;
         let max_args = n_registers - 2; // reserve two registers for closure and continuation
 
-        let cps_expr = limit_args::LimitArgs::new(max_args, gs.clone()).transform_expr(&cps_expr);
+        let cps = cps.limit_args(max_args);
+
+        let (cps_expr, gs) = cps.deconstruct();
 
         let cps_expr = LabelsToVars.transform_expr(&cps_expr);
 

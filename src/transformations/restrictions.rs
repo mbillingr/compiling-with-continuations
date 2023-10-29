@@ -1,4 +1,4 @@
-use crate::languages::cps_lang::ast::Expr;
+use crate::languages::cps_lang::ast::{Expr, Transform};
 use crate::transformations::{GenSym, GensymContext};
 use std::hash::Hash;
 use std::ops::Deref;
@@ -11,6 +11,7 @@ pub struct RestrictedAst<V: 'static> {
     ast: Expr<V>,
     all_names_unique: bool,
     funcs_referred_by_labels: bool,
+    max_args: Option<usize>,
     gensym_context: Arc<GensymContext>,
 }
 
@@ -20,6 +21,7 @@ impl<V> RestrictedAst<V> {
             ast,
             all_names_unique: false,
             funcs_referred_by_labels: false,
+            max_args: None,
             gensym_context: Arc::new(GensymContext::new(DEFAULT_GENSYM_DELIMITER)),
         }
     }
@@ -46,6 +48,7 @@ impl<V> RestrictedAst<V> {
         }
     }
 
+    /// Make every name (variables, functions) unique.
     pub fn rename_uniquely(self, new_delimiter: impl ToString) -> Self
     where
         V: std::fmt::Debug + Clone + Eq + Hash + GenSym,
@@ -61,6 +64,7 @@ impl<V> RestrictedAst<V> {
         }
     }
 
+    /// Ensure that functions are referenced by Value::Label instead of Value::Var.
     pub fn ensure_funcref_labels(self) -> Self
     where
         V: Clone + Eq + Hash + GenSym,
@@ -73,6 +77,8 @@ impl<V> RestrictedAst<V> {
         }
     }
 
+    /// Remove function definitions that trivially wrap another function.
+    /// E.g. with `(define (foo x y) (bar x y))` every call to foo is replaced with a call to bar.
     pub fn eta_reduce(self) -> Self
     where
         V: Clone + Eq + Hash,
@@ -81,6 +87,7 @@ impl<V> RestrictedAst<V> {
         RestrictedAst { ast, ..self }
     }
 
+    /// Perform an uncurrying step.
     pub fn uncurry(self) -> Self
     where
         V: Clone + PartialEq + Deref<Target = str> + GenSym,
@@ -88,5 +95,19 @@ impl<V> RestrictedAst<V> {
         let ast =
             super::cps_uncurrying::Context::new(self.gensym_context.clone()).uncurry(&self.ast);
         RestrictedAst { ast, ..self }
+    }
+
+    /// Ensure that no function takes mon than `max_args` arguments.
+    pub fn limit_args(self, max_args: usize) -> Self
+    where
+        V: Clone + PartialEq + GenSym,
+    {
+        let ast = super::limit_args::LimitArgs::new(max_args, self.gensym_context.clone())
+            .transform_expr(&self.ast);
+        RestrictedAst {
+            ast,
+            max_args: Some(max_args),
+            ..self
+        }
     }
 }
