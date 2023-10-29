@@ -97,7 +97,7 @@ mod tests {
 
         let cps = RestrictedAst::new(cps_expr);
         let cps = cps.rename_uniquely("__");
-        let cps = cps.ensure_funcref_labels();
+        let cps = cps.analyze_refs();
 
         println!("Initial CPS:");
         cps.expr().pretty_print();

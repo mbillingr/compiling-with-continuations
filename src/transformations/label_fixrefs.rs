@@ -17,7 +17,7 @@ impl Context {
         Context {}
     }
 
-    pub fn convert_labels<V: Clone + Eq + Hash>(&mut self, expr: &Expr<V>) -> Expr<V> {
+    pub fn analyze_refs<V: Clone + Eq + Hash>(&mut self, expr: &Expr<V>) -> Expr<V> {
         self.convert_exp(expr, &HashMap::new())
     }
 
@@ -118,6 +118,13 @@ impl Context {
                 return Value::Label(x.clone());
             }
         }
+
+        if let Value::Label(x) = val {
+            if let Some(Binding { is_label: false }) = bindings.get(x) {
+                return Value::Var(x.clone());
+            }
+        }
+
         val.clone()
     }
 
@@ -165,32 +172,32 @@ mod tests {
     fn convert_fix() {
         let x: Expr<&str> = cps_expr!(fix f(x)=(f x) in (f f));
         let y: Expr<&str> = cps_expr!(fix f(x)=((@f) x) in ((@f) (@f)));
-        assert_eq!(Context::new().convert_labels(&x), y);
+        assert_eq!(Context::new().analyze_refs(&x), y);
 
         let x: Expr<&str> = cps_expr!(fix f(x)=(x) in (switch f [(f f)]));
         let y: Expr<&str> = cps_expr!(fix f(x)=(x) in (switch (@f) [((@f) (@f))]));
-        assert_eq!(Context::new().convert_labels(&x), y);
+        assert_eq!(Context::new().analyze_refs(&x), y);
     }
 
     #[test]
     fn dont_convert_funcs_shadowed_by_locals() {
         let x: Expr<&str> = cps_expr!(fix f(x)=(x); g(f)=(f) in (g f));
         let y: Expr<&str> = cps_expr!(fix f(x)=(x); g(f)=(f) in ((@g) (@f)));
-        assert_eq!(Context::new().convert_labels(&x), y);
+        assert_eq!(Context::new().analyze_refs(&x), y);
     }
 
     #[test]
     fn dont_convert_funcs_shadowed_by_exprs() {
         let x: Expr<&str> = cps_expr!(fix f(x)=(x) in (record [] f (f)));
-        assert_eq!(Context::new().convert_labels(&x), x);
+        assert_eq!(Context::new().analyze_refs(&x), x);
 
         let x: Expr<&str> = cps_expr!(fix f(x)=(x) in (select 0 r f (f)));
-        assert_eq!(Context::new().convert_labels(&x), x);
+        assert_eq!(Context::new().analyze_refs(&x), x);
 
         let x: Expr<&str> = cps_expr!(fix f(x)=(x) in (offset 0 r f (f)));
-        assert_eq!(Context::new().convert_labels(&x), x);
+        assert_eq!(Context::new().analyze_refs(&x), x);
 
         let x: Expr<&str> = cps_expr!(fix f(x)=(x) in (box (int 0) [f] [(f f)]));
-        assert_eq!(Context::new().convert_labels(&x), x);
+        assert_eq!(Context::new().analyze_refs(&x), x);
     }
 }

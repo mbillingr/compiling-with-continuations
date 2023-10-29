@@ -97,7 +97,7 @@ fn convert_labels() {
 
     let expr_in = CExpr::from_str(&src).unwrap();
 
-    let expr_out = ctx.convert_labels(&expr_in);
+    let expr_out = ctx.analyze_refs(&expr_in);
 
     writeln!(stdout(), "{}", expr_out).unwrap();
 }

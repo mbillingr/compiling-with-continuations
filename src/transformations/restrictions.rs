@@ -10,7 +10,8 @@ const DEFAULT_GENSYM_DELIMITER: &str = "__";
 pub struct RestrictedAst<V: 'static> {
     ast: Expr<V>,
     all_names_unique: bool,
-    funcs_referred_by_labels: bool,
+    vars_refer_to_values_only: bool,
+    labels_refer_to_funcs_only: bool,
     max_args: Option<usize>,
     gensym_context: Arc<GensymContext>,
 }
@@ -20,7 +21,8 @@ impl<V> RestrictedAst<V> {
         RestrictedAst {
             ast,
             all_names_unique: false,
-            funcs_referred_by_labels: false,
+            vars_refer_to_values_only: false,
+            labels_refer_to_funcs_only: false,
             max_args: None,
             gensym_context: Arc::new(GensymContext::new(DEFAULT_GENSYM_DELIMITER)),
         }
@@ -64,15 +66,16 @@ impl<V> RestrictedAst<V> {
         }
     }
 
-    /// Ensure that functions are referenced by Value::Label instead of Value::Var.
-    pub fn ensure_funcref_labels(self) -> Self
+    /// Ensure that functions are referenced by Value::Label and values by Value::Var.
+    pub fn analyze_refs(self) -> Self
     where
         V: Clone + Eq + Hash + GenSym,
     {
-        let ast = super::label_fixrefs::Context::new().convert_labels(&self.ast);
+        let ast = super::label_fixrefs::Context::new().analyze_refs(&self.ast);
         RestrictedAst {
             ast,
-            funcs_referred_by_labels: true,
+            vars_refer_to_values_only: true,
+            labels_refer_to_funcs_only: true,
             ..self
         }
     }
