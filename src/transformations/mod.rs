@@ -1,4 +1,5 @@
 use crate::core::reference::Ref;
+use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -31,81 +32,71 @@ impl GensymContext {
         }
     }
 
-    fn gensym<V: GenSym>(&self, name: &str) -> V {
+    fn gensym<V: GenSym>(&self, name: impl Display) -> V {
         let n = self.sym_ctr.fetch_add(1, Ordering::Relaxed);
         V::gensym(name, &self.sym_delim, n)
     }
 
-    fn resetsym<V: GenSym>(&self, name: &str) -> V {
+    fn resetsym<V: GenSym>(&self, name: impl Display) -> V {
+        let name = name.to_string();
         let name = name.split(&self.sym_delim).next().unwrap();
         let n = self.sym_ctr.fetch_add(1, Ordering::Relaxed);
         V::gensym(name, &self.sym_delim, n)
     }
+
+    fn gensym2<V: GenSym>(&self, prefix: impl Display, suffix: impl Display) -> V {
+        let n = self.sym_ctr.fetch_add(1, Ordering::Relaxed);
+        V::gensym2(prefix, &self.sym_delim, n, suffix)
+    }
 }
 
 pub trait GenSym: Deref<Target = str> {
-    fn gensym(
-        name: impl std::fmt::Display,
-        delim: impl std::fmt::Display,
-        unique: impl std::fmt::Display,
-    ) -> Self;
+    fn gensym(name: impl Display, delim: impl Display, unique: impl Display) -> Self;
     fn gensym2(
-        name: impl std::fmt::Display,
-        delim: impl std::fmt::Display,
-        unique: impl std::fmt::Display,
-        suffix: impl std::fmt::Display,
+        name: impl Display,
+        delim: impl Display,
+        unique: impl Display,
+        suffix: impl Display,
     ) -> Self;
 }
 
 impl GenSym for Ref<str> {
-    fn gensym(
-        name: impl std::fmt::Display,
-        delim: impl std::fmt::Display,
-        unique: impl std::fmt::Display,
-    ) -> Self {
+    fn gensym(name: impl Display, delim: impl Display, unique: impl Display) -> Self {
         Ref::from(format!("{name}{}{}", delim, unique))
     }
     fn gensym2(
-        name: impl std::fmt::Display,
-        delim: impl std::fmt::Display,
-        unique: impl std::fmt::Display,
-        suffix: impl std::fmt::Display,
+        name: impl Display,
+        delim: impl Display,
+        unique: impl Display,
+        suffix: impl Display,
     ) -> Self {
         Ref::from(format!("{name}{delim}{unique}{delim}{suffix}"))
     }
 }
 
 impl GenSym for String {
-    fn gensym(
-        name: impl std::fmt::Display,
-        delim: impl std::fmt::Display,
-        unique: impl std::fmt::Display,
-    ) -> Self {
+    fn gensym(name: impl Display, delim: impl Display, unique: impl Display) -> Self {
         format!("{name}{}{}", delim, unique)
     }
     fn gensym2(
-        name: impl std::fmt::Display,
-        delim: impl std::fmt::Display,
-        unique: impl std::fmt::Display,
-        suffix: impl std::fmt::Display,
+        name: impl Display,
+        delim: impl Display,
+        unique: impl Display,
+        suffix: impl Display,
     ) -> Self {
         format!("{name}{delim}{unique}{delim}{suffix}")
     }
 }
 
 impl GenSym for &'static str {
-    fn gensym(
-        name: impl std::fmt::Display,
-        delim: impl std::fmt::Display,
-        unique: impl std::fmt::Display,
-    ) -> Self {
+    fn gensym(name: impl Display, delim: impl Display, unique: impl Display) -> Self {
         Box::leak(format!("{name}{}{}", delim, unique).into_boxed_str())
     }
     fn gensym2(
-        name: impl std::fmt::Display,
-        delim: impl std::fmt::Display,
-        unique: impl std::fmt::Display,
-        suffix: impl std::fmt::Display,
+        name: impl Display,
+        delim: impl Display,
+        unique: impl Display,
+        suffix: impl Display,
     ) -> Self {
         Box::leak(format!("{name}{delim}{unique}{delim}{suffix}").into_boxed_str())
     }
@@ -122,6 +113,7 @@ mod tests {
     use crate::languages::cps_lang::ast as cps;
     use crate::languages::mini_lambda::ast as ml;
     use crate::make_testsuite_for_mini_lambda;
+    use crate::transformations::cps_lang_to_abstract_machine::Op;
     use crate::transformations::restrictions::RestrictedAst;
 
     unsafe fn run_in_optimized_cps(
@@ -178,6 +170,17 @@ mod tests {
 
         println!("Registers:");
         cps.expr().pretty_print();
+        println!("\n");
+
+        let byte_code = cps.clone().generate_linear_code([0, 1, 2]);
+
+        println!("Linear:");
+        for op in byte_code {
+            match op {
+                Op::Label(l) => println!("{l}:"),
+                _ => println!("  {op:?}"),
+            }
+        }
         println!("\n");
 
         let c_code = cps.generate_c_code();

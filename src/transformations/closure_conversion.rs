@@ -2,7 +2,7 @@ use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
 use crate::transformations::{GenSym, GensymContext};
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -25,13 +25,13 @@ impl Context {
 }
 
 impl Context {
-    pub fn convert_closures<V: Clone + Ord + Eq + Hash + GenSym + Debug>(
+    pub fn convert_closures<V: Clone + Ord + Eq + Hash + GenSym + Debug + Display>(
         &self,
         exp: &Expr<V>,
     ) -> Expr<V> {
         self.convert_closures_(exp, &KnownFunctions::new())
     }
-    fn convert_closures_<V: Clone + Ord + Eq + Hash + GenSym + Debug>(
+    fn convert_closures_<V: Clone + Ord + Eq + Hash + GenSym + Debug + Display>(
         &self,
         exp: &Expr<V>,
         known_functions: &KnownFunctions<V>,
@@ -163,7 +163,7 @@ struct Closure<'a, V> {
     vars: Vec<V>,
 }
 
-impl<'a, V: Clone + Deref<Target = str> + GenSym + Debug> Closure<'a, V> {
+impl<'a, V: Clone + Deref<Target = str> + GenSym + Debug + Display> Closure<'a, V> {
     fn new(gs: &'a GensymContext) -> Self {
         Closure {
             gs,

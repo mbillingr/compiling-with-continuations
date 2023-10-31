@@ -1,16 +1,14 @@
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
-use crate::transformations::GensymContext;
-use std::borrow::Borrow;
+use crate::transformations::{GenSym, GensymContext};
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::marker::PhantomData;
-use std::ops::Deref;
 use std::sync::Arc;
 
-enum Op<V, F> {
+#[derive(Debug)]
+pub enum Op<V, F> {
     Label(F),
     BeginRecord(usize),
     PushRecord(Rand<V, F>),
@@ -42,7 +40,8 @@ enum Op<V, F> {
     StrIsEq(Rand<V, F>, Rand<V, F>, R<V>),
 }
 
-enum Rand<V, F> {
+#[derive(Debug, Clone)]
+pub enum Rand<V, F> {
     Label(F),
     Register(R<V>),
     Int(i64),
@@ -50,9 +49,9 @@ enum Rand<V, F> {
     String(Ref<String>),
 }
 
-#[derive(Clone, PartialEq)]
-enum R<V> {
-    General(V),
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum R<V> {
+    R(V),
     Tmp,
     Tmp2,
 }
@@ -63,17 +62,22 @@ pub struct Context<V, F> {
     gs: Arc<GensymContext>,
 }
 
-impl<
-        V: Clone + PartialEq + std::fmt::Debug + Display,
-        F: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + std::fmt::Debug + Display,
-    > Context<V, F>
+impl<V: Clone + PartialEq + Debug + Display, F: Clone + Eq + Hash + GenSym + Debug + Display>
+    Context<V, F>
 {
-    pub fn new(standard_arg_registers: Vec<R<V>>, gs: Arc<GensymContext>) -> Self {
+    pub fn new(
+        standard_arg_registers: impl IntoIterator<Item = V>,
+        gs: Arc<GensymContext>,
+    ) -> Self {
         Context {
-            standard_arg_registers,
+            standard_arg_registers: standard_arg_registers.into_iter().map(R::R).collect(),
             functions: Default::default(),
             gs,
         }
+    }
+
+    pub fn linearize_toplevel(&mut self, expr: &Expr<V, F>) -> Vec<Op<V, F>> {
+        self.linearize(expr, vec![])
     }
 
     fn linearize(&mut self, expr: &Expr<V, F>, mut ops: Vec<Op<V, F>>) -> Vec<Op<V, F>> {
@@ -83,19 +87,19 @@ impl<
                 for (val, ap) in fields.iter() {
                     ops = self.linearize_access(val, ap, ops);
                 }
-                ops.push(Op::EndRecord(R::General(var.clone())));
+                ops.push(Op::EndRecord(R::R(var.clone())));
                 self.linearize(cnt, ops)
             }
 
             Expr::Select(idx, rec, var, cnt) => {
                 let r = self.generate_operand(rec);
-                ops.push(Op::Select(*idx, r, R::General(var.clone())));
+                ops.push(Op::Select(*idx, r, R::R(var.clone())));
                 self.linearize(cnt, ops)
             }
 
             Expr::Offset(idx, rec, var, cnt) => {
                 let r = self.generate_operand(rec);
-                ops.push(Op::Select(*idx, r, R::General(var.clone())));
+                ops.push(Op::Select(*idx, r, R::R(var.clone())));
                 self.linearize(cnt, ops)
             }
 
@@ -108,7 +112,7 @@ impl<
 
             Expr::App(Value::Var(f), rands) => {
                 ops = self.set_values(&self.standard_arg_registers, rands, ops);
-                ops.push(Op::Tailcall(Rand::Register(R::General(f.clone()))));
+                ops.push(Op::Tailcall(Rand::Register(R::R(f.clone()))));
                 ops
             }
 
@@ -143,15 +147,12 @@ impl<
             }
 
             Expr::PrimOp(PrimOp::Untag, Ref([a]), Ref([var]), Ref([cnt])) => {
-                ops.push(Op::Untag(self.generate_operand(a), R::General(var.clone())));
+                ops.push(Op::Untag(self.generate_operand(a), R::R(var.clone())));
                 self.linearize(cnt, ops)
             }
 
             Expr::PrimOp(PrimOp::INeg, Ref([a]), Ref([var]), Ref([cnt])) => {
-                ops.push(Op::IntNegate(
-                    self.generate_operand(a),
-                    R::General(var.clone()),
-                ));
+                ops.push(Op::IntNegate(self.generate_operand(a), R::R(var.clone())));
                 self.linearize(cnt, ops)
             }
 
@@ -159,7 +160,7 @@ impl<
                 ops.push(Op::IntAdd(
                     self.generate_operand(a),
                     self.generate_operand(b),
-                    R::General(var.clone()),
+                    R::R(var.clone()),
                 ));
                 self.linearize(cnt, ops)
             }
@@ -168,7 +169,7 @@ impl<
                 ops.push(Op::IntSub(
                     self.generate_operand(a),
                     self.generate_operand(b),
-                    R::General(var.clone()),
+                    R::R(var.clone()),
                 ));
                 self.linearize(cnt, ops)
             }
@@ -216,22 +217,22 @@ impl<
 
             Expr::PrimOp(PrimOp::ShowInt, Ref([a]), Ref([var]), Ref([cnt])) => {
                 let a_ = self.generate_operand(a);
-                ops.push(Op::IntShow(a_));
-                ops.push(Op::Copy(a_, R::General(var.clone())));
+                ops.push(Op::IntShow(a_.clone()));
+                ops.push(Op::Copy(a_, R::R(var.clone())));
                 self.linearize(cnt, ops)
             }
 
             Expr::PrimOp(PrimOp::ShowReal, Ref([a]), Ref([var]), Ref([cnt])) => {
                 let a_ = self.generate_operand(a);
-                ops.push(Op::FloatShow(a_));
-                ops.push(Op::Copy(a_, R::General(var.clone())));
+                ops.push(Op::FloatShow(a_.clone()));
+                ops.push(Op::Copy(a_, R::R(var.clone())));
                 self.linearize(cnt, ops)
             }
 
             Expr::PrimOp(PrimOp::ShowStr, Ref([a]), Ref([var]), Ref([cnt])) => {
                 let a_ = self.generate_operand(a);
-                ops.push(Op::StrShow(a_));
-                ops.push(Op::Copy(a_, R::General(var.clone())));
+                ops.push(Op::StrShow(a_.clone()));
+                ops.push(Op::Copy(a_, R::R(var.clone())));
                 self.linearize(cnt, ops)
             }
 
@@ -257,7 +258,11 @@ impl<
     ) -> Vec<Op<V, F>> {
         let then_label = self.generate_unique_label("if", "then");
         let else_label = self.generate_unique_label("if", "else");
-        ops.push(Op::If(Rand::Register(R::Tmp), then_label, else_label));
+        ops.push(Op::If(
+            Rand::Register(R::Tmp),
+            then_label.clone(),
+            else_label.clone(),
+        ));
         ops.push(Op::Label(else_label));
         ops = self.linearize(else_cnt, ops);
         ops.push(Op::Label(then_label));
@@ -269,24 +274,24 @@ impl<
             Value::Int(i) => Rand::Int(*i),
             Value::Real(r) => Rand::Real(*r),
             Value::String(s) => Rand::String(*s),
-            Value::Var(v) => Rand::Register(R::General(v.clone())),
+            Value::Var(v) => Rand::Register(R::R(v.clone())),
             Value::Label(v) => Rand::Label(v.clone()),
         }
     }
 
     fn generate_unique_label(&mut self, prefix: impl Display, suffix: impl Display) -> F {
-        todo!()
+        self.gs.gensym2(prefix, suffix)
     }
 
     fn generate_unique_labels(&mut self, prefix: impl Display, n: usize) -> Vec<F> {
-        todo!()
+        (0..n).map(|_| self.gs.gensym(&prefix)).collect()
     }
 
     fn linearize_access(
         &self,
         value: &Value<V, F>,
-        mut ap: &AccessPath,
-        mut ops: Vec<Op<V, F>>,
+        ap: &AccessPath,
+        ops: Vec<Op<V, F>>,
     ) -> Vec<Op<V, F>> {
         let val = self.generate_operand(value);
         let (val, mut ops) = self.linearize_access_(val, ap, ops);
@@ -297,7 +302,7 @@ impl<
     fn linearize_access_(
         &self,
         value: Rand<V, F>,
-        mut ap: &AccessPath,
+        ap: &AccessPath,
         mut ops: Vec<Op<V, F>>,
     ) -> (Rand<V, F>, Vec<Op<V, F>>) {
         match ap {
@@ -325,7 +330,7 @@ impl<
         for (tgt, v) in targets.iter().zip(values) {
             match v {
                 Value::Var(r) => {
-                    let r = R::General(r.clone());
+                    let r = R::R(r.clone());
                     if &r != tgt {
                         pending_copies.push((r, tgt.clone()));
                     }
@@ -398,9 +403,9 @@ struct KnownFunction<V> {
 }
 
 impl<V: Clone> KnownFunction<V> {
-    fn new(params: &[R<V>]) -> Self {
+    fn new(params: &[V]) -> Self {
         KnownFunction {
-            arg_registers: params.to_vec(),
+            arg_registers: params.into_iter().cloned().map(R::R).collect(),
         }
     }
 }
@@ -410,19 +415,16 @@ mod tests {
     use super::*;
 
     fn check_shuffler(input: &[(&str, &str)]) {
-        let inputs: Vec<_> = input
-            .iter()
-            .map(|(s, t)| (s.to_string(), t.to_string()))
-            .collect();
+        let inputs: Vec<_> = input.iter().map(|(s, t)| (R::R(*s), R::R(*t))).collect();
         let assignments = Context::<&str, &str>::shuffle_registers(inputs.clone());
 
-        let mut outputs: HashMap<String, String> =
+        let mut outputs: HashMap<_, _> =
             inputs.iter().map(|(s, _)| (s.clone(), s.clone())).collect();
         for (src, tgt) in assignments {
             let val = outputs[&src].clone();
             outputs.insert(tgt, val);
         }
-        let outputs: HashMap<String, String> = inputs
+        let outputs: HashMap<_, _> = inputs
             .iter()
             .map(|(_, t)| (t.clone(), outputs.remove(t).unwrap()))
             .collect();

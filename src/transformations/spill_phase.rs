@@ -4,15 +4,16 @@ use crate::languages::cps_lang::ast::{AccessPath, Expr, Transform, Transformed, 
 use crate::set;
 use crate::transformations::{GenSym, GensymContext};
 use std::collections::{HashMap, VecDeque};
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::sync::Arc;
-pub fn spill_toplevel<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug>(
+pub fn spill_toplevel<V: Clone + Eq + Hash + Ord + GenSym + Debug + Display>(
     expr: &Expr<V>,
     n_registers: usize,
     gs: Arc<GensymContext>,
 ) -> Expr<V> {
     if let Expr::Fix(defs, cnt) = expr {
-        for (f, p, _) in defs.iter() {
+        for (_, p, _) in defs.iter() {
             if p.len() > n_registers {
                 panic!("function {f:?} has more parameters than available registers")
             }
@@ -89,7 +90,7 @@ impl<V: Clone + Eq + Hash> Spill<V> {
     }
 }
 
-impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spill<V> {
+impl<V: Clone + Eq + Hash + Ord + GenSym + Debug + Display> Transform<V> for Spill<V> {
     fn visit_expr(&mut self, expr: &Expr<V>) -> Transformed<Expr<V>> {
         Transformed::Done(self.transform_expr(expr))
     }
@@ -102,11 +103,11 @@ impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Transform<V> for Spi
     where
         Self: Sized,
     {
-        Self::transform_expr(self, expr)
+        Spill::transform_expr(self, expr)
     }
 }
 
-impl<V: Clone + Eq + Hash + Ord + GenSym + std::fmt::Debug> Spill<V> {
+impl<V: Clone + Eq + Hash + Ord + GenSym + Debug + Display> Spill<V> {
     pub fn transform_expr(&self, expr: &Expr<V>) -> Expr<V> {
         if let Expr::Fix(_, _) = expr {
             panic!(
@@ -136,7 +137,7 @@ struct SpillStep<'a, V: 'static + Eq + Hash> {
     gs: Arc<GensymContext>,
 }
 
-impl<'a, V: Eq + Hash + Clone + GenSym + Ord + std::fmt::Debug> SpillStep<'a, V> {
+impl<'a, V: Eq + Hash + Clone + GenSym + Ord + Debug + Display> SpillStep<'a, V> {
     fn new(spill: &'a Spill<V>, expr: &'a Expr<V>) -> Self {
         // todo: is this correct, or should we include a set item for every argument to the expr,
         //       even if it's not a variable?

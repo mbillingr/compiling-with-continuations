@@ -2,6 +2,7 @@ use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use crate::transformations::{GenSym, GensymContext};
 use std::collections::HashMap;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -22,14 +23,14 @@ impl Context {
         }
     }
 
-    pub fn rename_all<V: std::fmt::Debug + Clone + Eq + Hash + GenSym + Deref<Target = str>>(
+    pub fn rename_all<V: Debug + Display + Clone + Eq + Hash + GenSym + Deref<Target = str>>(
         &mut self,
         expr: &Expr<V>,
     ) -> Expr<V> {
         self.convert_exp(expr, &HashMap::new())
     }
 
-    fn convert_exp<V: std::fmt::Debug + Clone + Eq + Hash + GenSym + Deref<Target = str>>(
+    fn convert_exp<V: Debug + Display + Clone + Eq + Hash + GenSym + Deref<Target = str>>(
         &self,
         expr: &Expr<V>,
         bindings: &HashMap<V, V>,
@@ -116,7 +117,7 @@ impl Context {
         }
     }
 
-    fn convert_with<V: std::fmt::Debug + Clone + Eq + Hash + GenSym + Deref<Target = str>>(
+    fn convert_with<V: Debug + Display + Clone + Eq + Hash + GenSym + Deref<Target = str>>(
         &self,
         expr: &Expr<V>,
         bindings: &HashMap<V, V>,
@@ -128,7 +129,7 @@ impl Context {
         (self.convert_exp(expr, &bindings), newname)
     }
 
-    fn convert_val<V: std::fmt::Debug + Clone + Eq + Hash>(
+    fn convert_val<V: Debug + Display + Clone + Eq + Hash>(
         &self,
         val: &Value<V>,
         bindings: &HashMap<V, V>,
@@ -150,7 +151,7 @@ impl Context {
         }
     }
 
-    fn convert_vals<V: std::fmt::Debug + Clone + Eq + Hash>(
+    fn convert_vals<V: Debug + Display + Clone + Eq + Hash>(
         &self,
         vals: &[Value<V>],
         bindings: &HashMap<V, V>,

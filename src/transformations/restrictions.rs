@@ -55,7 +55,7 @@ impl<V, F> RestrictedAst<V, F> {
 impl<V> RestrictedAst<V, V> {
     pub fn assert_all_names_unique(self) -> Self
     where
-        V: Clone + Eq + Hash + std::fmt::Debug,
+        V: Clone + Eq + Hash + Debug + Display,
     {
         let bindings = self.ast.check_all_bindings_unique();
         if !bindings.duplicates.is_empty() {
@@ -70,7 +70,7 @@ impl<V> RestrictedAst<V, V> {
     /// Make every name (variables, functions) unique.
     pub fn rename_uniquely(self, new_delimiter: impl ToString) -> Self
     where
-        V: std::fmt::Debug + Clone + Eq + Hash + GenSym,
+        V: Debug + Display + Clone + Eq + Hash + GenSym,
     {
         let gensym_context = Arc::new(GensymContext::new(new_delimiter));
         let ast = super::make_all_names_unique::Context::new(gensym_context.clone())
@@ -122,7 +122,7 @@ impl<V> RestrictedAst<V, V> {
     /// Perform an uncurrying step.
     pub fn uncurry(self) -> Self
     where
-        V: Clone + PartialEq + Deref<Target = str> + GenSym,
+        V: Clone + PartialEq + Deref<Target = str> + GenSym + Display,
     {
         let ast =
             super::cps_uncurrying::Context::new(self.gensym_context.clone()).uncurry(&self.ast);
@@ -146,7 +146,7 @@ impl<V> RestrictedAst<V, V> {
     /// Change all functions no accept their closure as an argument
     pub fn convert_closures(self) -> Self
     where
-        V: Clone + Ord + Eq + Hash + GenSym + Debug,
+        V: Clone + Ord + Eq + Hash + GenSym + Debug + Display,
     {
         assert_eq!(self.ref_usage, RefUsage::VarsOnly);
 
@@ -181,7 +181,7 @@ impl<V> RestrictedAst<V, V> {
     /// Make sure the number of free variables never exceeds available registers
     pub fn spill(self, n_registers: usize) -> Self
     where
-        V: Clone + Eq + Hash + Ord + GenSym + Debug,
+        V: Clone + Eq + Hash + Ord + GenSym + Debug + Display,
     {
         assert!(self.toplevel_structure);
         assert!(self.max_args.is_some());
@@ -221,6 +221,21 @@ impl<V> RestrictedAst<V, V> {
 }
 
 impl<V, F> RestrictedAst<V, F> {
+    pub fn generate_linear_code(
+        self,
+        standard_arg_registers: [V; 3],
+    ) -> Vec<super::cps_lang_to_abstract_machine::Op<V, F>>
+    where
+        V: Clone + PartialEq + Debug + Display,
+        F: Clone + Eq + Hash + GenSym + Debug + Display,
+    {
+        let mut ctx = super::cps_lang_to_abstract_machine::Context::new(
+            standard_arg_registers,
+            self.gensym_context.clone(),
+        );
+        ctx.linearize_toplevel(&self.ast)
+    }
+
     pub fn generate_c_code(self) -> String
     where
         V: Clone + Debug + Display,

@@ -2,6 +2,7 @@ use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use crate::list;
 use crate::transformations::{GenSym, GensymContext};
+use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -22,7 +23,7 @@ impl Context {
 }
 
 impl Context {
-    pub fn uncurry<V: Clone + PartialEq + Deref<Target = str> + GenSym>(
+    pub fn uncurry<V: Clone + PartialEq + Deref<Target = str> + GenSym + Display>(
         &self,
         exp: &Expr<V>,
     ) -> Expr<V> {
