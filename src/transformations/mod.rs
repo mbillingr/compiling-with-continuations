@@ -133,9 +133,7 @@ mod tests {
         cps.expr().pretty_print();
         println!("\n");
 
-        let (cps_expr, _) = cps.deconstruct();
-
-        let c_code = cps_lang_to_c::program_to_c(n_registers, &cps_expr).join("\n");
+        let c_code = cps.generate_c_code();
 
         println!("C:");
         println!("{}", c_code);

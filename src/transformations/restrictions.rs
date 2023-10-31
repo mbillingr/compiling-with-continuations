@@ -1,6 +1,7 @@
 use crate::languages::cps_lang::ast::{Expr, Transform};
 use crate::transformations::{GenSym, GensymContext};
-use std::fmt::Debug;
+use std::borrow::Borrow;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -216,5 +217,17 @@ impl<V> RestrictedAst<V, V> {
             toplevel_structure: self.toplevel_structure,
             gensym_context: self.gensym_context,
         }
+    }
+}
+
+impl<V, F> RestrictedAst<V, F> {
+    pub fn generate_c_code(self) -> String
+    where
+        V: Clone + Debug + Display,
+        F: Clone + Eq + Hash + Borrow<str> + Deref<Target = str> + Debug + Display,
+    {
+        assert!(self.max_free_vars.is_some());
+        let n_registers = self.max_free_vars.unwrap();
+        super::cps_lang_to_c::program_to_c(n_registers, &self.ast).join("\n")
     }
 }
