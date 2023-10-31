@@ -1,5 +1,5 @@
 use crate::core::reference::Ref;
-use crate::languages::cps_lang::ast::{Expr, Value};
+use crate::languages::cps_lang::ast::{Expr, Transform, Transformed, Value};
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -7,23 +7,9 @@ pub struct Context;
 
 impl Context {}
 
-impl Context {
-    pub fn eta_reduce<V: Clone + Eq + Hash>(&'static self, exp: &Expr<V>) -> Expr<V> {
-        match exp {
-            Expr::Record(fields, r, cnt) => {
-                Expr::Record(*fields, r.clone(), self.eta_reduce(cnt).into())
-            }
-
-            Expr::Select(idx, r, x, cnt) => {
-                Expr::Select(*idx, r.clone(), x.clone(), self.eta_reduce(cnt).into())
-            }
-
-            Expr::Offset(idx, r, x, cnt) => {
-                Expr::Offset(*idx, r.clone(), x.clone(), self.eta_reduce(cnt).into())
-            }
-
-            Expr::App(rator, rands) => Expr::App(rator.clone(), *rands),
-
+impl<V: Clone + Eq + Hash> Transform<V> for Context {
+    fn visit_expr(&mut self, expr: &Expr<V>) -> Transformed<Expr<V>> {
+        match expr {
             Expr::Fix(defs, body) => {
                 let mut defs_out: Vec<(V, Ref<[V]>, Ref<Expr<V>>)> = vec![];
 
@@ -60,28 +46,23 @@ impl Context {
                 let body = self.eta_reduce(&*body);
 
                 if defs_out.is_empty() {
-                    body
+                    Transformed::Done(body)
                 } else {
-                    Expr::Fix(Ref::array(defs_out), body.into())
+                    Transformed::Done(Expr::Fix(Ref::array(defs_out), body.into()))
                 }
             }
-
-            Expr::Switch(v, arms) => Expr::Switch(
-                v.clone(),
-                Ref::array(arms.iter().map(|x| self.eta_reduce(x).into()).collect()),
-            ),
-
-            Expr::PrimOp(op, args, res, cnts) => Expr::PrimOp(
-                *op,
-                *args,
-                *res,
-                Ref::array(cnts.iter().map(|c| self.eta_reduce(c).into()).collect()),
-            ),
-
-            Expr::Halt(v) => Expr::Halt(v.clone()),
-
-            Expr::Panic(msg) => Expr::Panic(*msg),
+            _ => Transformed::Continue,
         }
+    }
+
+    fn visit_value(&mut self, _: &Value<V>) -> Transformed<Value<V>> {
+        Transformed::Continue
+    }
+}
+
+impl Context {
+    pub fn eta_reduce<V: Clone + Eq + Hash>(&mut self, exp: &Expr<V>) -> Expr<V> {
+        return self.transform_expr(exp);
     }
 }
 

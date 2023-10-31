@@ -115,7 +115,7 @@ impl<V> RestrictedAst<V, V> {
     where
         V: Clone + Eq + Hash,
     {
-        let ast = super::cps_eta_reduction::Context.eta_reduce(&self.ast);
+        let ast = super::cps_eta_reduction::Context.transform_expr(&self.ast);
         RestrictedAst { ast, ..self }
     }
 
