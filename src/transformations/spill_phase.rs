@@ -13,7 +13,7 @@ pub fn spill_toplevel<V: Clone + Eq + Hash + Ord + GenSym + Debug + Display>(
     gs: Arc<GensymContext>,
 ) -> Expr<V> {
     if let Expr::Fix(defs, cnt) = expr {
-        for (_, p, _) in defs.iter() {
+        for (f, p, _) in defs.iter() {
             if p.len() > n_registers {
                 panic!("function {f:?} has more parameters than available registers")
             }
