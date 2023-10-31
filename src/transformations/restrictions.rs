@@ -232,6 +232,7 @@ impl<V> RestrictedAst<V, V> {
 }
 
 impl<V, F> RestrictedAst<V, F> {
+    /// Generate Code for the abstract machine
     pub fn generate_linear_code(
         self,
         standard_arg_registers: [V; 3],
@@ -247,6 +248,7 @@ impl<V, F> RestrictedAst<V, F> {
         ctx.linearize_toplevel(&self.ast)
     }
 
+    /// Generate C code
     pub fn generate_c_code(self) -> String
     where
         V: Clone + Debug + Display,
