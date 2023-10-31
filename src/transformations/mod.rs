@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod closure_conversion;
 pub mod cps_eta_reduction;
+pub mod cps_eta_splitting;
 pub mod cps_lang_to_abstract_machine;
 pub mod cps_lang_to_c;
 pub mod cps_uncurrying;

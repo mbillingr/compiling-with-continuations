@@ -119,6 +119,17 @@ impl<V> RestrictedAst<V, V> {
         RestrictedAst { ast, ..self }
     }
 
+    /// Inverse eta reduction: wrap every function in another function.
+    /// This is useful because we can optimize known calls to the function while it may escape.
+    pub fn eta_split(self) -> Self
+    where
+        V: Clone + GenSym + Display,
+    {
+        let ast = super::cps_eta_splitting::Context::new(self.gensym_context.clone())
+            .transform_expr(&self.ast);
+        RestrictedAst { ast, ..self }
+    }
+
     /// Perform an uncurrying step.
     pub fn uncurry(self) -> Self
     where

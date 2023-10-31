@@ -1,25 +1,25 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, List, Value};
 
-pub trait Transform<V: Clone> {
-    fn visit_expr(&mut self, expr: &Expr<V>) -> Transformed<Expr<V>>;
-    fn visit_value(&mut self, value: &Value<V>) -> Transformed<Value<V>>;
+pub trait Transform<V: Clone, F: Clone = V> {
+    fn visit_expr(&mut self, expr: &Expr<V, F>) -> Transformed<Expr<V, F>>;
+    fn visit_value(&mut self, value: &Value<V, F>) -> Transformed<Value<V, F>>;
 
-    fn transform_expr(&mut self, expr: &Expr<V>) -> Expr<V>
+    fn transform_expr(&mut self, expr: &Expr<V, F>) -> Expr<V, F>
     where
         Self: Sized,
     {
         expr.transform(self)
     }
 
-    fn transform_value(&mut self, value: &Value<V>) -> Value<V>
+    fn transform_value(&mut self, value: &Value<V, F>) -> Value<V, F>
     where
         Self: Sized,
     {
         value.transform(self)
     }
 
-    fn transform_values(&mut self, values: &List<Value<V>>) -> List<Value<V>>
+    fn transform_values(&mut self, values: &List<Value<V, F>>) -> List<Value<V, F>>
     where
         Self: Sized,
     {
@@ -28,8 +28,8 @@ pub trait Transform<V: Clone> {
 
     fn transform_fields(
         &mut self,
-        fields: &List<(Value<V>, AccessPath)>,
-    ) -> List<(Value<V>, AccessPath)>
+        fields: &List<(Value<V, F>, AccessPath)>,
+    ) -> List<(Value<V, F>, AccessPath)>
     where
         Self: Sized,
     {
@@ -53,8 +53,8 @@ pub enum Transformed<T> {
     Again(T),
 }
 
-impl<V: Clone> Expr<V> {
-    pub fn transform(&self, transformer: &mut impl Transform<V>) -> Self {
+impl<V: Clone, F: Clone> Expr<V, F> {
+    pub fn transform(&self, transformer: &mut impl Transform<V, F>) -> Self {
         match transformer.visit_expr(self) {
             Transformed::Continue => {}
             Transformed::Done(new_expr) => return new_expr,
@@ -128,8 +128,8 @@ impl<V: Clone> Expr<V> {
     }
 }
 
-impl<V: Clone> Value<V> {
-    pub fn transform(&self, transformer: &mut impl Transform<V>) -> Self {
+impl<V: Clone, F: Clone> Value<V, F> {
+    pub fn transform(&self, transformer: &mut impl Transform<V, F>) -> Self {
         match transformer.visit_value(self) {
             Transformed::Continue => self.clone(),
             Transformed::Done(new_value) => new_value,
