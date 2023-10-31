@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod closure_conversion;
 pub mod cps_eta_reduction;
+pub mod cps_lang_to_abstract_machine;
 pub mod cps_lang_to_c;
 pub mod cps_uncurrying;
 pub mod label_fixrefs;
@@ -43,24 +44,70 @@ impl GensymContext {
 }
 
 pub trait GenSym: Deref<Target = str> {
-    fn gensym(name: &str, delim: &str, unique: impl std::fmt::Display) -> Self;
+    fn gensym(
+        name: impl std::fmt::Display,
+        delim: impl std::fmt::Display,
+        unique: impl std::fmt::Display,
+    ) -> Self;
+    fn gensym2(
+        name: impl std::fmt::Display,
+        delim: impl std::fmt::Display,
+        unique: impl std::fmt::Display,
+        suffix: impl std::fmt::Display,
+    ) -> Self;
 }
 
 impl GenSym for Ref<str> {
-    fn gensym(name: &str, delim: &str, unique: impl std::fmt::Display) -> Self {
+    fn gensym(
+        name: impl std::fmt::Display,
+        delim: impl std::fmt::Display,
+        unique: impl std::fmt::Display,
+    ) -> Self {
         Ref::from(format!("{name}{}{}", delim, unique))
+    }
+    fn gensym2(
+        name: impl std::fmt::Display,
+        delim: impl std::fmt::Display,
+        unique: impl std::fmt::Display,
+        suffix: impl std::fmt::Display,
+    ) -> Self {
+        Ref::from(format!("{name}{delim}{unique}{delim}{suffix}"))
     }
 }
 
 impl GenSym for String {
-    fn gensym(name: &str, delim: &str, unique: impl std::fmt::Display) -> Self {
+    fn gensym(
+        name: impl std::fmt::Display,
+        delim: impl std::fmt::Display,
+        unique: impl std::fmt::Display,
+    ) -> Self {
         format!("{name}{}{}", delim, unique)
+    }
+    fn gensym2(
+        name: impl std::fmt::Display,
+        delim: impl std::fmt::Display,
+        unique: impl std::fmt::Display,
+        suffix: impl std::fmt::Display,
+    ) -> Self {
+        format!("{name}{delim}{unique}{delim}{suffix}")
     }
 }
 
 impl GenSym for &'static str {
-    fn gensym(name: &str, delim: &str, unique: impl std::fmt::Display) -> Self {
+    fn gensym(
+        name: impl std::fmt::Display,
+        delim: impl std::fmt::Display,
+        unique: impl std::fmt::Display,
+    ) -> Self {
         Box::leak(format!("{name}{}{}", delim, unique).into_boxed_str())
+    }
+    fn gensym2(
+        name: impl std::fmt::Display,
+        delim: impl std::fmt::Display,
+        unique: impl std::fmt::Display,
+        suffix: impl std::fmt::Display,
+    ) -> Self {
+        Box::leak(format!("{name}{delim}{unique}{delim}{suffix}").into_boxed_str())
     }
 }
 
