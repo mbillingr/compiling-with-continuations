@@ -1,5 +1,6 @@
 mod accessors;
 mod check_bindings_unique;
+mod collect_functions;
 mod compute;
 mod count_nodes;
 mod deser;

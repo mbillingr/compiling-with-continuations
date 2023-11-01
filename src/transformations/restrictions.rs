@@ -13,6 +13,7 @@ const DEFAULT_GENSYM_DELIMITER: &str = "__";
 pub struct RestrictedAst<V: 'static, F: 'static> {
     ast: Expr<V, F>,
     all_names_unique: bool,
+    no_dead_fns: bool,
     ref_usage: RefUsage,
     max_args: Option<usize>,
     explicit_closures: bool,
@@ -35,6 +36,7 @@ impl<V, F> RestrictedAst<V, F> {
         RestrictedAst {
             ast,
             all_names_unique: false,
+            no_dead_fns: false,
             ref_usage: RefUsage::Unknown,
             max_args: None,
             explicit_closures: false,
@@ -141,17 +143,50 @@ impl<V> RestrictedAst<V, V> {
         RestrictedAst { ast, ..self }
     }
 
+    /// inline functions used only once.
+    pub fn beta_contract(self) -> Self
+    where
+        V: Clone + Eq + Hash + PartialEq,
+    {
+        assert!(self.all_names_unique);
+        assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
+        assert!(self.no_dead_fns);
+        let ast = super::function_inlining::beta_contraction(&self.ast);
+        RestrictedAst {
+            ast,
+            no_dead_fns: false, // beta contraction does not remove the definitions
+            ..self
+        }
+    }
+
+    /// inline functions contain only a single expression
+    pub fn inline_trivial_fns(self) -> Self
+    where
+        V: Clone + Eq + Hash + PartialEq,
+    {
+        assert!(self.all_names_unique);
+        assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
+        let ast = super::function_inlining::inline_trivial_fns(&self.ast);
+        RestrictedAst {
+            ast,
+            all_names_unique: false, // inlining may introduce duplicate bindings inside function bodies
+            no_dead_fns: false,      // inlining does not remove the definitions
+            ..self
+        }
+    }
+
     /// Inline selected functions
     pub fn inline(self, inlineable: HashMap<V, (Vec<V>, Expr<V>)>) -> Self
     where
         V: Clone + Eq + Hash + PartialEq,
     {
         assert!(self.all_names_unique);
-        assert!(self.ref_usage == RefUsage::LabelsAndVars);
+        assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
         let ast = super::function_inlining::inline(&self.ast, inlineable);
         RestrictedAst {
             ast,
             all_names_unique: false, // inlining may introduce duplicate bindings inside function bodies
+            no_dead_fns: false,      // inlining does not remove the definitions
             ..self
         }
     }
@@ -237,6 +272,7 @@ impl<V> RestrictedAst<V, V> {
         RestrictedAst {
             ast,
             all_names_unique: self.all_names_unique,
+            no_dead_fns: self.no_dead_fns,
             explicit_closures: self.explicit_closures,
             max_args: self.max_args,
             max_free_vars: self.max_free_vars,

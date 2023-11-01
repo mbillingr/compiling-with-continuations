@@ -6,8 +6,8 @@ use map_macro::hash_set;
 use std::collections::HashSet;
 use std::hash::Hash;
 
-impl<V: Clone + Eq + Hash> Compute<V, V> for FreeVars<V> {
-    fn visit_expr(&mut self, expr: &Expr<V, V>) -> Computation {
+impl<'e, V: Clone + Eq + Hash> Compute<'e, V, V> for FreeVars<V> {
+    fn visit_expr(&mut self, expr: &'e Expr<V, V>) -> Computation {
         match expr {
             Expr::Fix(defs, cnt) => {
                 for (_, params, body) in defs.iter() {

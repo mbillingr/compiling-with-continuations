@@ -1,26 +1,26 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, List, Value};
 
-pub trait Compute<V: Clone, F: Clone = V> {
-    fn visit_expr(&mut self, expr: &Expr<V, F>) -> Computation;
+pub trait Compute<'e, V: Clone, F: Clone = V> {
+    fn visit_expr(&mut self, expr: &'e Expr<V, F>) -> Computation;
     fn visit_value(&mut self, value: &Value<V, F>);
-    fn post_visit_expr(&mut self, expr: &Expr<V, F>);
+    fn post_visit_expr(&mut self, expr: &'e Expr<V, F>);
 
-    fn compute_for_expr(&mut self, expr: &Expr<V, F>)
+    fn compute_for_expr(&mut self, expr: &'e Expr<V, F>)
     where
         Self: Sized,
     {
         expr.compute(self)
     }
 
-    fn compute_for_value(&mut self, val: &Value<V, F>)
+    fn compute_for_value(&mut self, val: &'e Value<V, F>)
     where
         Self: Sized,
     {
         val.compute(self)
     }
 
-    fn compute_for_exprs(&mut self, exprs: &List<Ref<Expr<V, F>>>)
+    fn compute_for_exprs(&mut self, exprs: &'e List<Ref<Expr<V, F>>>)
     where
         Self: Sized,
     {
@@ -29,7 +29,7 @@ pub trait Compute<V: Clone, F: Clone = V> {
         }
     }
 
-    fn compute_for_values(&mut self, values: &List<Value<V, F>>)
+    fn compute_for_values(&mut self, values: &'e List<Value<V, F>>)
     where
         Self: Sized,
     {
@@ -38,7 +38,7 @@ pub trait Compute<V: Clone, F: Clone = V> {
         }
     }
 
-    fn compute_for_fields(&mut self, fields: &List<(Value<V, F>, AccessPath)>)
+    fn compute_for_fields(&mut self, fields: &'e List<(Value<V, F>, AccessPath)>)
     where
         Self: Sized,
     {
@@ -57,7 +57,7 @@ pub enum Computation {
 }
 
 impl<V: Clone, F: Clone> Expr<V, F> {
-    pub fn compute(&self, comp: &mut impl Compute<V, F>) {
+    pub fn compute<'e>(&'e self, comp: &mut impl Compute<'e, V, F>) {
         match comp.visit_expr(self) {
             Computation::Continue => {}
             Computation::Done => return,
@@ -111,7 +111,7 @@ impl<V: Clone, F: Clone> Expr<V, F> {
 }
 
 impl<V: Clone, F: Clone> Value<V, F> {
-    pub fn compute(&self, comp: &mut impl Compute<V, F>) {
+    pub fn compute<'e>(&'e self, comp: &mut impl Compute<'e, V, F>) {
         comp.visit_value(self);
     }
 }
