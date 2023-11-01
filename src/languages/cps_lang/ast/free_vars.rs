@@ -1,44 +1,62 @@
 use crate::core::reference::Ref;
 use crate::core::sets::Set;
+use crate::languages::cps_lang::ast::compute::{Computation, Compute};
 use crate::languages::cps_lang::ast::{Expr, Value};
 use map_macro::hash_set;
 use std::collections::HashSet;
 use std::hash::Hash;
 
+impl<V: Clone + Eq + Hash> Compute<V, V> for FreeVars<V> {
+    fn visit_expr(&mut self, expr: &Expr<V, V>) -> Computation {
+        match expr {
+            Expr::Fix(defs, cnt) => {
+                for (_, params, body) in defs.iter() {
+                    body.compute(self);
+                    for p in params.iter() {
+                        // This is not 100% correct. If p was free in another function we should
+                        // not remove it. Only if all names are unique, this is no problem.
+                        self.0.remove(p);
+                    }
+                }
+
+                cnt.compute(self);
+
+                for (f, _, _) in defs.iter() {
+                    self.0.remove(f);
+                }
+
+                Computation::Done
+            }
+            _ => Computation::Continue,
+        }
+    }
+
+    fn visit_value(&mut self, value: &Value<V, V>) {
+        if let Value::Var(v) = value {
+            self.0.insert(v.clone());
+        }
+    }
+
+    fn post_visit_expr(&mut self, expr: &Expr<V, V>) {
+        match expr {
+            Expr::Record(_, var, _) | Expr::Select(_, _, var, _) | Expr::Offset(_, _, var, _) => {
+                self.0.remove(var);
+            }
+            Expr::PrimOp(_, _, vars, _) => {
+                for v in vars.iter() {
+                    self.0.remove(v);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 impl<V: Clone + Eq + Hash> Expr<V> {
     pub fn free_vars(&self) -> FreeVars<V> {
-        match self {
-            Expr::Record(fields, r, cnt) => cnt
-                .free_vars()
-                .without(r)
-                .merge_values(fields.iter().map(|(x, _)| x)),
-
-            Expr::Select(_, r, x, cnt) | Expr::Offset(_, r, x, cnt) => {
-                cnt.free_vars().without(x).union(r.free_vars())
-            }
-
-            Expr::App(fun, args) => fun.free_vars().merge_values(args.iter()),
-
-            Expr::Fix(defs, body) => body
-                .free_vars()
-                .union(self.fix_function_free_vars())
-                .merge(defs.iter().map(|(_, p, b)| Self::function_free_vars(p, b)))
-                .without_these(defs.iter().map(|(f, _, _)| f)),
-
-            Expr::Switch(cond, cnts) => cond.free_vars().merge_exprs(cnts.iter().map(|x| &**x)),
-
-            Expr::PrimOp(_, args, xs, cnts) => {
-                let mut fvs = FreeVars::empty().merge_exprs(cnts.iter().map(|x| &**x));
-                for x in xs.iter() {
-                    fvs = fvs.without(x)
-                }
-                fvs.merge_values(args.iter())
-            }
-
-            Expr::Halt(v) => v.free_vars(),
-
-            Expr::Panic(_) => FreeVars::empty(),
-        }
+        let mut fvs = FreeVars::empty();
+        self.compute(&mut fvs);
+        fvs
     }
 
     pub fn fix_function_free_vars(&self) -> FreeVars<V> {
@@ -107,16 +125,6 @@ impl<V: Eq + Hash + 'static> FreeVars<V> {
             self = self.without(v)
         }
         self
-    }
-}
-
-impl<V: Clone + Eq + Hash + 'static> FreeVars<V> {
-    fn merge_values<'a>(self, vals: impl Iterator<Item = &'a Value<V>>) -> Self {
-        self.merge(vals.map(Value::free_vars))
-    }
-
-    fn merge_exprs<'a>(self, vals: impl Iterator<Item = &'a Expr<V>>) -> Self {
-        self.merge(vals.map(Expr::free_vars))
     }
 }
 

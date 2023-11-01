@@ -2,10 +2,9 @@ use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, List, Value};
 
 pub trait Compute<V: Clone, F: Clone = V> {
-    type Result;
-
     fn visit_expr(&mut self, expr: &Expr<V, F>) -> Computation;
     fn visit_value(&mut self, value: &Value<V, F>);
+    fn post_visit_expr(&mut self, expr: &Expr<V, F>);
 
     fn compute_for_expr(&mut self, expr: &Expr<V, F>)
     where
@@ -106,6 +105,8 @@ impl<V: Clone, F: Clone> Expr<V, F> {
 
             Expr::Panic(_) => {}
         }
+
+        comp.post_visit_expr(self)
     }
 }
 
