@@ -18,6 +18,7 @@ pub mod mini_lambda_to_cps_lang;
 pub mod register_allocation;
 pub mod restrictions;
 pub mod spill_phase;
+pub mod function_inlining;
 
 #[derive(Debug)]
 pub struct GensymContext {

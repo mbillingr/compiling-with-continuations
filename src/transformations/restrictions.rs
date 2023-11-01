@@ -1,6 +1,7 @@
 use crate::languages::cps_lang::ast::{Expr, Transform};
 use crate::transformations::{GenSym, GensymContext};
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
@@ -138,6 +139,21 @@ impl<V> RestrictedAst<V, V> {
         let ast =
             super::cps_uncurrying::Context::new(self.gensym_context.clone()).uncurry(&self.ast);
         RestrictedAst { ast, ..self }
+    }
+
+    /// Inline selected functions
+    pub fn inline(self, inlineable: HashMap<V, (Vec<V>, Expr<V>)>) -> Self
+    where
+        V: Clone + Eq + Hash + PartialEq,
+    {
+        assert!(self.all_names_unique);
+        assert!(self.ref_usage == RefUsage::LabelsAndVars);
+        let ast = super::function_inlining::inline(&self.ast, inlineable);
+        RestrictedAst {
+            ast,
+            all_names_unique: false, // inlining may introduce duplicate bindings inside function bodies
+            ..self
+        }
     }
 
     /// Ensure that no function takes more than `max_args` arguments.
