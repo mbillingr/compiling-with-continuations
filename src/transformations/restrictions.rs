@@ -187,14 +187,14 @@ impl<V> RestrictedAst<V, V> {
         }
     }
 
-    /// inline functions contain only a single expression
-    pub fn inline_trivial_fns(self) -> Self
+    /// function inlining pass
+    pub fn inline_functions(self) -> Self
     where
         V: Clone + Eq + Hash + PartialEq,
     {
         assert!(self.all_names_unique);
         assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
-        let ast = super::function_inlining::inline_trivial_fns(&self.ast);
+        let ast = super::function_inlining::heuristic_inline(&self.ast);
         RestrictedAst {
             ast,
             all_names_unique: false, // inlining may introduce duplicate bindings inside function bodies

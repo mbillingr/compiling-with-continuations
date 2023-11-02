@@ -5,13 +5,14 @@ use std::hash::Hash;
 /// inline functions used only once. This will crash if there are unused (mutual) recursive functions!
 pub fn beta_contraction<V: Clone + Eq + Hash + PartialEq>(expr: &Expr<V, V>) -> Expr<V, V> {
     Inliner {
-        inlineable_functions: inline_candidate_bodies(
-            expr.collect_all_functions()
-                .into_iter()
-                .filter(|(_, fninfo)| fninfo.n_app == 1)
-                .map(|(f, fninfo)| (f, (fninfo.params.to_vec(), fninfo.body.clone())))
-                .collect(),
-        ),
+        inlineable_functions: expr
+            .collect_all_functions()
+            .into_iter()
+            .filter(|(_, fninfo)| fninfo.n_app == 1)
+            .map(|(f, fninfo)| (f, (fninfo.params.to_vec(), fninfo.body.clone())))
+            .collect(),
+        heuristic: AlwaysInline,
+        depth: 0,
     }
     .transform_expr(expr)
 }
@@ -28,6 +29,22 @@ pub fn inline_trivial_fns<V: Clone + Eq + Hash + PartialEq>(expr: &Expr<V, V>) -
             })
             .map(|(f, fninfo)| (f, (fninfo.params.to_vec(), fninfo.body.clone())))
             .collect(),
+        heuristic: AlwaysInline,
+        depth: 0,
+    }
+    .transform_expr(expr)
+}
+
+/// inline function calls based on heuristics
+pub fn heuristic_inline<V: Clone + Eq + Hash + PartialEq>(expr: &Expr<V, V>) -> Expr<V, V> {
+    Inliner {
+        inlineable_functions: expr
+            .collect_all_functions()
+            .into_iter()
+            .map(|(f, fninfo)| (f, (fninfo.params.to_vec(), fninfo.body.clone())))
+            .collect(),
+        heuristic: InlineDecision {},
+        depth: 0,
     }
     .transform_expr(expr)
 }
@@ -38,6 +55,8 @@ pub fn inline<V: Clone + Eq + Hash + PartialEq>(
 ) -> Expr<V, V> {
     Inliner {
         inlineable_functions: inlineable,
+        heuristic: AlwaysInline,
+        depth: 0,
     }
     .transform_expr(expr)
 }
@@ -58,19 +77,26 @@ pub fn inline_candidate_bodies<V: Clone + Eq + Hash + PartialEq>(
     }
 }
 
-struct Inliner<V: 'static> {
+struct Inliner<V: 'static, T: InlineHeuristic<V, V>> {
     inlineable_functions: HashMap<V, (Vec<V>, Expr<V, V>)>,
+    heuristic: T,
+    depth: usize,
 }
 
-impl<V: Clone + Eq + Hash + PartialEq> Transform<V, V> for Inliner<V> {
+impl<V: Clone + Eq + Hash + PartialEq, T: InlineHeuristic<V, V>> Transform<V, V> for Inliner<V, T> {
     fn visit_expr(&mut self, expr: &Expr<V, V>) -> Transformed<Expr<V, V>> {
         match expr {
             Expr::App(Value::Label(f), args) => match self.inlineable_functions.get(f) {
-                None => Transformed::Continue,
-                Some((params, body)) => Transformed::Done(
-                    body.clone()
-                        .substitute_vars(params.into_iter().cloned().zip(args.iter().cloned())),
-                ),
+                Some((params, body)) if self.heuristic.calc(self.depth, args, params, body) => {
+                    let new_body = body
+                        .clone()
+                        .substitute_vars(params.into_iter().cloned().zip(args.iter().cloned()));
+                    self.depth += 1;
+                    let new_body = self.transform_expr(&new_body);
+                    self.depth -= 1;
+                    Transformed::Done(new_body)
+                }
+                _ => Transformed::Continue,
             },
             _ => Transformed::Continue,
         }
@@ -78,6 +104,52 @@ impl<V: Clone + Eq + Hash + PartialEq> Transform<V, V> for Inliner<V> {
 
     fn visit_value(&mut self, _: &Value<V, V>) -> Transformed<Value<V, V>> {
         Transformed::Continue
+    }
+}
+
+trait InlineHeuristic<V, F> {
+    fn calc(&self, depth: usize, args: &[Value<V, F>], params: &[V], body: &Expr<V, F>) -> bool;
+}
+
+impl<V, F, T: Fn(usize, &[Value<V, F>], &[V], &Expr<V, F>) -> bool> InlineHeuristic<V, F> for T {
+    fn calc(&self, depth: usize, args: &[Value<V, F>], params: &[V], body: &Expr<V, F>) -> bool {
+        self(depth, args, params, body)
+    }
+}
+
+struct AlwaysInline;
+
+impl<V, F> InlineHeuristic<V, F> for AlwaysInline {
+    fn calc(&self, _: usize, _: &[Value<V, F>], _: &[V], _: &Expr<V, F>) -> bool {
+        true
+    }
+}
+
+struct InlineDecision {}
+
+impl<V, F> InlineHeuristic<V, F> for InlineDecision {
+    fn calc(&self, depth: usize, args: &[Value<V, F>], _params: &[V], _body: &Expr<V, F>) -> bool {
+        let const_args = args
+            .iter()
+            .filter(|a| match a {
+                Value::Var(_) => false,
+                _ => true,
+            })
+            .count();
+
+        if args.len() > 1 {
+            return false;
+        }
+
+        if const_args < args.len() {
+            return false;
+        }
+
+        let const_arg_ratio = const_args as f64 / args.len() as f64;
+
+        const INLINE_AGGRESSIVENESS: f64 = 1.0;
+
+        (1 + depth) as f64 / const_arg_ratio <= INLINE_AGGRESSIVENESS
     }
 }
 

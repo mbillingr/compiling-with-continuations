@@ -152,6 +152,14 @@ mod tests {
         let cps = cps.purge_dead_functions();
         let cps = cps.beta_contract();
 
+        let cps = cps.inline_functions();
+        println!("DBG:");
+        cps.clone().expr().pretty_print();
+        println!("\n");
+        let cps = cps.rename_uniquely("__");
+        let cps = cps.purge_dead_functions();
+        let cps = cps.analyze_refs();
+
         println!("More reductions:");
         cps.clone().rename_uniquely("__").expr().pretty_print();
         println!("\n");
@@ -176,6 +184,9 @@ mod tests {
         cps.expr().pretty_print();
         println!("\n");
 
+        //let (cps_expr, _) = cps.deconstruct();
+        //return crate::languages::cps_lang::interpreter::exec(&cps_expr, out);
+
         let cps = cps.allocate_registers();
 
         println!("Registers:");
@@ -193,7 +204,7 @@ mod tests {
         }
         println!("\n");
 
-        let c_code = cps.generate_c_code();
+        let c_code = cps.clone().generate_c_code();
 
         println!("C:");
         println!("{}", c_code);
@@ -203,8 +214,6 @@ mod tests {
         let result = String::from_utf8(Command::new(bin).output().unwrap().stdout).unwrap();
         let result = result.trim();
         write!(out, "{}", result).unwrap();
-
-        //cps_lang::interpreter::exec(&cps_expr, out)
         Answer::from_usize(0)
     }
 
