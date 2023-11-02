@@ -112,6 +112,22 @@ impl<V> RestrictedAst<V, V> {
         }
     }
 
+    /// Remove unused functions
+    pub fn purge_dead_functions(self) -> Self
+    where
+        V: Clone + Eq + Hash,
+    {
+        assert!(self.all_names_unique);
+        assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
+        let ast = super::dead_function_removal::purge_dead_functions(&self.ast)
+            .unwrap_or_else(|| self.ast.clone());
+        RestrictedAst {
+            ast,
+            no_dead_fns: true,
+            ..self
+        }
+    }
+
     /// Remove function definitions that trivially wrap another function.
     /// E.g. with `(define (foo x y) (bar x y))` every call to foo is replaced with a call to bar.
     pub fn eta_reduce(self) -> Self
@@ -140,7 +156,11 @@ impl<V> RestrictedAst<V, V> {
     {
         let ast =
             super::cps_uncurrying::Context::new(self.gensym_context.clone()).uncurry(&self.ast);
-        RestrictedAst { ast, ..self }
+        RestrictedAst {
+            ast,
+            ref_usage: RefUsage::Unknown,
+            ..self
+        }
     }
 
     /// inline functions used only once.
@@ -151,11 +171,19 @@ impl<V> RestrictedAst<V, V> {
         assert!(self.all_names_unique);
         assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
         assert!(self.no_dead_fns);
-        let ast = super::function_inlining::beta_contraction(&self.ast);
-        RestrictedAst {
-            ast,
-            no_dead_fns: false, // beta contraction does not remove the definitions
-            ..self
+        let mut ast = self.ast;
+        loop {
+            ast = super::function_inlining::beta_contraction(&ast);
+            match super::dead_function_removal::purge_dead_functions(&ast) {
+                Some(a) => ast = a,
+                None => {
+                    return RestrictedAst {
+                        ast,
+                        no_dead_fns: true,
+                        ..self
+                    }
+                }
+            }
         }
     }
 

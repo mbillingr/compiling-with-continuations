@@ -11,6 +11,7 @@ mod transform;
 
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
+pub use compute::{Computation, Compute};
 pub use transform::{Transform, Transformed};
 
 #[derive(Debug, PartialEq, Clone)]

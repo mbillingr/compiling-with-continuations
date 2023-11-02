@@ -9,6 +9,8 @@ pub mod cps_eta_splitting;
 pub mod cps_lang_to_abstract_machine;
 pub mod cps_lang_to_c;
 pub mod cps_uncurrying;
+pub mod dead_function_removal;
+pub mod function_inlining;
 pub mod label_fixrefs;
 mod labels_to_vars;
 pub mod lambda_lifting;
@@ -18,7 +20,6 @@ pub mod mini_lambda_to_cps_lang;
 pub mod register_allocation;
 pub mod restrictions;
 pub mod spill_phase;
-pub mod function_inlining;
 
 #[derive(Debug)]
 pub struct GensymContext {
@@ -134,8 +135,7 @@ mod tests {
         .convert(&expr, Box::new(|x| cps::Expr::Halt(x)));
 
         let cps = RestrictedAst::new(cps_expr);
-        //let cps = cps.rename_uniquely("__");
-        let cps = cps.analyze_refs();
+        let cps = cps.rename_uniquely("__");
 
         println!("Initial CPS:");
         cps.expr().pretty_print();
@@ -143,8 +143,16 @@ mod tests {
 
         let cps = cps.eta_reduce();
         let cps = cps.uncurry();
+        let cps = cps.analyze_refs();
 
         println!("η Reduced:");
+        cps.clone().rename_uniquely("__").expr().pretty_print();
+        println!("\n");
+
+        let cps = cps.purge_dead_functions();
+        let cps = cps.beta_contract();
+
+        println!("More reductions:");
         cps.clone().rename_uniquely("__").expr().pretty_print();
         println!("\n");
 
