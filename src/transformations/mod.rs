@@ -184,14 +184,21 @@ mod tests {
         cps.expr().pretty_print();
         println!("\n");
 
-        //let (cps_expr, _) = cps.deconstruct();
+        /*let (cps_expr, _) = cps.deconstruct();
         //return crate::languages::cps_lang::interpreter::exec(&cps_expr, out);
+        crate::languages::cps_lang::safe_interpreter::exec(&cps_expr, out);
+        return Answer::from_usize(0);*/
 
         let cps = cps.allocate_registers();
 
         println!("Registers:");
         cps.expr().pretty_print();
         println!("\n");
+
+        /*let (cps_expr, _) = cps.deconstruct();
+        //return crate::languages::cps_lang::interpreter::exec(&cps_expr, out);
+        crate::languages::cps_lang::safe_interpreter::exec(&cps_expr, out);
+        return Answer::from_usize(0);*/
 
         let byte_code = cps.clone().generate_linear_code([0, 1, 2]);
 
