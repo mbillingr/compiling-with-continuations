@@ -237,6 +237,23 @@ macro_rules! make_testsuite_for_mini_lambda {
             }
         }
 
+        #[test]
+        fn factorial() {
+            unsafe {
+                let expr = $crate::languages::mini_lambda::ast::Expr::from_str(
+                    "(fix ((fact args
+                             (switch ((primitive <) (record (select 0 args) 2)) ()
+                                     ((1 (select 1 args))
+                                      (0 (fact (record 
+                                           ((primitive -) (record (select 0 args) 1)) 
+                                           ((primitive *) (record (select 0 args) (select 1 args)))
+                                          )))))))
+                        (fact (record 5 1)))"
+                ).unwrap();
+                assert_eq!(run_expr!(expr, int), 120);
+            }
+        }
+
     };
 
     (continuation_tests $runner:ident) => {

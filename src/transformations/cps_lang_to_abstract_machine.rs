@@ -32,6 +32,8 @@ pub enum Op<V, F> {
     IntNegate(Rand<V, F>, R<V>),
     IntAdd(Rand<V, F>, Rand<V, F>, R<V>),
     IntSub(Rand<V, F>, Rand<V, F>, R<V>),
+    IntMul(Rand<V, F>, Rand<V, F>, R<V>),
+    IntDiv(Rand<V, F>, Rand<V, F>, R<V>),
 
     FloatShow(Rand<V, F>),
     FloatIsEq(Rand<V, F>, Rand<V, F>, R<V>),
@@ -157,21 +159,19 @@ impl<V: Clone + PartialEq + Debug + Display, F: Clone + Eq + Hash + GenSym + Deb
             }
 
             Expr::PrimOp(PrimOp::IAdd, Ref([a, b]), Ref([var]), Ref([cnt])) => {
-                ops.push(Op::IntAdd(
-                    self.generate_operand(a),
-                    self.generate_operand(b),
-                    R::R(var.clone()),
-                ));
-                self.linearize(cnt, ops)
+                self.binary_primop(Op::IntAdd, a, b, var, cnt, ops)
             }
 
             Expr::PrimOp(PrimOp::ISub, Ref([a, b]), Ref([var]), Ref([cnt])) => {
-                ops.push(Op::IntSub(
-                    self.generate_operand(a),
-                    self.generate_operand(b),
-                    R::R(var.clone()),
-                ));
-                self.linearize(cnt, ops)
+                self.binary_primop(Op::IntSub, a, b, var, cnt, ops)
+            }
+
+            Expr::PrimOp(PrimOp::IMul, Ref([a, b]), Ref([var]), Ref([cnt])) => {
+                self.binary_primop(Op::IntMul, a, b, var, cnt, ops)
+            }
+
+            Expr::PrimOp(PrimOp::IDiv, Ref([a, b]), Ref([var]), Ref([cnt])) => {
+                self.binary_primop(Op::IntDiv, a, b, var, cnt, ops)
             }
 
             Expr::PrimOp(PrimOp::IsZero, Ref([a]), Ref([]), Ref([else_cnt, then_cnt])) => {
@@ -248,6 +248,23 @@ impl<V: Clone + PartialEq + Debug + Display, F: Clone + Eq + Hash + GenSym + Deb
 
             _ => todo!("{expr:?}"),
         }
+    }
+
+    fn binary_primop(
+        &mut self,
+        op: impl Fn(Rand<V, F>, Rand<V, F>, R<V>) -> Op<V, F>,
+        a: &Value<V, F>,
+        b: &Value<V, F>,
+        var: &V,
+        cnt: &Expr<V, F>,
+        mut ops: Vec<Op<V, F>>,
+    ) -> Vec<Op<V, F>> {
+        ops.push(op(
+            self.generate_operand(a),
+            self.generate_operand(b),
+            R::R(var.clone()),
+        ));
+        self.linearize(cnt, ops)
     }
 
     fn linearize_if(

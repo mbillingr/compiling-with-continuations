@@ -159,25 +159,19 @@ impl<
             }
 
             Expr::PrimOp(PrimOp::IAdd, Ref([a, b]), Ref([var]), Ref([cnt])) => {
-                let stmts = self.c_binop(
-                    "+",
-                    self.generate_typed(a, T_INT),
-                    self.generate_typed(b, T_INT),
-                    register(var),
-                    stmts,
-                );
-                self.generate_c(cnt, stmts)
+                self.generate_binary_binop("+", a, T_INT, b, T_INT, var, cnt, stmts)
             }
 
             Expr::PrimOp(PrimOp::ISub, Ref([a, b]), Ref([var]), Ref([cnt])) => {
-                let stmts = self.c_binop(
-                    "-",
-                    self.generate_typed(a, T_INT),
-                    self.generate_typed(b, T_INT),
-                    register(var),
-                    stmts,
-                );
-                self.generate_c(cnt, stmts)
+                self.generate_binary_binop("-", a, T_INT, b, T_INT, var, cnt, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::IMul, Ref([a, b]), Ref([var]), Ref([cnt])) => {
+                self.generate_binary_binop("*", a, T_INT, b, T_INT, var, cnt, stmts)
+            }
+
+            Expr::PrimOp(PrimOp::IDiv, Ref([a, b]), Ref([var]), Ref([cnt])) => {
+                self.generate_binary_binop("/", a, T_INT, b, T_INT, var, cnt, stmts)
             }
 
             Expr::PrimOp(PrimOp::IsZero, Ref([a]), Ref([]), Ref([else_cnt, then_cnt])) => {
@@ -266,6 +260,27 @@ impl<
             Value::Var(v) => register(v),
             Value::Label(v) => format!("(T) &&{v}"),
         }
+    }
+
+    fn generate_binary_binop(
+        &mut self,
+        op: &str,
+        a: &Value<V, F>,
+        aty: &str,
+        b: &Value<V, F>,
+        bty: &str,
+        var: &V,
+        cnt: &Ref<Expr<V, F>>,
+        stmts: Vec<String>,
+    ) -> Vec<String> {
+        let stmts = self.c_binop(
+            op,
+            self.generate_typed(a, aty),
+            self.generate_typed(b, bty),
+            register(var),
+            stmts,
+        );
+        self.generate_c(cnt, stmts)
     }
 
     fn generate_typed(&self, value: &Value<V, F>, ty: impl std::fmt::Display) -> String {
