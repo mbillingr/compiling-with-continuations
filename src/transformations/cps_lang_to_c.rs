@@ -1,6 +1,7 @@
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
+use crate::transformations::register_allocation::R;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -13,7 +14,7 @@ const TMP: &'static str = "tmp"; // generic temporary register
 const TMP2: &'static str = "tmp2"; // generic temporary register
 const JMP: &'static str = "jmp"; // jump target
 
-const STANDARD_ARG_REGISTERS: &'static [usize] = &[0, 1, 2];
+const STANDARD_ARG_REGISTERS: &'static [R] = &[R(0), R(1), R(2)];
 
 const T_INT: &str = "(T)";
 const T_REAL: &str = "*(R*)&";
@@ -40,7 +41,8 @@ pub fn program_to_c<
     let body = ctx.generate_c(expr, vec![]);
     let regs: Vec<_> = (0..n_registers)
         .into_iter()
-        .map(|r| format!("r{r}"))
+        .map(R)
+        .map(|r| format!("{r}"))
         .collect();
     let mut prog: Vec<_> = [
         PREAMBLE,
@@ -258,7 +260,7 @@ impl<
             Value::Int(i) => i.to_string(),
             Value::Real(r) => format!("0x{:016x} /*{r}*/", r.to_bits()),
             Value::String(s) => format!("{:?}", s),
-            Value::Var(v) => format!("r{v}"),
+            Value::Var(v) => register(v),
             Value::Label(v) => format!("(T) &&{v}"),
         }
     }
@@ -518,7 +520,7 @@ impl<
 }
 
 fn register<V: std::fmt::Display>(r: V) -> String {
-    format!("r{r}")
+    format!("{r}")
 }
 
 struct KnownFunction<V> {

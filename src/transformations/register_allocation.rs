@@ -1,12 +1,26 @@
 use crate::core::reference::Ref;
 use crate::core::sets::Set;
+use crate::core::sexpr::S;
 use crate::languages::cps_lang::ast::{Expr, Value};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 
-pub type R = usize;
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct R(pub usize);
+
+impl std::fmt::Display for R {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "r{}", self.0)
+    }
+}
+
+impl From<R> for S {
+    fn from(r: R) -> Self {
+        S::Int(r.0 as i64)
+    }
+}
 
 pub fn allocate<V: Clone + Eq + Hash + Debug>(n_registers: usize, expr: &Expr<V>) -> Expr<R, V> {
     let ctx = AllocationContext::new(n_registers);
@@ -22,7 +36,7 @@ struct AllocationContext<V> {
 
 impl<V: Clone + Eq + Hash + Debug> AllocationContext<V> {
     pub fn new(n_registers: usize) -> Self {
-        let all_registers: Vec<_> = (0..n_registers).collect();
+        let all_registers: Vec<_> = (0..n_registers).map(R).collect();
         AllocationContext {
             available_registers: all_registers.iter().copied().map(Reverse).collect(),
             all_registers: Ref::array(all_registers),

@@ -117,6 +117,7 @@ mod tests {
     use crate::languages::mini_lambda::ast as ml;
     use crate::make_testsuite_for_mini_lambda;
     use crate::transformations::cps_lang_to_abstract_machine::Op;
+    use crate::transformations::register_allocation::R;
     use crate::transformations::restrictions::RestrictedAst;
 
     unsafe fn run_in_optimized_cps(
@@ -200,7 +201,7 @@ mod tests {
         crate::languages::cps_lang::safe_interpreter::exec(&cps_expr, out);
         return Answer::from_usize(0);*/
 
-        let byte_code = cps.clone().generate_linear_code([0, 1, 2]);
+        let byte_code = cps.clone().generate_linear_code([R(0), R(1), R(2)]);
 
         println!("Linear:");
         for op in byte_code {

@@ -1,4 +1,5 @@
 use crate::languages::cps_lang::ast::{Expr, Transform};
+use crate::transformations::register_allocation::R;
 use crate::transformations::{GenSym, GensymContext};
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -288,7 +289,7 @@ impl<V> RestrictedAst<V, V> {
     }
 
     /// Assign variables to registers
-    pub fn allocate_registers(self) -> RestrictedAst<usize, V>
+    pub fn allocate_registers(self) -> RestrictedAst<R, V>
     where
         V: Clone + Eq + Hash + Debug,
     {
