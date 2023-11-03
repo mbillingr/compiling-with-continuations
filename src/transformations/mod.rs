@@ -4,6 +4,7 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod closure_conversion;
+pub mod constant_folding;
 pub mod cps_eta_reduction;
 pub mod cps_eta_splitting;
 pub mod cps_lang_to_abstract_machine;
@@ -154,16 +155,16 @@ mod tests {
         let cps = cps.beta_contract();
 
         let cps = cps.inline_functions();
-        println!("DBG:");
-        cps.clone().expr().pretty_print();
-        println!("\n");
         let cps = cps.rename_uniquely("__");
         let cps = cps.purge_dead_functions();
         let cps = cps.analyze_refs();
+        let cps = cps.fold_constants();
+        let cps = cps.purge_dead_functions();
 
         println!("More reductions:");
         cps.clone().rename_uniquely("__").expr().pretty_print();
         println!("\n");
+        todo!("WHY ISNT THE UNUSED f__3 PURGED IN THE fibonacci TEST?");
 
         let n_registers = 5;
         let max_args = n_registers - 1; // reserve one more register for the closure

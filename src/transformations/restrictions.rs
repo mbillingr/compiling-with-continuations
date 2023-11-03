@@ -116,7 +116,7 @@ impl<V> RestrictedAst<V, V> {
     /// Remove unused functions
     pub fn purge_dead_functions(self) -> Self
     where
-        V: Clone + Eq + Hash,
+        V: Clone + Eq + Hash + Debug,
     {
         assert!(self.all_names_unique);
         assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
@@ -167,7 +167,7 @@ impl<V> RestrictedAst<V, V> {
     /// inline functions used only once.
     pub fn beta_contract(self) -> Self
     where
-        V: Clone + Eq + Hash + PartialEq,
+        V: Clone + Eq + Hash + PartialEq + Debug,
     {
         assert!(self.all_names_unique);
         assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
@@ -218,6 +218,15 @@ impl<V> RestrictedAst<V, V> {
             no_dead_fns: false,      // inlining does not remove the definitions
             ..self
         }
+    }
+
+    /// Reduce various constant expressions
+    pub fn fold_constants(self) -> Self
+    where
+        V: Clone + Eq + Hash + PartialEq,
+    {
+        let ast = super::constant_folding::ConstantFolder.transform_expr(&self.ast);
+        RestrictedAst { ast, ..self }
     }
 
     /// Ensure that no function takes more than `max_args` arguments.

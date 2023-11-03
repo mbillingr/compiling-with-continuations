@@ -1,12 +1,15 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Computation, Compute, Expr, Transform, Transformed, Value};
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::hash::Hash;
 
-pub fn purge_dead_functions<V: Clone, F: Clone + Eq + Hash>(
+pub fn purge_dead_functions<V: Clone + Debug, F: Clone + Eq + Hash + Debug>(
     expr: &Expr<V, F>,
 ) -> Option<Expr<V, F>> {
     let mns = MarkAndSweep::mark(expr);
+    println!("ALL: {:?}", mns.function_bodies.keys());
+    println!("REACHABLE: {:?}", mns.reachable_fns);
     if mns.all_reachable() {
         None
     } else {
@@ -14,6 +17,7 @@ pub fn purge_dead_functions<V: Clone, F: Clone + Eq + Hash>(
     }
 }
 
+#[derive(Debug)]
 struct MarkAndSweep<'e, V: 'static, F: 'static> {
     function_bodies: HashMap<F, &'e Expr<V, F>>,
     reachable_fns: HashSet<F>,
