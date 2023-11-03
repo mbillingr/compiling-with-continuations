@@ -8,8 +8,6 @@ pub fn purge_dead_functions<V: Clone + Debug, F: Clone + Eq + Hash + Debug>(
     expr: &Expr<V, F>,
 ) -> Option<Expr<V, F>> {
     let mns = MarkAndSweep::mark(expr);
-    println!("ALL: {:?}", mns.function_bodies.keys());
-    println!("REACHABLE: {:?}", mns.reachable_fns);
     if mns.all_reachable() {
         None
     } else {
@@ -78,7 +76,8 @@ impl<V: Clone, F: Clone + Eq + Hash + PartialEq> Transform<V, F> for MarkAndSwee
                 let mut defs_out = vec![];
                 for (f, p, b) in defs.iter() {
                     if self.reachable_fns.contains(f) {
-                        defs_out.push((f.clone(), *p, *b));
+                        let body_out = b.transform(self);
+                        defs_out.push((f.clone(), *p, Ref::new(body_out)));
                     }
                 }
                 let cnt_out = cnt.transform(self);
@@ -147,6 +146,21 @@ mod tests {
     #[test]
     fn remove_unmarked_functions() {
         let x = Expr::from_str("(fix ((foo () (halt 0)) (bar () (halt 0))) (halt 0))").unwrap();
+        let y = Expr::from_str("(fix ((foo () (halt 0))) (halt 0))").unwrap();
+        assert_eq!(
+            MarkAndSweep {
+                reachable_fns: hash_set!["foo".into()],
+                function_bodies: Default::default()
+            }
+            .sweep(&x),
+            y
+        );
+    }
+
+    #[test]
+    fn descend_into_function_bodies() {
+        let x =
+            Expr::from_str("(fix ((foo () (fix ((bar () (halt 0))) (halt 0)))) (halt 0))").unwrap();
         let y = Expr::from_str("(fix ((foo () (halt 0))) (halt 0))").unwrap();
         assert_eq!(
             MarkAndSweep {

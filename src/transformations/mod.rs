@@ -164,7 +164,6 @@ mod tests {
         println!("More reductions:");
         cps.clone().rename_uniquely("__").expr().pretty_print();
         println!("\n");
-        todo!("WHY ISNT THE UNUSED f__3 PURGED IN THE fibonacci TEST?");
 
         let n_registers = 5;
         let max_args = n_registers - 1; // reserve one more register for the closure
