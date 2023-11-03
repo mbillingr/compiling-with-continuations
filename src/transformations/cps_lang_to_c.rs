@@ -8,6 +8,9 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
+// debug output
+const INSTRUMENT: bool = false;
+
 // special registers
 const CNT: &'static str = "cnt"; // counter
 const TMP: &'static str = "tmp"; // generic temporary register
@@ -295,9 +298,7 @@ impl<
                         pending_copies.push((r, tgt));
                     }
                 }
-                _ => {
-                    stmts = self.c_set_register(register(tgt), self.generate_value(v), stmts);
-                }
+                _ => {}
             }
         }
 
@@ -305,6 +306,16 @@ impl<
 
         for (src, tgt) in actual_copies {
             stmts = self.c_set_register(tgt, src, stmts);
+        }
+
+        // assign constants after register shuffling so we don't overwrite anything that's still needed
+        for (tgt, v) in targets.iter().zip(values) {
+            match v {
+                Value::Var(_) => {}
+                _ => {
+                    stmts = self.c_set_register(register(tgt), self.generate_value(v), stmts);
+                }
+            }
         }
 
         stmts
@@ -368,6 +379,9 @@ impl<
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{r} = {src};"));
+        if INSTRUMENT {
+            stmts.push(format!("printf(\"{r} = {src}\\n\");"))
+        }
         stmts
     }
 
@@ -399,6 +413,9 @@ impl<
 
     fn c_begin_function(&self, name: &F, mut stmts: Vec<String>) -> Vec<String> {
         stmts.push(format!("{name}:"));
+        if INSTRUMENT {
+            stmts.push(format!("printf(\"entering {name}\\n\");"))
+        }
         stmts
     }
 
@@ -415,6 +432,9 @@ impl<
 
     fn c_end_record(&self, r: String, mut stmts: Vec<String>) -> Vec<String> {
         stmts.push(format!("{r} = {TMP};"));
+        if INSTRUMENT {
+            stmts.push(format!("printf(\"{r} = RECORD(%ld)\\n\", cnt);"))
+        }
         stmts
     }
 
@@ -426,6 +446,9 @@ impl<
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{var} = ((T*){rec})[{idx}];"));
+        if INSTRUMENT {
+            stmts.push(format!("printf(\"{var} = {rec}[{idx}]\\n\");"))
+        }
         stmts
     }
 
@@ -437,6 +460,9 @@ impl<
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{var} = {rec} + {idx};"));
+        if INSTRUMENT {
+            stmts.push(format!("printf(\"{var} = {rec}@{idx}\\n\");"))
+        }
         stmts
     }
 
@@ -477,6 +503,9 @@ impl<
         mut stmts: Vec<String>,
     ) -> Vec<String> {
         stmts.push(format!("{out} = {a} {op} {b};"));
+        if INSTRUMENT {
+            stmts.push(format!("printf(\"{out} = {a} {op} {b}\\n\");"))
+        }
         stmts
     }
 
@@ -600,5 +629,24 @@ mod tests {
             ("f", "e"),
             ("g", "g"),
         ]);
+    }
+
+    #[test]
+    fn assign_constants_after_register_shuffling() {
+        let stmts = Context::<&str, &str>::new().set_values(
+            &["a", "b"],
+            &[Value::Int(0), Value::Var("a")],
+            vec![],
+        );
+
+        let expected = ["b = a;", "a = 0;"];
+
+        assert_eq!(
+            stmts,
+            expected
+                .into_iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        );
     }
 }
