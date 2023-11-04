@@ -1,4 +1,4 @@
-use crate::languages::cps_lang::ast::{Expr, Transform};
+use crate::languages::cps_lang::ast::{Compute, Expr, Transform};
 use crate::transformations::register_allocation::R;
 use crate::transformations::{GenSym, GensymContext};
 use std::borrow::Borrow;
@@ -257,6 +257,30 @@ impl<V> RestrictedAst<V, V> {
             ast,
             max_args: self.max_args.map(|n| n + 1), // the closure becomes an extra argument
             ref_usage: RefUsage::LabelsAndVars, // the conversion uses Value::Label to put functions into closure records
+            explicit_closures: true,
+            ..self
+        }
+    }
+
+    /// Change functions to take a closure argument if required
+    pub fn convert_closures2(self) -> Self
+    where
+        V: Clone + Ord + Eq + Hash + GenSym + Debug + Display,
+    {
+        assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
+        assert!(self.all_names_unique);
+        assert!(self.max_args.is_some());
+        let n = self.max_args.unwrap();
+
+        let mut ctx =
+            super::closure_conversion_advanced::Context::new(n, self.gensym_context.clone());
+        ctx.compute_for_expr(&self.ast);
+        let mut ctx = ctx.solve_closure_requirements();
+        let ast = ctx.transform_expr(&self.ast);
+
+        RestrictedAst {
+            ast,
+            max_args: self.max_args.map(|n| n + 1), // the closure becomes an extra argument
             explicit_closures: true,
             ..self
         }

@@ -7,7 +7,7 @@ use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::Arc;
 
-const CLS_FUNC_INDEX: isize = 0;
+pub const CLS_FUNC_INDEX: isize = 0;
 
 pub struct Context {
     pub gs: Arc<GensymContext>,
@@ -79,7 +79,7 @@ impl Context {
             Expr::Fix(defs, body) => {
                 let cls_arg: V = self.gs.gensym("cls");
 
-                let mut closure = Closure::new(&self.gs);
+                let mut closure = Closure::new(self.gs.clone());
                 for (f, _, _) in defs.iter() {
                     closure.add_function(f);
                 }
@@ -118,14 +118,8 @@ impl Context {
                     ));
                 }
 
-                let mut cls_fields = vec![];
-                for f in closure.renamed_funcs {
-                    cls_fields.push((Value::Label(f), AccessPath::Ref(0)));
-                }
-                for v in closure.vars {
-                    cls_fields.push((Value::Var(v), AccessPath::Ref(0)));
-                }
-                let body_out = Ref::new(Expr::Record(Ref::array(cls_fields), cls_arg, body.into()));
+                let cls_fields = closure.into_fields();
+                let body_out = Ref::new(Expr::Record(Ref::array(cls_fields), cls_arg, body));
 
                 Expr::Fix(Ref::array(defs_out), body_out)
             }
@@ -156,15 +150,15 @@ impl Context {
 }
 
 #[derive(Debug)]
-struct Closure<'a, V> {
-    gs: &'a GensymContext,
+pub struct Closure<V> {
+    gs: Arc<GensymContext>,
     funcs: Vec<V>,
     renamed_funcs: Vec<V>,
     vars: Vec<V>,
 }
 
-impl<'a, V: Clone + Deref<Target = str> + GenSym + Debug + Display> Closure<'a, V> {
-    fn new(gs: &'a GensymContext) -> Self {
+impl<V: Clone + Deref<Target = str> + GenSym + Debug + Display> Closure<V> {
+    pub fn new(gs: Arc<GensymContext>) -> Self {
         Closure {
             gs,
             funcs: vec![],
@@ -173,21 +167,21 @@ impl<'a, V: Clone + Deref<Target = str> + GenSym + Debug + Display> Closure<'a, 
         }
     }
 
-    fn add_function(&mut self, name: &V) {
+    pub fn add_function(&mut self, name: &V) {
         self.renamed_funcs.push(self.gs.gensym(name));
         self.funcs.push(name.clone());
     }
 
-    fn add_var(&mut self, name: &V) {
+    pub fn add_var(&mut self, name: &V) {
         self.vars.push(name.clone())
     }
 
-    fn get_new_func_name(&self, name: &str) -> V {
+    pub fn get_new_func_name(&self, name: &str) -> V {
         let idx = self.get_func_idx(name).unwrap();
         self.renamed_funcs[idx as usize].clone()
     }
 
-    fn get_var_idx(&self, name: &str, current_fn: &str) -> Option<isize> {
+    pub fn get_var_idx(&self, name: &str, current_fn: &str) -> Option<isize> {
         let offset = self.funcs.len() as isize;
         self.vars
             .iter()
@@ -197,7 +191,7 @@ impl<'a, V: Clone + Deref<Target = str> + GenSym + Debug + Display> Closure<'a, 
             .and_then(|i| self.get_func_idx(current_fn).map(|j| offset - j + i))
     }
 
-    fn get_func_idx(&self, name: &str) -> Option<isize> {
+    pub fn get_func_idx(&self, name: &str) -> Option<isize> {
         self.funcs
             .iter()
             .enumerate()
@@ -205,7 +199,24 @@ impl<'a, V: Clone + Deref<Target = str> + GenSym + Debug + Display> Closure<'a, 
             .map(|(i, _)| i as isize)
     }
 
-    fn build_lookup(&self, name: V, current_fn: &str, cls_val: Value<V>, cnt: Expr<V>) -> Expr<V> {
+    pub fn into_fields(self) -> Vec<(Value<V, V>, AccessPath)> {
+        let mut cls_fields = vec![];
+        for f in self.renamed_funcs {
+            cls_fields.push((Value::Label(f), AccessPath::Ref(0)));
+        }
+        for v in self.vars {
+            cls_fields.push((Value::Var(v), AccessPath::Ref(0)));
+        }
+        cls_fields
+    }
+
+    pub fn build_lookup(
+        &self,
+        name: V,
+        current_fn: &str,
+        cls_val: Value<V>,
+        cnt: Expr<V>,
+    ) -> Expr<V> {
         if &*name == current_fn {
             return cnt;
         }

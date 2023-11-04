@@ -1,30 +1,38 @@
-use crate::languages::cps_lang::ast::{Computation, Compute, Expr, Value};
+use crate::core::reference::Ref;
+use crate::languages::cps_lang::ast::{Computation, Compute, Expr, Transform, Transformed, Value};
+use crate::transformations::closure_conversion::{Closure, CLS_FUNC_INDEX};
+use crate::transformations::{GenSym, GensymContext};
+use map_macro::hash_set;
 use std::collections::{HashMap, HashSet};
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
+use std::sync::Arc;
 
 /// Requirements:
 ///   - unique names
 ///   - labels
-struct Context<V, F> {
+pub struct Context<V, F> {
     n_registers: usize,
     vars_free_in_fn: HashMap<F, HashSet<V>>,
     fns_applied_in_fn: HashMap<F, HashSet<F>>,
     sibling_fns: HashMap<F, HashSet<F>>,
     fns_that_need_closures: HashSet<F>,
+    gs: Arc<GensymContext>,
 }
 
 impl<V: Clone + Eq + Hash, F: Clone + Eq + Hash> Context<V, F> {
-    pub fn new(n_registers: usize) -> Self {
+    pub fn new(n_registers: usize, gs: Arc<GensymContext>) -> Self {
         Context {
             n_registers,
             vars_free_in_fn: Default::default(),
             fns_applied_in_fn: Default::default(),
             sibling_fns: Default::default(),
             fns_that_need_closures: Default::default(),
+            gs,
         }
     }
 
-    fn solve_closure_requirements(mut self) -> Self {
+    pub fn solve_closure_requirements(mut self) -> Self {
         loop {
             let vars_free_in_fn = self.iteration_step_free_vars();
             let fns_that_need_closures = self.iteration_step_needed_closure();
@@ -129,6 +137,97 @@ impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for Conte
     fn post_visit_expr(&mut self, _: &'e Expr<V, F>) {}
 }
 
+impl<V: Clone + Debug + Display + Eq + GenSym + Hash> Context<V, V> {
+    fn make_closure_application(&mut self, f: &V, args: &Ref<[Value<V, V>]>) -> Expr<V, V> {
+        let mut args_ = vec![Value::Var(f.clone())];
+        args_.extend(self.transform_values(args).iter().cloned());
+        let f_: V = self.gs.gensym(f);
+        Expr::Select(
+            CLS_FUNC_INDEX,
+            Value::Var(f.clone()),
+            f_.clone(),
+            Expr::App(Value::Var(f_), Ref::array(args_)).into(),
+        )
+    }
+}
+
+impl<V: Clone + Debug + Display + Eq + GenSym + Hash> Transform<V, V> for Context<V, V> {
+    fn visit_expr(&mut self, expr: &Expr<V, V>) -> Transformed<Expr<V, V>> {
+        match expr {
+            Expr::App(Value::Var(f), args) => {
+                Transformed::Done(self.make_closure_application(f, args))
+            }
+
+            Expr::App(Value::Label(f), args) if self.fns_that_need_closures.contains(f) => {
+                Transformed::Done(self.make_closure_application(f, args))
+            }
+
+            Expr::Fix(defs, cnt) => {
+                let cls_arg: V = self.gs.gensym("cls");
+
+                let mut closure = Closure::new(self.gs.clone());
+                let mut clvars = hash_set![];
+                for (f, _, _) in defs.iter() {
+                    if self.fns_that_need_closures.contains(f) {
+                        closure.add_function(f);
+                        clvars.extend(&self.vars_free_in_fn[f])
+                    }
+                }
+                for v in clvars {
+                    closure.add_var(v)
+                }
+
+                let mut defs_out = vec![];
+                for (f, p, b) in defs.iter() {
+                    let mut fbody = self.transform_expr(b);
+                    if self.fns_that_need_closures.contains(f) {
+                        for v in &self.vars_free_in_fn[f] {
+                            fbody =
+                                closure.build_lookup(v.clone(), f, Value::Var(f.clone()), fbody);
+                        }
+                        defs_out.push((
+                            closure.get_new_func_name(f),
+                            p.prepend(f.clone()),
+                            fbody.into(),
+                        ));
+                    } else {
+                        defs_out.push((f.clone(), *p, fbody.into()));
+                    }
+                }
+
+                let mut cnt = Ref::new(self.transform_expr(cnt));
+                for (f, _, _) in defs.iter() {
+                    if self.fns_that_need_closures.contains(f) {
+                        let idx = closure.get_func_idx(f).unwrap();
+                        cnt = Ref::new(Expr::Offset(
+                            idx,
+                            Value::Var(cls_arg.clone()),
+                            f.clone(),
+                            cnt,
+                        ));
+                    }
+                }
+
+                let cls_fields = closure.into_fields();
+                let cnt_out = Expr::Record(Ref::array(cls_fields), cls_arg, cnt);
+
+                Transformed::Done(Expr::Fix(Ref::array(defs_out), Ref::new(cnt_out)))
+            }
+
+            _ => Transformed::Continue,
+        }
+    }
+
+    fn visit_value(&mut self, value: &Value<V, V>) -> Transformed<Value<V, V>> {
+        match value {
+            Value::Label(f) if self.fns_that_need_closures.contains(f) => {
+                Transformed::Done(Value::Var(f.clone()))
+            }
+            _ => Transformed::Continue,
+        }
+    }
+}
+
 struct FnsApplied<F>(HashSet<F>);
 
 impl<F> FnsApplied<F> {
@@ -170,7 +269,7 @@ mod tests {
             "(fix ((f () (fix ((g () (y))) (x (@ g))))) (fix ((h () (z))) ((@ h))))",
         )
         .unwrap();
-        let mut ctx = Context::new(0);
+        let mut ctx = Context::new(0, Arc::new(GensymContext::new("_")));
         ctx.compute_for_expr(&x);
         assert_eq!(
             ctx.vars_free_in_fn,
@@ -187,7 +286,7 @@ mod tests {
             "(fix ((f () (fix ((g () (y (@ f)))) ((@ g))))) (fix ((h () (z))) ((@ g))))",
         )
         .unwrap();
-        let mut ctx = Context::new(0);
+        let mut ctx = Context::new(0, Arc::new(GensymContext::new("_")));
         ctx.compute_for_expr(&x);
         assert_eq!(ctx.fns_that_need_closures, hash_set!["f".into()]) // f escapes
     }
@@ -198,7 +297,7 @@ mod tests {
             "(fix ((f () (fix ((g () ((@ h)))) ((@ g))))) (fix ((h () ((@ f)))) (halt 0)))",
         )
         .unwrap();
-        let mut ctx = Context::new(0);
+        let mut ctx = Context::new(0, Arc::new(GensymContext::new("_")));
         ctx.compute_for_expr(&x);
         assert_eq!(
             ctx.fns_applied_in_fn,
@@ -215,7 +314,7 @@ mod tests {
             "(fix ((f () (fix ((g () (y)) (i () (z))) (x)))) (fix ((h () (z)) (j () (z))) (halt 0)))",
         )
         .unwrap();
-        let mut ctx = Context::new(0);
+        let mut ctx = Context::new(0, Arc::new(GensymContext::new("_")));
         ctx.compute_for_expr(&x);
         assert_eq!(
             ctx.sibling_fns,
@@ -240,6 +339,7 @@ mod tests {
                 "g".into() => hash_set!["f".into()]],
             sibling_fns: hash_map![],
             fns_that_need_closures: hash_set![],
+            gs: Arc::new(GensymContext::new("_")),
         };
 
         assert_eq!(
@@ -262,6 +362,7 @@ mod tests {
                 "g".into() => hash_set!["f".into()]],
             sibling_fns: hash_map![],
             fns_that_need_closures: hash_set![],
+            gs: Arc::new(GensymContext::new("_")),
         };
 
         assert_eq!(
@@ -283,6 +384,7 @@ mod tests {
             sibling_fns: hash_map![
                 "f".into() => hash_set![]],
             fns_that_need_closures: hash_set![],
+            gs: Arc::new(GensymContext::new("_")),
         };
 
         assert_eq!(ctx.iteration_step_needed_closure(), hash_set!["f".into()]);
@@ -302,6 +404,7 @@ mod tests {
                 "f".into() => hash_set!["g".into()],
                 "g".into() => hash_set!["f".into()]],
             fns_that_need_closures: hash_set!["g".into()],
+            gs: Arc::new(GensymContext::new("_")),
         };
 
         assert_eq!(
@@ -324,6 +427,7 @@ mod tests {
                 "f".into() => hash_set!["g".into()],
                 "g".into() => hash_set!["f".into()]],
             fns_that_need_closures: hash_set!["f".into(), "g".into()],
+            gs: Arc::new(GensymContext::new("_")),
         };
 
         assert_eq!(
@@ -346,6 +450,7 @@ mod tests {
                 "f".into() => hash_set!["g".into()],
                 "g".into() => hash_set!["f".into()]],
             fns_that_need_closures: hash_set![],
+            gs: Arc::new(GensymContext::new("_")),
         };
 
         let ctx = ctx.solve_closure_requirements();
@@ -361,5 +466,14 @@ mod tests {
                 "f".into() => hash_set!["x".into(), "y".into()],
                 "g".into() => hash_set!["x".into(), "y".into(), "z".into()]]
         );
+    }
+
+    #[test]
+    fn free_vars_passed_as_arguments_to_known_function() {
+        // A function with just a few free vars should not require a closure if it does not escape.
+        // This function's parameters will need to be extended by the free variables.
+        // Any calls should pass in those variables. (This is possible, because the function is
+        // known, and so all free vars are in scope at the call site.)
+        todo!()
     }
 }
