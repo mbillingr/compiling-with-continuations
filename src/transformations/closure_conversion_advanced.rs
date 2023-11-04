@@ -10,7 +10,6 @@ struct Context<V, F> {
     vars_free_in_fn: HashMap<F, HashSet<V>>,
     fns_applied_in_fn: HashMap<F, HashSet<F>>,
     sibling_fns: HashMap<F, HashSet<F>>,
-    known_functions: HashSet<F>, // All functions that never escape, I suppose...
     fns_that_need_closures: HashSet<F>,
 }
 
@@ -21,7 +20,6 @@ impl<V: Clone + Eq + Hash, F: Clone + Eq + Hash> Context<V, F> {
             vars_free_in_fn: Default::default(),
             fns_applied_in_fn: Default::default(),
             sibling_fns: Default::default(),
-            known_functions: Default::default(),
             fns_that_need_closures: Default::default(),
         }
     }
@@ -93,8 +91,6 @@ impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for Conte
                     self.sibling_fns.insert(f.clone(), fsibs);
                 }
 
-                self.known_functions.extend(siblings.iter().cloned());
-
                 self.vars_free_in_fn.extend(
                     defs.iter()
                         .map(|(f, p, b)| (f, Expr::function_free_vars_nofns(p, b)))
@@ -124,7 +120,6 @@ impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for Conte
             Value::Label(f) => {
                 // This function escapes (unless it's the first value of an App node, which should
                 // not call this visitor).
-                self.known_functions.remove(f);
                 self.fns_that_need_closures.insert(f.clone());
             }
             _ => {}
@@ -187,17 +182,6 @@ mod tests {
     }
 
     #[test]
-    fn find_known_functions() {
-        let x = Expr::from_str(
-            "(fix ((f () (fix ((g () (y (@ f)))) ((@ g))))) (fix ((h () (z))) ((@ g))))",
-        )
-        .unwrap();
-        let mut ctx = Context::new(0);
-        ctx.compute_for_expr(&x);
-        assert_eq!(ctx.known_functions, hash_set!["g".into(), "h".into()]) // f escapes
-    }
-
-    #[test]
     fn find_escaping_functions() {
         let x = Expr::from_str(
             "(fix ((f () (fix ((g () (y (@ f)))) ((@ g))))) (fix ((h () (z))) ((@ g))))",
@@ -255,7 +239,6 @@ mod tests {
                 "f".into() => hash_set!["g".into()],
                 "g".into() => hash_set!["f".into()]],
             sibling_fns: hash_map![],
-            known_functions: hash_set![],
             fns_that_need_closures: hash_set![],
         };
 
@@ -278,7 +261,6 @@ mod tests {
                 "f".into() => hash_set!["g".into()],
                 "g".into() => hash_set!["f".into()]],
             sibling_fns: hash_map![],
-            known_functions: hash_set![],
             fns_that_need_closures: hash_set![],
         };
 
@@ -300,7 +282,6 @@ mod tests {
                 "f".into() => hash_set![]],
             sibling_fns: hash_map![
                 "f".into() => hash_set![]],
-            known_functions: hash_set![],
             fns_that_need_closures: hash_set![],
         };
 
@@ -320,7 +301,6 @@ mod tests {
             sibling_fns: hash_map![
                 "f".into() => hash_set!["g".into()],
                 "g".into() => hash_set!["f".into()]],
-            known_functions: hash_set![],
             fns_that_need_closures: hash_set!["g".into()],
         };
 
@@ -343,7 +323,6 @@ mod tests {
             sibling_fns: hash_map![
                 "f".into() => hash_set!["g".into()],
                 "g".into() => hash_set!["f".into()]],
-            known_functions: hash_set![],
             fns_that_need_closures: hash_set!["f".into(), "g".into()],
         };
 
@@ -366,7 +345,6 @@ mod tests {
             sibling_fns: hash_map![
                 "f".into() => hash_set!["g".into()],
                 "g".into() => hash_set!["f".into()]],
-            known_functions: hash_set![],
             fns_that_need_closures: hash_set![],
         };
 
