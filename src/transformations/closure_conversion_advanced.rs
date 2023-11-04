@@ -474,6 +474,25 @@ mod tests {
         // This function's parameters will need to be extended by the free variables.
         // Any calls should pass in those variables. (This is possible, because the function is
         // known, and so all free vars are in scope at the call site.)
-        todo!()
+
+        let mut ctx = Context {
+            n_registers: 10,
+            vars_free_in_fn: hash_map![
+                "f".into() => hash_set!["x".into(), "y".into()]],
+            fns_applied_in_fn: hash_map![
+                "f".into() => hash_set![]],
+            sibling_fns: hash_map![
+                "f".into() => hash_set![]],
+            fns_that_need_closures: hash_set![],
+            gs: Arc::new(GensymContext::new("__")),
+        };
+
+        let x = Expr::from_str("((@ f) 0)").unwrap();
+        let y = Expr::from_str("((@ f) 0 x y)").unwrap();
+        assert_eq!(ctx.transform_expr(&x), y);
+
+        let x = Expr::from_str("(fix ((f (a) (halt 0))) (halt 0))").unwrap();
+        let y = Expr::from_str("(fix ((f (a x y) (halt 0))) (halt 0))").unwrap();
+        assert_eq!(ctx.transform_expr(&x), y);
     }
 }
