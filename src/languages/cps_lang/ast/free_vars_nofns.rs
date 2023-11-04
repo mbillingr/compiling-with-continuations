@@ -6,8 +6,8 @@ use map_macro::hash_set;
 use std::collections::HashSet;
 use std::hash::Hash;
 
-impl<'e, V: Clone + Eq + Hash> Compute<'e, V, V> for FreeVars<V> {
-    fn visit_expr(&mut self, expr: &'e Expr<V, V>) -> Computation {
+impl<'e, V: Clone + Eq + Hash, F: Clone> Compute<'e, V, F> for FreeVarsNoFns<V> {
+    fn visit_expr(&mut self, expr: &'e Expr<V, F>) -> Computation {
         match expr {
             Expr::Fix(defs, cnt) => {
                 for (_, params, body) in defs.iter() {
@@ -21,23 +21,19 @@ impl<'e, V: Clone + Eq + Hash> Compute<'e, V, V> for FreeVars<V> {
 
                 cnt.compute(self);
 
-                for (f, _, _) in defs.iter() {
-                    self.0.remove(f);
-                }
-
                 Computation::Done
             }
             _ => Computation::Continue,
         }
     }
 
-    fn visit_value(&mut self, value: &Value<V, V>) {
+    fn visit_value(&mut self, value: &Value<V, F>) {
         if let Value::Var(v) = value {
             self.0.insert(v.clone());
         }
     }
 
-    fn post_visit_expr(&mut self, expr: &Expr<V, V>) {
+    fn post_visit_expr(&mut self, expr: &Expr<V, F>) {
         match expr {
             Expr::Record(_, var, _) | Expr::Select(_, _, var, _) | Expr::Offset(_, _, var, _) => {
                 self.0.remove(var);
@@ -52,45 +48,46 @@ impl<'e, V: Clone + Eq + Hash> Compute<'e, V, V> for FreeVars<V> {
     }
 }
 
-impl<V: Clone + Eq + Hash> Expr<V> {
-    pub fn free_vars(&self) -> FreeVars<V> {
-        let mut fvs = FreeVars::empty();
+impl<V: Clone + Eq + Hash, F: Clone> Expr<V, F> {
+    pub fn free_vars_nofns(&self) -> FreeVarsNoFns<V> {
+        let mut fvs = FreeVarsNoFns::empty();
         self.compute(&mut fvs);
         fvs
     }
 
-    pub fn fix_function_free_vars(&self) -> FreeVars<V> {
+    pub fn fix_function_free_vars_nofns(&self) -> FreeVarsNoFns<V> {
         match self {
-            Expr::Fix(defs, _) => FreeVars::empty()
-                .merge(defs.iter().map(|(_, p, b)| Self::function_free_vars(p, b)))
-                .without_these(defs.iter().map(|(f, _, _)| f)),
+            Expr::Fix(defs, _) => FreeVarsNoFns::empty().merge(
+                defs.iter()
+                    .map(|(_, p, b)| Self::function_free_vars_nofns(p, b)),
+            ),
             _ => panic!("Expected fix"),
         }
     }
 
-    pub fn function_free_vars(params: &Ref<[V]>, body: &Expr<V>) -> FreeVars<V> {
-        body.free_vars().without_these(params.iter())
+    pub fn function_free_vars_nofns(params: &Ref<[V]>, body: &Expr<V, F>) -> FreeVarsNoFns<V> {
+        body.free_vars_nofns().without_these(params.iter())
     }
 }
 
 impl<V: Clone + PartialEq + Eq + Hash> Value<V> {
-    pub fn free_vars(&self) -> FreeVars<V> {
+    pub fn free_vars_nofns(&self) -> FreeVarsNoFns<V> {
         match self {
-            Value::Var(v) | Value::Label(v) => FreeVars::singleton(v.clone()),
-            _ => FreeVars::empty(),
+            Value::Var(v) => FreeVarsNoFns::singleton(v.clone()),
+            _ => FreeVarsNoFns::empty(),
         }
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct FreeVars<V: Eq + Hash>(HashSet<V>);
+pub struct FreeVarsNoFns<V: Eq + Hash>(HashSet<V>);
 
-impl<V: Eq + Hash> FreeVars<V> {
+impl<V: Eq + Hash> FreeVarsNoFns<V> {
     pub fn empty() -> Self {
-        FreeVars(HashSet::new())
+        FreeVarsNoFns(HashSet::new())
     }
     pub fn singleton(v: V) -> Self {
-        FreeVars(hash_set![v])
+        FreeVarsNoFns(hash_set![v])
     }
 
     pub fn is_empty(&self) -> bool {
@@ -119,7 +116,7 @@ impl<V: Eq + Hash> FreeVars<V> {
         self.0.into_iter()
     }
 }
-impl<V: Eq + Hash + 'static> FreeVars<V> {
+impl<V: Eq + Hash + 'static> FreeVarsNoFns<V> {
     pub fn without_these<'a>(mut self, vs: impl Iterator<Item = &'a V>) -> Self {
         for v in vs {
             self = self.without(v)
@@ -128,26 +125,26 @@ impl<V: Eq + Hash + 'static> FreeVars<V> {
     }
 }
 
-impl<V: Eq + Hash + Clone> From<&V> for FreeVars<V> {
+impl<V: Eq + Hash + Clone> From<&V> for FreeVarsNoFns<V> {
     fn from(value: &V) -> Self {
-        FreeVars::singleton(value.clone())
+        FreeVarsNoFns::singleton(value.clone())
     }
 }
 
-impl<V: Eq + Hash> From<HashSet<V>> for FreeVars<V> {
+impl<V: Eq + Hash> From<HashSet<V>> for FreeVarsNoFns<V> {
     fn from(value: HashSet<V>) -> Self {
-        FreeVars(value)
+        FreeVarsNoFns(value)
     }
 }
 
-impl<V: Eq + Hash> Into<HashSet<V>> for FreeVars<V> {
+impl<V: Eq + Hash> Into<HashSet<V>> for FreeVarsNoFns<V> {
     fn into(self) -> HashSet<V> {
         self.0
     }
 }
 
-impl<V: Eq + Hash> From<FreeVars<V>> for Set<V> {
-    fn from(value: FreeVars<V>) -> Self {
+impl<V: Eq + Hash> From<FreeVarsNoFns<V>> for Set<V> {
+    fn from(value: FreeVarsNoFns<V>) -> Self {
         let tmp: HashSet<_> = value.into();
         tmp.into()
     }

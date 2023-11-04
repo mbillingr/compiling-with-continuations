@@ -4,6 +4,7 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod closure_conversion;
+pub mod closure_conversion_advanced;
 pub mod constant_folding;
 pub mod cps_eta_reduction;
 pub mod cps_eta_splitting;

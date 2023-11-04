@@ -5,6 +5,7 @@ mod compute;
 mod count_nodes;
 mod deser;
 mod free_vars;
+mod free_vars_nofns;
 mod pretty_print;
 mod substitute;
 mod transform;
