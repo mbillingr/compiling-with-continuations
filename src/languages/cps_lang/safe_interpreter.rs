@@ -132,6 +132,20 @@ pub fn eval_expr<V: Clone + Eq, F: Clone + Eq>(
                         );
                         expr = &cnts[0];
                     }
+                    PrimOp::IMul => {
+                        env = env.extend_var(
+                            vars[0].clone(),
+                            Answer::Int(x[0].as_int() * x[1].as_int()),
+                        );
+                        expr = &cnts[0];
+                    }
+                    PrimOp::IDiv => {
+                        env = env.extend_var(
+                            vars[0].clone(),
+                            Answer::Int(x[0].as_int() / x[1].as_int()),
+                        );
+                        expr = &cnts[0];
+                    }
                     PrimOp::FSame => {
                         if x[0].as_float() == x[1].as_float() {
                             expr = &cnts[1];

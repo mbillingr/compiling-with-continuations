@@ -122,6 +122,88 @@ mod tests {
     use crate::transformations::register_allocation::R;
     use crate::transformations::restrictions::RestrictedAst;
 
+    unsafe fn run_in_unoptimized_cps(
+        mini_lambda_expr: &ml::Expr<Ref<str>>,
+        out: &mut impl Write,
+    ) -> Answer {
+        let expr = mini_lambda_expr.clone();
+
+        println!("Source:");
+        println!("{}", expr.to_string());
+        println!("\n");
+
+        let cps_expr = Box::leak(Box::new(mini_lambda_to_cps_lang::Context::new(
+            "__".to_string(),
+        )))
+        .convert(&expr, Box::new(|x| cps::Expr::Halt(x)));
+
+        let cps = RestrictedAst::new(cps_expr);
+        let cps = cps.rename_uniquely("__");
+
+        println!("Initial CPS:");
+        cps.expr().pretty_print();
+        println!("\n");
+
+        let n_registers = 5;
+        let max_args = n_registers - 1; // reserve one more register for the closure
+
+        let cps = cps.limit_args(max_args);
+        let cps = cps.reset_refs();
+        let cps = cps.convert_closures();
+        let cps = cps.lift_lambdas();
+
+        println!("Closure Conversion & Lambda Lifting:");
+        cps.clone().rename_uniquely("__").expr().pretty_print();
+        println!("\n");
+
+        let cps = cps.spill(n_registers);
+
+        let cps = cps.rename_uniquely("__");
+
+        println!("Final:");
+        cps.expr().pretty_print();
+        println!("\n");
+
+        /*let (cps_expr, _) = cps.deconstruct();
+        //return crate::languages::cps_lang::interpreter::exec(&cps_expr, out);
+        crate::languages::cps_lang::safe_interpreter::exec(&cps_expr, out);
+        return Answer::from_usize(0);*/
+
+        let cps = cps.allocate_registers();
+
+        println!("Registers:");
+        cps.expr().pretty_print();
+        println!("\n");
+
+        /*let (cps_expr, _) = cps.deconstruct();
+        //return crate::languages::cps_lang::interpreter::exec(&cps_expr, out);
+        crate::languages::cps_lang::safe_interpreter::exec(&cps_expr, out);
+        return Answer::from_usize(0);*/
+
+        let byte_code = cps.clone().generate_linear_code([R(0), R(1), R(2)]);
+
+        println!("Linear:");
+        for op in byte_code {
+            match op {
+                Op::Label(l) => println!("{l}:"),
+                _ => println!("  {op:?}"),
+            }
+        }
+        println!("\n");
+
+        let c_code = cps.clone().generate_c_code();
+
+        println!("C:");
+        println!("{}", c_code);
+        println!("\n");
+
+        let bin = compile_c(c_code);
+        let result = String::from_utf8(Command::new(bin).output().unwrap().stdout).unwrap();
+        let result = result.trim();
+        write!(out, "{}", result).unwrap();
+        Answer::from_usize(0)
+    }
+
     unsafe fn run_in_optimized_cps(
         mini_lambda_expr: &ml::Expr<Ref<str>>,
         out: &mut impl Write,
@@ -155,12 +237,20 @@ mod tests {
         let cps = cps.purge_dead_functions();
         let cps = cps.beta_contract();
 
-        let cps = cps.inline_functions();
-        let cps = cps.rename_uniquely("__");
+        let mut cps = cps;
+        for _ in 0..10 {
+            cps = cps.inline_functions();
+            cps = cps.rename_uniquely("__");
+            cps = cps.purge_dead_functions();
+            cps = cps.analyze_refs();
+            cps = cps.fold_constants();
+        }
+
         let cps = cps.purge_dead_functions();
-        let cps = cps.analyze_refs();
+        let cps = cps.beta_contract();
         let cps = cps.fold_constants();
-        let cps = cps.purge_dead_functions();
+
+        let cps = cps.rename_uniquely("__");
 
         println!("More reductions:");
         cps.clone().rename_uniquely("__").expr().pretty_print();
@@ -242,5 +332,13 @@ mod tests {
         binary
     }
 
-    make_testsuite_for_mini_lambda!(run_in_optimized_cps continuation_tests);
+    mod unpotimized {
+        use super::*;
+        make_testsuite_for_mini_lambda!(run_in_unoptimized_cps continuation_tests);
+    }
+
+    mod optimized {
+        use super::*;
+        make_testsuite_for_mini_lambda!(run_in_optimized_cps continuation_tests);
+    }
 }
