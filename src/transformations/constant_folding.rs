@@ -33,6 +33,66 @@ impl<V: Clone + PartialEq, F: Clone + PartialEq> Transform<V, F> for ConstantFol
                 Ref([no, _]),
             ) => Transformed::Again((**no).clone()),
 
+            Expr::PrimOp(
+                PrimOp::IAdd,
+                Ref([Value::Int(a), Value::Int(b)]),
+                Ref([var]),
+                Ref([cnt]),
+            ) => Transformed::Done((**cnt).substitute_var(var, &Value::Int(*a + *b))),
+
+            Expr::PrimOp(PrimOp::IAdd, Ref([Value::Int(0), x]), Ref([var]), Ref([cnt])) => {
+                Transformed::Done((**cnt).substitute_var(var, x))
+            }
+
+            Expr::PrimOp(PrimOp::IAdd, Ref([x, Value::Int(0)]), Ref([var]), Ref([cnt])) => {
+                Transformed::Done((**cnt).substitute_var(var, x))
+            }
+
+            Expr::PrimOp(
+                PrimOp::ISub,
+                Ref([Value::Int(a), Value::Int(b)]),
+                Ref([var]),
+                Ref([cnt]),
+            ) => Transformed::Done((**cnt).substitute_var(var, &Value::Int(*a - *b))),
+
+            Expr::PrimOp(PrimOp::ISub, Ref([x, Value::Int(0)]), Ref([var]), Ref([cnt])) => {
+                Transformed::Done((**cnt).substitute_var(var, x))
+            }
+
+            Expr::PrimOp(
+                PrimOp::IMul,
+                Ref([Value::Int(a), Value::Int(b)]),
+                Ref([var]),
+                Ref([cnt]),
+            ) => Transformed::Done((**cnt).substitute_var(var, &Value::Int(*a * *b))),
+
+            Expr::PrimOp(PrimOp::IMul, Ref([x, Value::Int(1)]), Ref([var]), Ref([cnt])) => {
+                Transformed::Done((**cnt).substitute_var(var, x))
+            }
+
+            Expr::PrimOp(PrimOp::IMul, Ref([Value::Int(1), x]), Ref([var]), Ref([cnt])) => {
+                Transformed::Done((**cnt).substitute_var(var, x))
+            }
+
+            Expr::PrimOp(PrimOp::IMul, Ref([_, Value::Int(0)]), Ref([var]), Ref([cnt])) => {
+                Transformed::Done((**cnt).substitute_var(var, &Value::Int(0)))
+            }
+
+            Expr::PrimOp(PrimOp::IMul, Ref([Value::Int(0), _]), Ref([var]), Ref([cnt])) => {
+                Transformed::Done((**cnt).substitute_var(var, &Value::Int(0)))
+            }
+
+            Expr::PrimOp(
+                PrimOp::IDiv,
+                Ref([Value::Int(a), Value::Int(b)]),
+                Ref([var]),
+                Ref([cnt]),
+            ) => Transformed::Done((**cnt).substitute_var(var, &Value::Int(*a / *b))),
+
+            Expr::PrimOp(PrimOp::IDiv, Ref([x, Value::Int(1)]), Ref([var]), Ref([cnt])) => {
+                Transformed::Done((**cnt).substitute_var(var, x))
+            }
+
             _ => Transformed::Continue,
         }
     }
