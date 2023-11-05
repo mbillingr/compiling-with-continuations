@@ -46,6 +46,12 @@ impl<T: Clone> Ref<[T]> {
         }
         Self::array(xs)
     }
+
+    pub fn append(&self, ys: impl IntoIterator<Item = T>) -> Self {
+        let mut xs = self.to_vec();
+        xs.extend(ys);
+        Self::array(xs)
+    }
 }
 
 #[macro_export]

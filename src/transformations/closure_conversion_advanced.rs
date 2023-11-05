@@ -137,7 +137,7 @@ impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for Conte
     fn post_visit_expr(&mut self, _: &'e Expr<V, F>) {}
 }
 
-impl<V: Clone + Debug + Display + Eq + GenSym + Hash> Context<V, V> {
+impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Context<V, V> {
     fn make_closure_application(&mut self, f: &V, args: &Ref<[Value<V, V>]>) -> Expr<V, V> {
         let mut args_ = vec![Value::Var(f.clone())];
         args_.extend(self.transform_values(args).iter().cloned());
@@ -151,7 +151,7 @@ impl<V: Clone + Debug + Display + Eq + GenSym + Hash> Context<V, V> {
     }
 }
 
-impl<V: Clone + Debug + Display + Eq + GenSym + Hash> Transform<V, V> for Context<V, V> {
+impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Transform<V, V> for Context<V, V> {
     fn visit_expr(&mut self, expr: &Expr<V, V>) -> Transformed<Expr<V, V>> {
         match expr {
             Expr::App(Value::Var(f), args) => {
@@ -160,6 +160,14 @@ impl<V: Clone + Debug + Display + Eq + GenSym + Hash> Transform<V, V> for Contex
 
             Expr::App(Value::Label(f), args) if self.fns_that_need_closures.contains(f) => {
                 Transformed::Done(self.make_closure_application(f, args))
+            }
+
+            Expr::App(Value::Label(f), args) if !self.vars_free_in_fn[f].is_empty() => {
+                let mut free_vars: Vec<_> = self.vars_free_in_fn[f].iter().cloned().collect();
+                free_vars.sort_unstable();
+                let args_ = args.append(free_vars.into_iter().map(Value::Var));
+                let args_out: Vec<_> = args_.iter().map(|a| self.transform_value(a)).collect();
+                Transformed::Done(Expr::App(Value::Label(f.clone()), Ref::array(args_out)))
             }
 
             Expr::Fix(defs, cnt) => {
@@ -190,6 +198,12 @@ impl<V: Clone + Debug + Display + Eq + GenSym + Hash> Transform<V, V> for Contex
                             p.prepend(f.clone()),
                             fbody.into(),
                         ));
+                    } else if !self.vars_free_in_fn[f].is_empty() {
+                        let mut free_vars: Vec<_> =
+                            self.vars_free_in_fn[f].iter().cloned().collect();
+                        free_vars.sort_unstable();
+                        let p_out = p.append(free_vars);
+                        defs_out.push((f.clone(), p_out, fbody.into()))
                     } else {
                         defs_out.push((f.clone(), *p, fbody.into()));
                     }
@@ -209,9 +223,13 @@ impl<V: Clone + Debug + Display + Eq + GenSym + Hash> Transform<V, V> for Contex
                 }
 
                 let cls_fields = closure.into_fields();
-                let cnt_out = Expr::Record(Ref::array(cls_fields), cls_arg, cnt);
+                let cnt_out = if cls_fields.is_empty() {
+                    cnt
+                } else {
+                    Ref::new(Expr::Record(Ref::array(cls_fields), cls_arg, cnt))
+                };
 
-                Transformed::Done(Expr::Fix(Ref::array(defs_out), Ref::new(cnt_out)))
+                Transformed::Done(Expr::Fix(Ref::array(defs_out), cnt_out))
             }
 
             _ => Transformed::Continue,
