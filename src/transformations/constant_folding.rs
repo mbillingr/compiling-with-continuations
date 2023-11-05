@@ -18,10 +18,10 @@ impl<V: Clone + PartialEq, F: Clone + PartialEq> Transform<V, F> for ConstantFol
                 Ref([_, yes]),
             ) if a == b => Transformed::Again((**yes).clone()),
 
-            // Two different variables may or may not have the same value
+            // Variables may have any value, so we can never know in advance if they are the same
             Expr::PrimOp(
                 PrimOp::ISame | PrimOp::FSame | PrimOp::SSame,
-                Ref([Value::Var(_), Value::Var(_)]),
+                Ref([Value::Var(_), _] | [_, Value::Var(_)]),
                 _,
                 Ref([_, _]),
             ) => Transformed::Continue,
@@ -141,12 +141,18 @@ mod tests {
     }
 
     #[test]
-    fn fold_comparison_over_same_variables() {
+    fn fold_comparison_over_variables() {
         let x = Expr::from_str("(primop = (x x) () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(yes)").unwrap();
         assert_eq!(ConstantFolder.transform_expr(&x), y);
 
         let x = Expr::from_str("(primop = (x y) () ((no) (yes)))").unwrap();
+        assert_eq!(ConstantFolder.transform_expr(&x), x);
+
+        let x = Expr::from_str("(primop = (x 0) () ((no) (yes)))").unwrap();
+        assert_eq!(ConstantFolder.transform_expr(&x), x);
+
+        let x = Expr::from_str("(primop = (0 x) () ((no) (yes)))").unwrap();
         assert_eq!(ConstantFolder.transform_expr(&x), x);
     }
 
