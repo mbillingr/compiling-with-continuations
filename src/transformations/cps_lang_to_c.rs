@@ -291,7 +291,7 @@ impl<
     fn generate_access(&self, value: &Value<V, F>, ap: &AccessPath) -> String {
         match ap {
             AccessPath::Ref(0) => self.generate_value(value),
-            AccessPath::Ref(i) => format!("({} + {})", self.generate_value(value), i),
+            AccessPath::Ref(i) => format!("((T)((T*){} + {}))", self.generate_value(value), i),
             AccessPath::Sel(i, ap) => format!("{}[{}]", self.generate_access(value, ap), i),
         }
     }
@@ -474,7 +474,7 @@ impl<
         var: String,
         mut stmts: Vec<String>,
     ) -> Vec<String> {
-        stmts.push(format!("{var} = {rec} + {idx};"));
+        stmts.push(format!("{var} = (T)((T*){rec} + {idx});"));
         if INSTRUMENT {
             stmts.push(format!("printf(\"{var} = {rec}@{idx}\\n\");"))
         }
