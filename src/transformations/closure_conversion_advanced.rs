@@ -12,17 +12,17 @@ use std::sync::Arc;
 ///   - unique names
 ///   - labels
 #[derive(Debug)]
-pub struct Context<V, F> {
+pub struct Context<V> {
     n_registers: usize,
-    fn_nargs: HashMap<F, usize>,
-    vars_free_in_fn: HashMap<F, HashSet<V>>,
-    fns_applied_in_fn: HashMap<F, HashSet<F>>,
-    sibling_fns: HashMap<F, HashSet<F>>,
-    fns_that_need_closures: HashSet<F>,
+    fn_nargs: HashMap<V, usize>,
+    vars_free_in_fn: HashMap<V, HashSet<V>>,
+    fns_applied_in_fn: HashMap<V, HashSet<V>>,
+    sibling_fns: HashMap<V, HashSet<V>>,
+    fns_that_need_closures: HashSet<V>,
     gs: Arc<GensymContext>,
 }
 
-impl<V: Clone + Debug + Eq + Hash, F: Clone + Debug + Eq + Hash> Context<V, F> {
+impl<V: Clone + Debug + Eq + Hash> Context<V> {
     pub fn new(n_registers: usize, gs: Arc<GensymContext>) -> Self {
         Context {
             n_registers,
@@ -52,7 +52,7 @@ impl<V: Clone + Debug + Eq + Hash, F: Clone + Debug + Eq + Hash> Context<V, F> {
         }
     }
 
-    fn iteration_step_free_vars(&self) -> HashMap<F, HashSet<V>> {
+    fn iteration_step_free_vars(&self) -> HashMap<V, HashSet<V>> {
         let mut vars_free_in_fn_out = HashMap::with_capacity(self.vars_free_in_fn.len());
         for (f, vf) in &self.vars_free_in_fn {
             let mut fvs = vf.clone();
@@ -64,7 +64,7 @@ impl<V: Clone + Debug + Eq + Hash, F: Clone + Debug + Eq + Hash> Context<V, F> {
         vars_free_in_fn_out
     }
 
-    fn iteration_step_needed_closure(&self) -> HashSet<F> {
+    fn iteration_step_needed_closure(&self) -> HashSet<V> {
         let mut needed = self.fns_that_need_closures.clone();
 
         needed.extend(
@@ -90,8 +90,8 @@ impl<V: Clone + Debug + Eq + Hash, F: Clone + Debug + Eq + Hash> Context<V, F> {
     }
 }
 
-impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for Context<V, F> {
-    fn visit_expr(&mut self, expr: &'e Expr<V, F>) -> Computation {
+impl<'e, V: Clone + Eq + Hash> Compute<'e, V, V> for Context<V> {
+    fn visit_expr(&mut self, expr: &'e Expr<V, V>) -> Computation {
         match expr {
             Expr::Fix(defs, _) => {
                 let siblings: HashSet<_> = defs.iter().map(|(f, _, _)| f.clone()).collect();
@@ -105,11 +105,15 @@ impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for Conte
                 self.fn_nargs
                     .extend(defs.iter().map(|(f, p, _)| (f.clone(), p.len())));
 
-                self.vars_free_in_fn.extend(
-                    defs.iter()
-                        .map(|(f, p, b)| (f, Expr::function_free_vars_nofns(p, b)))
-                        .map(|(f, fvs)| (f.clone(), fvs.into())),
-                );
+                self.vars_free_in_fn.extend(defs.iter().map(|(f, p, b)| {
+                    let mut escape_from = FnsEscape::new();
+                    escape_from.compute_for_expr(b);
+
+                    let mut fvs: HashSet<_> = Expr::function_free_vars_nofns(p, b).into();
+                    fvs.extend(escape_from.0);
+
+                    (f.clone(), fvs)
+                }));
 
                 self.fns_applied_in_fn.extend(defs.iter().map(|(f, _, b)| {
                     let mut applied_in = FnsApplied::new();
@@ -129,7 +133,7 @@ impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for Conte
         }
     }
 
-    fn visit_value(&mut self, value: &Value<V, F>) {
+    fn visit_value(&mut self, value: &Value<V, V>) {
         match value {
             Value::Label(f) => {
                 // This function escapes (unless it's the first value of an App node, which should
@@ -140,10 +144,10 @@ impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for Conte
         }
     }
 
-    fn post_visit_expr(&mut self, _: &'e Expr<V, F>) {}
+    fn post_visit_expr(&mut self, _: &'e Expr<V, V>) {}
 }
 
-impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Context<V, V> {
+impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Context<V> {
     fn make_closure_application(&mut self, f: &V, args: &Ref<[Value<V, V>]>) -> Expr<V, V> {
         let mut args_ = vec![Value::Var(f.clone())];
         args_.extend(self.transform_values(args).iter().cloned());
@@ -157,7 +161,7 @@ impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Context<V, V> {
     }
 }
 
-impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Transform<V, V> for Context<V, V> {
+impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Transform<V, V> for Context<V> {
     fn visit_expr(&mut self, expr: &Expr<V, V>) -> Transformed<Expr<V, V>> {
         match expr {
             Expr::App(Value::Var(f), args) => {
@@ -281,6 +285,43 @@ impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for FnsAp
     fn post_visit_expr(&mut self, _: &'e Expr<V, F>) {}
 }
 
+struct FnsEscape<F>(HashSet<F>);
+
+impl<F> FnsEscape<F> {
+    pub fn new() -> Self {
+        FnsEscape(HashSet::new())
+    }
+}
+
+impl<'e, V: Clone + Eq + Hash, F: Clone + Eq + Hash> Compute<'e, V, F> for FnsEscape<F> {
+    fn visit_expr(&mut self, expr: &'e Expr<V, F>) -> Computation {
+        match expr {
+            Expr::App(_, args) => {
+                self.compute_for_values(args);
+                Computation::Done
+            }
+
+            Expr::Fix(_, cnt) => {
+                self.compute_for_expr(cnt);
+                Computation::Done
+            }
+
+            _ => Computation::Continue,
+        }
+    }
+
+    fn visit_value(&mut self, value: &Value<V, F>) {
+        match value {
+            Value::Label(f) => {
+                self.0.insert(f.clone());
+            }
+            _ => {}
+        }
+    }
+
+    fn post_visit_expr(&mut self, _: &'e Expr<V, F>) {}
+}
+
 fn sorted<T: Ord>(xs: impl IntoIterator<Item = T>) -> Vec<T> {
     let mut ys: Vec<_> = xs.into_iter().collect();
     ys.sort_unstable();
@@ -305,7 +346,7 @@ mod tests {
             hash_map! {
             "h".into() => hash_set!["z".into()],
             "g".into() => hash_set!["y".into()],
-            "f".into() => hash_set!["x".into(), "y".into()]}
+            "f".into() => hash_set!["x".into(), "y".into(), "g".into()]}
         )
     }
 
@@ -358,7 +399,7 @@ mod tests {
 
     #[test]
     fn free_var_update() {
-        let ctx: Context<&str, &str> = Context {
+        let ctx: Context<&str> = Context {
             n_registers: 0,
             fn_nargs: hash_map![],
             vars_free_in_fn: hash_map![
@@ -382,7 +423,7 @@ mod tests {
 
     #[test]
     fn free_var_convergenge() {
-        let ctx: Context<&str, &str> = Context {
+        let ctx: Context<&str> = Context {
             n_registers: 0,
             fn_nargs: hash_map![],
             vars_free_in_fn: hash_map![
@@ -406,7 +447,7 @@ mod tests {
 
     #[test]
     fn closure_need_update_due_to_register_pressure() {
-        let ctx: Context<&str, &str> = Context {
+        let ctx: Context<&str> = Context {
             n_registers: 1,
             fn_nargs: hash_map![
                 "f".into() => 0],
@@ -425,7 +466,7 @@ mod tests {
 
     #[test]
     fn closure_need_update_due_to_sibling() {
-        let ctx: Context<&str, &str> = Context {
+        let ctx: Context<&str> = Context {
             n_registers: 1,
             fn_nargs: hash_map![
                 "f".into() => 0, 
@@ -451,7 +492,7 @@ mod tests {
 
     #[test]
     fn closure_need_convergence() {
-        let ctx: Context<&str, &str> = Context {
+        let ctx: Context<&str> = Context {
             n_registers: 1,
             fn_nargs: hash_map![
                 "f".into() => 0, 
@@ -477,7 +518,7 @@ mod tests {
 
     #[test]
     fn solve_closure_needs() {
-        let ctx: Context<&str, &str> = Context {
+        let ctx: Context<&str> = Context {
             n_registers: 1,
             fn_nargs: hash_map![
                 "f".into() => 0, 
