@@ -260,7 +260,6 @@ mod tests {
         let max_args = n_registers - 1; // reserve one more register for the closure
 
         let cps = cps.limit_args(max_args);
-        //let cps = cps.reset_refs();
         let cps = cps.convert_closures2();
         let cps = cps.lift_lambdas();
 

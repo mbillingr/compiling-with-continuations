@@ -11,6 +11,7 @@ use std::sync::Arc;
 /// Requirements:
 ///   - unique names
 ///   - labels
+#[derive(Debug)]
 pub struct Context<V, F> {
     n_registers: usize,
     fn_nargs: HashMap<F, usize>,
@@ -21,7 +22,7 @@ pub struct Context<V, F> {
     gs: Arc<GensymContext>,
 }
 
-impl<V: Clone + Eq + Hash, F: Clone + Eq + Hash> Context<V, F> {
+impl<V: Clone + Debug + Eq + Hash, F: Clone + Debug + Eq + Hash> Context<V, F> {
     pub fn new(n_registers: usize, gs: Arc<GensymContext>) -> Self {
         Context {
             n_registers,
@@ -42,6 +43,7 @@ impl<V: Clone + Eq + Hash, F: Clone + Eq + Hash> Context<V, F> {
             if vars_free_in_fn == self.vars_free_in_fn
                 && fns_that_need_closures == self.fns_that_need_closures
             {
+                println!("{:?}", self);
                 return self;
             }
 
@@ -65,7 +67,6 @@ impl<V: Clone + Eq + Hash, F: Clone + Eq + Hash> Context<V, F> {
     fn iteration_step_needed_closure(&self) -> HashSet<F> {
         let mut needed = self.fns_that_need_closures.clone();
 
-        // todo: shouldn't we test if |fv| + |params| > N ?
         needed.extend(
             self.vars_free_in_fn
                 .iter()
@@ -563,6 +564,22 @@ mod tests {
         let x = Expr::from_str("(fix ((f (a b) (halt 0))) (halt 0))").unwrap();
         let y = Expr::from_str(
             "(fix ((f__2 (f a b) (select 2 f y (select 1 f x (halt 0))))) (record (((@ f__2) (ref 0)) x y) cls__1 (offset 0 cls__1 f (halt 0))))",
+        )
+        .unwrap();
+        assert_eq!(ctx.transform_expr(&x), y);
+    }
+
+    #[test]
+    fn escape_from_another_function() {
+        let mut ctx = Context::new(50, Arc::new(GensymContext::new("__")));
+
+        let x = Expr::from_str("(fix ((f () (halt 0)) (g (k) (k (@ f)))) (halt 0))").unwrap();
+        ctx.compute_for_expr(&x);
+
+        let mut ctx = ctx.solve_closure_requirements();
+
+        let y = Expr::from_str(
+            "(fix ((f__1 (f) (halt 0)) (g (k f) (select 0 k k__2 (k__2 k f)))) (record (((@ f__1) (ref 0))) cls__0 (offset 0 cls__0 f (halt 0))))",
         )
         .unwrap();
         assert_eq!(ctx.transform_expr(&x), y);
