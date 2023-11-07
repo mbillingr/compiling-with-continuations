@@ -148,8 +148,13 @@ mod tests {
         let max_args = n_registers - 1; // reserve one more register for the closure
 
         let cps = cps.limit_args(max_args);
+        //let cps = cps.analyze_refs();
+        //let cps = cps.convert_closures2();
         let cps = cps.reset_refs();
         let cps = cps.convert_closures();
+        println!("DBG:");
+        cps.expr().pretty_print();
+        println!("\n");
         let cps = cps.lift_lambdas();
 
         println!("Closure Conversion & Lambda Lifting:");
@@ -261,9 +266,6 @@ mod tests {
 
         let cps = cps.limit_args(max_args);
         let cps = cps.convert_closures2();
-        println!("DBG:");
-        cps.expr().pretty_print();
-        println!("\n");
         let cps = cps.lift_lambdas();
 
         println!("Closure Conversion & Lambda Lifting:");

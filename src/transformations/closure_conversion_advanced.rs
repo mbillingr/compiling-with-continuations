@@ -90,7 +90,7 @@ impl<V: Clone + Debug + Eq + Hash> Context<V> {
     }
 }
 
-impl<'e, V: Clone + Eq + Hash> Compute<'e, V, V> for Context<V> {
+impl<'e, V: Clone + Debug + Eq + Hash> Compute<'e, V, V> for Context<V> {
     fn visit_expr(&mut self, expr: &'e Expr<V, V>) -> Computation {
         match expr {
             Expr::Fix(defs, _) => {
@@ -673,6 +673,33 @@ mod tests {
                             (offset 0 cls__1 g 
                                 (halt g)))))) 
                 ((@ f)))",
+        )
+        .unwrap();
+        assert_eq!(ctx.transform_expr(&x), y);
+    }
+
+    #[test]
+    fn escaping_outer_function() {
+        let mut ctx = Context::new(50, Arc::new(GensymContext::new("__")));
+
+        let x = Expr::from_str(
+            "(fix ((f ()
+                    (fix ((g () (halt (@ f))))
+                        ((@ g)))))
+                (halt 0))",
+        )
+        .unwrap();
+        ctx.compute_for_expr(&x);
+
+        let mut ctx = ctx.solve_closure_requirements();
+
+        let y = Expr::from_str(
+            "(fix ((f__1 (f)
+                    (fix ((g (f) (halt f)))
+                        ((@ g) f))))
+                (record (((@ f__1) (ref 0))) cls__0
+                    (offset 0 cls__0 f
+                        (halt 0))))",
         )
         .unwrap();
         assert_eq!(ctx.transform_expr(&x), y);

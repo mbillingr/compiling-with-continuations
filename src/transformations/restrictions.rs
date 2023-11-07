@@ -307,6 +307,7 @@ impl<V> RestrictedAst<V, V> {
     where
         V: Clone + Eq + Hash + Ord + GenSym + Debug + Display,
     {
+        assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
         assert!(self.toplevel_structure);
         assert!(self.max_args.is_some());
         assert!(self.max_args.unwrap() <= n_registers);

@@ -32,7 +32,7 @@ impl<'e, V: Clone + Eq + Hash> Compute<'e, V, V> for FreeVars<V> {
     }
 
     fn visit_value(&mut self, value: &Value<V, V>) {
-        if let Value::Var(v) = value {
+        if let Value::Var(v) | Value::Label(v) = value {
             self.0.insert(v.clone());
         }
     }
@@ -75,10 +75,9 @@ impl<V: Clone + Eq + Hash> Expr<V> {
 
 impl<V: Clone + PartialEq + Eq + Hash> Value<V> {
     pub fn free_vars(&self) -> FreeVars<V> {
-        match self {
-            Value::Var(v) | Value::Label(v) => FreeVars::singleton(v.clone()),
-            _ => FreeVars::empty(),
-        }
+        let mut fvs = FreeVars::empty();
+        self.compute(&mut fvs);
+        fvs
     }
 }
 
@@ -197,5 +196,10 @@ mod tests {
             cps_expr!((set [a b] [x y] [(x y) (y z)])).free_vars(),
             hash_set!["a", "b", "z"].into()
         );
+    }
+
+    #[test]
+    fn label_in_halt() {
+        assert_eq!(cps_expr!(halt (@ f)).free_vars(), hash_set!["f"].into());
     }
 }
