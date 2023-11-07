@@ -16,6 +16,7 @@ pub fn beta_contraction<V: Clone + Eq + Hash + PartialEq>(
             .map(|(f, fninfo)| (f, (fninfo.params.to_vec(), fninfo.body.clone())))
             .collect(),
         heuristic: AlwaysInline,
+        recursive: true,
         depth: 0,
         clicker,
     }
@@ -38,6 +39,7 @@ pub fn inline_trivial_fns<V: Clone + Eq + Hash + PartialEq>(
             .map(|(f, fninfo)| (f, (fninfo.params.to_vec(), fninfo.body.clone())))
             .collect(),
         heuristic: AlwaysInline,
+        recursive: true,
         depth: 0,
         clicker,
     }
@@ -56,6 +58,7 @@ pub fn heuristic_inline<V: Clone + Eq + Hash + PartialEq>(
             .map(|(f, fninfo)| (f, (fninfo.params.to_vec(), fninfo.body.clone())))
             .collect(),
         heuristic: InlineDecision {},
+        recursive: false,
         depth: 0,
         clicker,
     }
@@ -65,6 +68,8 @@ pub fn heuristic_inline<V: Clone + Eq + Hash + PartialEq>(
 struct Inliner<V: 'static, T: InlineHeuristic<V, V>> {
     inlineable_functions: HashMap<V, (Vec<V>, Expr<V, V>)>,
     heuristic: T,
+    /// whether to inline inlined function bodies
+    recursive: bool,
     depth: usize,
     clicker: Clicker,
 }
@@ -78,12 +83,14 @@ impl<V: Clone + Eq + Hash + PartialEq, T: InlineHeuristic<V, V>> Transform<V, V>
         match expr {
             Expr::App(Value::Label(f), args) => match self.inlineable_functions.get(f) {
                 Some((params, body)) if self.heuristic.calc(self.depth, args, params, body) => {
-                    let new_body = body
+                    let mut new_body = body
                         .clone()
                         .substitute_vars(params.into_iter().cloned().zip(args.iter().cloned()));
-                    self.depth += 1;
-                    let new_body = self.transform_expr(&new_body);
-                    self.depth -= 1;
+                    if self.recursive {
+                        self.depth += 1;
+                        new_body = self.transform_expr(&new_body);
+                        self.depth -= 1;
+                    }
                     Transformed::Done(new_body)
                 }
                 _ => Transformed::Continue,
@@ -118,7 +125,7 @@ impl<V, F> InlineHeuristic<V, F> for AlwaysInline {
 struct InlineDecision {}
 
 impl<V, F> InlineHeuristic<V, F> for InlineDecision {
-    fn calc(&self, depth: usize, args: &[Value<V, F>], _params: &[V], _body: &Expr<V, F>) -> bool {
+    fn calc(&self, depth: usize, args: &[Value<V, F>], _params: &[V], body: &Expr<V, F>) -> bool {
         let const_args = args
             .iter()
             .filter(|a| match a {
@@ -127,19 +134,15 @@ impl<V, F> InlineHeuristic<V, F> for InlineDecision {
             })
             .count();
 
-        if args.len() > 1 {
-            return false;
-        }
-
         if const_args < args.len() {
             return false;
         }
 
         let const_arg_ratio = const_args as f64 / args.len() as f64;
 
-        const INLINE_AGGRESSIVENESS: f64 = 1.0;
+        const INLINE_AGGRESSIVENESS: f64 = 100.0;
 
-        (1 + depth) as f64 / const_arg_ratio <= INLINE_AGGRESSIVENESS
+        body.size() as f64 + (1 + depth) as f64 / const_arg_ratio <= INLINE_AGGRESSIVENESS
     }
 }
 
@@ -155,6 +158,7 @@ mod tests {
         Inliner {
             inlineable_functions: inlineable,
             heuristic: AlwaysInline,
+            recursive: true,
             depth: 0,
             clicker: Clicker::new(),
         }

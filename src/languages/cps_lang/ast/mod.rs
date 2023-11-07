@@ -7,6 +7,7 @@ mod deser;
 mod free_vars;
 mod free_vars_nofns;
 mod pretty_print;
+mod size;
 mod substitute;
 mod transform;
 

@@ -1,7 +1,7 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, List, Value};
 
-pub trait Compute<'e, V: Clone, F: Clone = V> {
+pub trait Compute<'e, V, F = V> {
     fn visit_expr(&mut self, expr: &'e Expr<V, F>) -> Computation;
     fn visit_value(&mut self, value: &Value<V, F>);
     fn post_visit_expr(&mut self, expr: &'e Expr<V, F>);
@@ -56,7 +56,7 @@ pub enum Computation {
     Done,
 }
 
-impl<V: Clone, F: Clone> Expr<V, F> {
+impl<V, F> Expr<V, F> {
     pub fn compute<'e>(&'e self, comp: &mut impl Compute<'e, V, F>) {
         match comp.visit_expr(self) {
             Computation::Continue => {}
@@ -110,7 +110,7 @@ impl<V: Clone, F: Clone> Expr<V, F> {
     }
 }
 
-impl<V: Clone, F: Clone> Value<V, F> {
+impl<V, F> Value<V, F> {
     pub fn compute<'e>(&'e self, comp: &mut impl Compute<'e, V, F>) {
         comp.visit_value(self);
     }

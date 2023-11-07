@@ -240,7 +240,7 @@ mod tests {
         let cps = cps.beta_contract();
 
         let mut cps = cps;
-        loop {
+        for _ in 0..1000 {
             cps.clicker.reset();
 
             cps = cps.inline_functions();
