@@ -206,7 +206,11 @@ impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Transform<V, V> for 
                 for (f, _, _) in defs.iter() {
                     if self.fns_that_need_closures.contains(f) {
                         closure.add_function(f);
-                        clvars.extend(&self.vars_free_in_fn[f])
+                        for v in &self.vars_free_in_fn[f] {
+                            if !self.fn_args[f].contains(v) {
+                                clvars.insert(v);
+                            }
+                        }
                     }
                 }
                 for v in sorted(clvars) {
@@ -223,7 +227,9 @@ impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Transform<V, V> for 
                                 closure.build_lookup(g.clone(), f, Value::Var(f.clone()), fbody);
                         }
                         for v in free_vars {
-                            fbody = closure.build_lookup(v, f, Value::Var(f.clone()), fbody);
+                            if !self.fn_args[f].contains(&v) {
+                                fbody = closure.build_lookup(v, f, Value::Var(f.clone()), fbody);
+                            }
                         }
                         defs_out.push((
                             closure.get_new_func_name(f),
@@ -745,6 +751,62 @@ mod tests {
                     (fix ((g (x) (halt x)))
                         ((@ g) x))))
                 ((@ f) 0))",
+        )
+        .unwrap();
+        assert_eq!(ctx.transform_expr(&x), y);
+    }
+
+    #[test]
+    fn free_variable_applied_in_child_function() {
+        let mut ctx = Context::new(50, Arc::new(GensymContext::new("__")));
+
+        let x = Expr::from_str(
+            "(fix ((f (x)
+                    (fix ((g () (x)))
+                        ((@ g)))))
+                ((@ f) xx))",
+        )
+        .unwrap();
+        ctx.compute_for_expr(&x);
+
+        let mut ctx = ctx.solve_closure_requirements();
+
+        let y = Expr::from_str(
+            "(fix ((f (x)
+                          (fix ((g (x) 
+                                   (select 0 x x__2
+                                       (x__2 x))))
+                              ((@ g) x))))
+                     ((@ f) xx))",
+        )
+        .unwrap();
+        assert_eq!(ctx.transform_expr(&x), y);
+    }
+
+    #[test]
+    fn free_variable_applied_in_child_of_function_with_closure() {
+        let mut ctx = Context::new(50, Arc::new(GensymContext::new("__")));
+
+        let x = Expr::from_str(
+            "(fix ((f (x)
+                    (fix ((g () (x)))
+                        ((@ g)))))
+                (halt (@ f)))",
+        )
+        .unwrap();
+        ctx.compute_for_expr(&x);
+
+        let mut ctx = ctx.solve_closure_requirements();
+
+        let y = Expr::from_str(
+            "(fix ((f__1 (f x)                          
+                          (fix ((g (x) 
+                                   (select 0 x x__3
+                                       (x__3 x))))
+                              ((@ g) x))))
+                     (record (((@ f__1) (ref 0))) cls__0 
+                        (offset 0 cls__0 f 
+                            (halt f))))",
         )
         .unwrap();
         assert_eq!(ctx.transform_expr(&x), y);
