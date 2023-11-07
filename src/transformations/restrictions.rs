@@ -1,8 +1,8 @@
+use crate::core::clicker::Clicker;
 use crate::languages::cps_lang::ast::{Compute, Expr, Transform};
 use crate::transformations::register_allocation::R;
 use crate::transformations::{GenSym, GensymContext};
 use std::borrow::Borrow;
-use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
@@ -21,6 +21,7 @@ pub struct RestrictedAst<V: 'static, F: 'static> {
     toplevel_structure: bool,
     max_free_vars: Option<usize>,
     gensym_context: Arc<GensymContext>,
+    pub clicker: Clicker,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -44,6 +45,7 @@ impl<V, F> RestrictedAst<V, F> {
             toplevel_structure: false,
             max_free_vars: None,
             gensym_context: Arc::new(GensymContext::new(DEFAULT_GENSYM_DELIMITER)),
+            clicker: Default::default(),
         }
     }
 
@@ -120,8 +122,9 @@ impl<V> RestrictedAst<V, V> {
     {
         assert!(self.all_names_unique);
         assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
-        let ast = super::dead_function_removal::purge_dead_functions(&self.ast)
-            .unwrap_or_else(|| self.ast.clone());
+        let ast =
+            super::dead_function_removal::purge_dead_functions(&self.ast, self.clicker.clone())
+                .unwrap_or_else(|| self.ast.clone());
         RestrictedAst {
             ast,
             no_dead_fns: true,
@@ -174,8 +177,8 @@ impl<V> RestrictedAst<V, V> {
         assert!(self.no_dead_fns);
         let mut ast = self.ast;
         loop {
-            ast = super::function_inlining::beta_contraction(&ast);
-            match super::dead_function_removal::purge_dead_functions(&ast) {
+            ast = super::function_inlining::beta_contraction(&ast, self.clicker.clone());
+            match super::dead_function_removal::purge_dead_functions(&ast, self.clicker.clone()) {
                 Some(a) => ast = a,
                 None => {
                     return RestrictedAst {
@@ -195,23 +198,7 @@ impl<V> RestrictedAst<V, V> {
     {
         assert!(self.all_names_unique);
         assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
-        let ast = super::function_inlining::heuristic_inline(&self.ast);
-        RestrictedAst {
-            ast,
-            all_names_unique: false, // inlining may introduce duplicate bindings inside function bodies
-            no_dead_fns: false,      // inlining does not remove the definitions
-            ..self
-        }
-    }
-
-    /// Inline selected functions
-    pub fn inline(self, inlineable: HashMap<V, (Vec<V>, Expr<V>)>) -> Self
-    where
-        V: Clone + Eq + Hash + PartialEq,
-    {
-        assert!(self.all_names_unique);
-        assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);
-        let ast = super::function_inlining::inline(&self.ast, inlineable);
+        let ast = super::function_inlining::heuristic_inline(&self.ast, self.clicker.clone());
         RestrictedAst {
             ast,
             all_names_unique: false, // inlining may introduce duplicate bindings inside function bodies
@@ -225,7 +212,8 @@ impl<V> RestrictedAst<V, V> {
     where
         V: Clone + Eq + Hash + PartialEq,
     {
-        let ast = super::constant_folding::ConstantFolder.transform_expr(&self.ast);
+        let ast = super::constant_folding::ConstantFolder::new(self.clicker.clone())
+            .transform_expr(&self.ast);
         RestrictedAst { ast, ..self }
     }
 
@@ -342,6 +330,7 @@ impl<V> RestrictedAst<V, V> {
             ref_usage: self.ref_usage,
             toplevel_structure: self.toplevel_structure,
             gensym_context: self.gensym_context,
+            clicker: Default::default(),
         }
     }
 }

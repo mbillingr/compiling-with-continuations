@@ -240,12 +240,18 @@ mod tests {
         let cps = cps.beta_contract();
 
         let mut cps = cps;
-        for _ in 0..10 {
+        loop {
+            cps.clicker.reset();
+
             cps = cps.inline_functions();
             cps = cps.rename_uniquely("__");
             cps = cps.purge_dead_functions();
             cps = cps.analyze_refs();
             cps = cps.fold_constants();
+
+            if cps.clicker.count() == 0 {
+                break;
+            }
         }
 
         let cps = cps.purge_dead_functions();

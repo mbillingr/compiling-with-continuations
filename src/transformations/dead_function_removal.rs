@@ -1,3 +1,4 @@
+use crate::core::clicker::Clicker;
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Computation, Compute, Expr, Transform, Transformed, Value};
 use std::collections::{HashMap, HashSet};
@@ -6,8 +7,9 @@ use std::hash::Hash;
 
 pub fn purge_dead_functions<V: Clone + Debug, F: Clone + Eq + Hash + Debug>(
     expr: &Expr<V, F>,
+    clicker: Clicker,
 ) -> Option<Expr<V, F>> {
-    let mns = MarkAndSweep::mark(expr);
+    let mns = MarkAndSweep::mark(expr, clicker);
     if mns.all_reachable() {
         None
     } else {
@@ -19,13 +21,15 @@ pub fn purge_dead_functions<V: Clone + Debug, F: Clone + Eq + Hash + Debug>(
 struct MarkAndSweep<'e, V: 'static, F: 'static> {
     function_bodies: HashMap<F, &'e Expr<V, F>>,
     reachable_fns: HashSet<F>,
+    clicker: Clicker,
 }
 
 impl<'e, V: Clone, F: Clone + Eq + Hash> MarkAndSweep<'e, V, F> {
-    fn mark(expr: &'e Expr<V, F>) -> Self {
+    fn mark(expr: &'e Expr<V, F>, clicker: Clicker) -> Self {
         let mut mns = MarkAndSweep {
             function_bodies: Default::default(),
             reachable_fns: Default::default(),
+            clicker,
         };
         mns.compute_for_expr(expr);
         mns
@@ -78,6 +82,8 @@ impl<V: Clone, F: Clone + Eq + Hash + PartialEq> Transform<V, F> for MarkAndSwee
                     if self.reachable_fns.contains(f) {
                         let body_out = b.transform(self);
                         defs_out.push((f.clone(), *p, Ref::new(body_out)));
+                    } else {
+                        self.clicker.click()
                     }
                 }
                 let cnt_out = cnt.transform(self);
@@ -104,14 +110,17 @@ mod tests {
     #[test]
     fn dontmark_unreachable_function() {
         let x = Expr::from_str("(fix ((foo () (halt 0))) (halt 0))").unwrap();
-        assert_eq!(MarkAndSweep::mark(&x).reachable_fns, hash_set![]);
+        assert_eq!(
+            MarkAndSweep::mark(&x, Default::default()).reachable_fns,
+            hash_set![]
+        );
     }
 
     #[test]
     fn mark_reachable_function() {
         let x = Expr::from_str("(fix ((foo () (halt 0))) ((@ foo)))").unwrap();
         assert_eq!(
-            MarkAndSweep::mark(&x).reachable_fns,
+            MarkAndSweep::mark(&x, Default::default()).reachable_fns,
             hash_set!["foo".into()]
         );
     }
@@ -120,7 +129,7 @@ mod tests {
     fn mark_indirectly_reachable_function() {
         let x = Expr::from_str("(fix ((bar () (halt 0)) (foo () ((@ bar)))) ((@ foo)))").unwrap();
         assert_eq!(
-            MarkAndSweep::mark(&x).reachable_fns,
+            MarkAndSweep::mark(&x, Default::default()).reachable_fns,
             hash_set!["foo".into(), "bar".into()]
         );
     }
@@ -128,17 +137,23 @@ mod tests {
     #[test]
     fn dontmark_unreachable_recursion() {
         let x = Expr::from_str("(fix ((foo () ((@ foo)))) (halt 0))").unwrap();
-        assert_eq!(MarkAndSweep::mark(&x).reachable_fns, hash_set![]);
+        assert_eq!(
+            MarkAndSweep::mark(&x, Default::default()).reachable_fns,
+            hash_set![]
+        );
 
         let x = Expr::from_str("(fix ((foo () ((@ bar))) (bar () ((@ foo)))) (halt 0))").unwrap();
-        assert_eq!(MarkAndSweep::mark(&x).reachable_fns, hash_set![]);
+        assert_eq!(
+            MarkAndSweep::mark(&x, Default::default()).reachable_fns,
+            hash_set![]
+        );
     }
 
     #[test]
     fn halt_on_reachable_recursion() {
         let x = Expr::from_str("(fix ((foo () ((@ foo)))) ((@ foo)))").unwrap();
         assert_eq!(
-            MarkAndSweep::mark(&x).reachable_fns,
+            MarkAndSweep::mark(&x, Default::default()).reachable_fns,
             hash_set!["foo".into()]
         );
     }
@@ -150,7 +165,8 @@ mod tests {
         assert_eq!(
             MarkAndSweep {
                 reachable_fns: hash_set!["foo".into()],
-                function_bodies: Default::default()
+                function_bodies: Default::default(),
+                clicker: Default::default()
             }
             .sweep(&x),
             y
@@ -165,7 +181,8 @@ mod tests {
         assert_eq!(
             MarkAndSweep {
                 reachable_fns: hash_set!["foo".into()],
-                function_bodies: Default::default()
+                function_bodies: Default::default(),
+                clicker: Default::default()
             }
             .sweep(&x),
             y
@@ -179,7 +196,8 @@ mod tests {
         assert_eq!(
             MarkAndSweep {
                 reachable_fns: hash_set![],
-                function_bodies: Default::default()
+                function_bodies: Default::default(),
+                clicker: Default::default()
             }
             .sweep(&x),
             y

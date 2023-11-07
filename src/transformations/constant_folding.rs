@@ -1,10 +1,24 @@
+use crate::core::clicker::Clicker;
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast::{Expr, Transform, Transformed, Value};
 
-pub struct ConstantFolder;
+#[derive(Default)]
+pub struct ConstantFolder {
+    clicker: Clicker,
+}
+
+impl ConstantFolder {
+    pub fn new(clicker: Clicker) -> Self {
+        ConstantFolder { clicker }
+    }
+}
 
 impl<V: Clone + PartialEq, F: Clone + PartialEq> Transform<V, F> for ConstantFolder {
+    fn autoclick(&mut self) {
+        self.clicker.click()
+    }
+
     fn visit_expr(&mut self, expr: &Expr<V, F>) -> Transformed<Expr<V, F>> {
         match expr {
             Expr::Switch(Value::Int(idx), cnts) => {
@@ -124,129 +138,129 @@ mod tests {
     fn fold_switch_over_constant() {
         let x = Expr::from_str("(switch 1 (halt 10) (halt 20) (halt 30))").unwrap();
         let y = Expr::from_str("(halt 20)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
     }
 
     #[test]
     fn fold_constant_equality() {
         let x = Expr::from_str("(primop = (0 0) () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(yes)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop = (0 1) () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(no)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop =f (0.0 0.0) () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(yes)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop =f (1.0 0.1) () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(no)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop =s (\"foo\" \"foo\") () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(yes)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop =s (\"foo\" \"bar\") () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(no)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
     }
 
     #[test]
     fn fold_integer_comparison() {
         let x = Expr::from_str("(primop < (0 0) () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(no)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop < (0 1) () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(yes)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop < (x x) () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(no)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop < (x y) () ((no) (yes)))").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), x);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), x);
 
         let x = Expr::from_str("(primop < (0 x) () ((no) (yes)))").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), x);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), x);
 
         let x = Expr::from_str("(primop < (x 0) () ((no) (yes)))").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), x);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), x);
     }
 
     #[test]
     fn fold_comparison_over_variables() {
         let x = Expr::from_str("(primop = (x x) () ((no) (yes)))").unwrap();
         let y = Expr::from_str("(yes)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop = (x y) () ((no) (yes)))").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), x);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), x);
 
         let x = Expr::from_str("(primop = (x 0) () ((no) (yes)))").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), x);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), x);
 
         let x = Expr::from_str("(primop = (0 x) () ((no) (yes)))").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), x);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), x);
     }
 
     #[test]
     fn fold_integer_arithmetic() {
         let x = Expr::from_str("(primop + (1 2) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt 3)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop - (2 1) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt 1)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop * (2 2) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt 4)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop / (6 2) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt 3)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop + (0 x) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt x)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop + (x 0) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt x)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop - (x 0) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt x)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop * (x 1) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt x)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop * (1 x) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt x)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop / (x 1) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt x)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop * (x 0) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt 0)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         let x = Expr::from_str("(primop * (0 x) (r) ((halt r)))").unwrap();
         let y = Expr::from_str("(halt 0)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
 
         // fold-cascade
         let x = Expr::from_str("(primop + (1 2) (y) ((primop + (y y) (z) ((halt z)))))").unwrap();
         let y = Expr::from_str("(halt 6)").unwrap();
-        assert_eq!(ConstantFolder.transform_expr(&x), y);
+        assert_eq!(ConstantFolder::default().transform_expr(&x), y);
     }
 }

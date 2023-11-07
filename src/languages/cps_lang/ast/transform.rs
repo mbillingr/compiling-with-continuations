@@ -5,6 +5,8 @@ pub trait Transform<V: Clone, F: Clone = V> {
     fn visit_expr(&mut self, expr: &Expr<V, F>) -> Transformed<Expr<V, F>>;
     fn visit_value(&mut self, value: &Value<V, F>) -> Transformed<Value<V, F>>;
 
+    fn autoclick(&mut self) {}
+
     fn transform_expr(&mut self, expr: &Expr<V, F>) -> Expr<V, F>
     where
         Self: Sized,
@@ -57,8 +59,14 @@ impl<V: Clone, F: Clone> Expr<V, F> {
     pub fn transform(&self, transformer: &mut impl Transform<V, F>) -> Self {
         match transformer.visit_expr(self) {
             Transformed::Continue => {}
-            Transformed::Done(new_expr) => return new_expr,
-            Transformed::Again(new_expr) => return new_expr.transform(transformer),
+            Transformed::Done(new_expr) => {
+                transformer.autoclick();
+                return new_expr;
+            }
+            Transformed::Again(new_expr) => {
+                transformer.autoclick();
+                return new_expr.transform(transformer);
+            }
         }
 
         match self {

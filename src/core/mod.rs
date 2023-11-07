@@ -7,4 +7,5 @@ pub mod ptr_tagging;
 pub mod sexpr;
 #[macro_use]
 pub mod sets;
+pub mod clicker;
 pub mod either;
