@@ -152,9 +152,6 @@ mod tests {
         //let cps = cps.convert_closures2();
         let cps = cps.reset_refs();
         let cps = cps.convert_closures();
-        println!("DBG:");
-        cps.expr().pretty_print();
-        println!("\n");
         let cps = cps.lift_lambdas();
 
         println!("Closure Conversion & Lambda Lifting:");

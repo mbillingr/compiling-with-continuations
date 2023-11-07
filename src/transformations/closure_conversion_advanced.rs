@@ -43,7 +43,6 @@ impl<V: Clone + Debug + Eq + Hash> Context<V> {
             if vars_free_in_fn == self.vars_free_in_fn
                 && fns_that_need_closures == self.fns_that_need_closures
             {
-                println!("{:?}", self);
                 return self;
             }
 
