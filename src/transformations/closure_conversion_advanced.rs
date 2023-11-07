@@ -59,6 +59,7 @@ impl<V: Clone + Debug + Eq + Hash> Context<V> {
             for g in self.fns_applied_in_fn[f].difference(&self.fns_that_need_closures) {
                 fvs.extend(self.vars_free_in_fn[g].iter().cloned());
             }
+            fvs.remove(f); // make sure the function itself is not counted as its own free var
             vars_free_in_fn_out.insert(f.clone(), fvs);
         }
         vars_free_in_fn_out
@@ -116,18 +117,23 @@ impl<'e, V: Clone + Debug + Eq + Hash> Compute<'e, V, V> for Context<V> {
                     (f.clone(), applied_in.0)
                 }));
 
-                // if a sibling escapes from f, share its closure
-                self.fns_that_need_closures
-                    .extend(defs.iter().filter_map(|(f, _, b)| {
-                        let mut escape_from = FnsEscape::new();
-                        escape_from.compute_for_expr(b);
+                for (f, p, b) in defs.iter() {
+                    let mut escape_from = FnsEscape::new();
+                    escape_from.compute_for_expr(b);
 
-                        escape_from
-                            .0
-                            .intersection(&self.sibling_fns[f])
-                            .next()
-                            .map(|_| f.clone())
-                    }));
+                    for g in escape_from.0 {
+                        if self.sibling_fns[f].contains(&g) {
+                            // if a sibling g escapes from f, f can share g's closure
+                            self.fns_that_need_closures.insert(f.clone());
+                            break;
+                        } else {
+                            let fvs: HashSet<_> = Expr::function_free_vars(p, b).into();
+                            if fvs.contains(&g) {
+                                self.vars_free_in_fn.get_mut(&f).unwrap().insert(g);
+                            }
+                        }
+                    }
+                }
 
                 Computation::Continue
             }
@@ -365,7 +371,12 @@ mod tests {
     #[test]
     fn find_escaping_functions() {
         let x = Expr::from_str(
-            "(fix ((f () (fix ((g () (y (@ f)))) ((@ g))))) (fix ((h () (z))) ((@ g))))",
+            "(fix ((f ()
+                          (fix ((g () 
+                                   (y (@ f)))) 
+                            ((@ g))))) 
+                    (fix ((h () (z))) 
+                        ((@ h))))",
         )
         .unwrap();
         let mut ctx = Context::new(0, Arc::new(GensymContext::new("_")));
@@ -623,7 +634,7 @@ mod tests {
     }
 
     #[test]
-    fn escape_from_another_function() {
+    fn escaping_sibling_function() {
         let mut ctx = Context::new(50, Arc::new(GensymContext::new("__")));
 
         let x = Expr::from_str(
