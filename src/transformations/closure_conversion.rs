@@ -181,6 +181,10 @@ impl<V: Clone + Deref<Target = str> + GenSym + Debug + Display> Closure<V> {
         self.renamed_funcs[idx as usize].clone()
     }
 
+    pub fn functions(&self) -> &[V] {
+        &self.funcs
+    }
+
     pub fn get_var_idx(&self, name: &str, current_fn: &str) -> Option<isize> {
         let offset = self.funcs.len() as isize;
         self.vars
@@ -190,7 +194,6 @@ impl<V: Clone + Deref<Target = str> + GenSym + Debug + Display> Closure<V> {
             .map(|(i, _)| i as isize)
             .and_then(|i| self.get_func_idx(current_fn).map(|j| offset - j + i))
     }
-
     pub fn get_func_idx(&self, name: &str) -> Option<isize> {
         self.funcs
             .iter()

@@ -106,12 +106,7 @@ impl<'e, V: Clone + Eq + Hash> Compute<'e, V, V> for Context<V> {
                     .extend(defs.iter().map(|(f, p, _)| (f.clone(), p.len())));
 
                 self.vars_free_in_fn.extend(defs.iter().map(|(f, p, b)| {
-                    let mut escape_from = FnsEscape::new();
-                    escape_from.compute_for_expr(b);
-
-                    let mut fvs: HashSet<_> = Expr::function_free_vars_nofns(p, b).into();
-                    fvs.extend(escape_from.0);
-
+                    let fvs: HashSet<_> = Expr::function_free_vars_nofns(p, b).into();
                     (f.clone(), fvs)
                 }));
 
@@ -120,6 +115,19 @@ impl<'e, V: Clone + Eq + Hash> Compute<'e, V, V> for Context<V> {
                     applied_in.compute_for_expr(b);
                     (f.clone(), applied_in.0)
                 }));
+
+                // if a sibling escapes from f, share its closure
+                self.fns_that_need_closures
+                    .extend(defs.iter().filter_map(|(f, _, b)| {
+                        let mut escape_from = FnsEscape::new();
+                        escape_from.compute_for_expr(b);
+
+                        escape_from
+                            .0
+                            .intersection(&self.sibling_fns[f])
+                            .next()
+                            .map(|_| f.clone())
+                    }));
 
                 Computation::Continue
             }
@@ -199,6 +207,10 @@ impl<V: Clone + Debug + Display + Eq + GenSym + Hash + Ord> Transform<V, V> for 
                     let mut fbody = self.transform_expr(b);
                     if self.fns_that_need_closures.contains(f) {
                         let free_vars: Vec<_> = sorted(self.vars_free_in_fn[f].iter().cloned());
+                        for g in closure.functions() {
+                            fbody =
+                                closure.build_lookup(g.clone(), f, Value::Var(f.clone()), fbody);
+                        }
                         for v in free_vars {
                             fbody = closure.build_lookup(v, f, Value::Var(f.clone()), fbody);
                         }
@@ -346,7 +358,7 @@ mod tests {
             hash_map! {
             "h".into() => hash_set!["z".into()],
             "g".into() => hash_set!["y".into()],
-            "f".into() => hash_set!["x".into(), "y".into(), "g".into()]}
+            "f".into() => hash_set!["x".into(), "y".into()]}
         )
     }
 
@@ -614,13 +626,53 @@ mod tests {
     fn escape_from_another_function() {
         let mut ctx = Context::new(50, Arc::new(GensymContext::new("__")));
 
-        let x = Expr::from_str("(fix ((f () (halt 0)) (g (k) (k (@ f)))) (halt 0))").unwrap();
+        let x = Expr::from_str(
+            "(fix ((f () (halt 0))
+                   (g () (halt (@ f))))
+                ((@ g)))",
+        )
+        .unwrap();
         ctx.compute_for_expr(&x);
 
         let mut ctx = ctx.solve_closure_requirements();
 
         let y = Expr::from_str(
-            "(fix ((f__1 (f) (halt 0)) (g (k f) (select 0 k k__2 (k__2 k f)))) (record (((@ f__1) (ref 0))) cls__0 (offset 0 cls__0 f (halt 0))))",
+            "(fix ((f__1 (f) (offset 1 f g (halt 0)))
+                   (g__2 (g)
+                      (offset -1 g f 
+                        (halt f)))) 
+                (record (((@ f__1) (ref 0)) ((@ g__2) (ref 0))) cls__0 
+                    (offset 1 cls__0 g 
+                        (offset 0 cls__0 f
+                            (select 0 g g__3
+                                (g__3 g))))))",
+        )
+        .unwrap();
+        assert_eq!(ctx.transform_expr(&x), y);
+    }
+
+    #[test]
+    fn escaping_inner_function() {
+        let mut ctx = Context::new(50, Arc::new(GensymContext::new("__")));
+
+        let x = Expr::from_str(
+            "(fix ((f ()
+                    (fix ((g () (halt 0))) 
+                        (halt (@ g))))) 
+                ((@ f)))",
+        )
+        .unwrap();
+        ctx.compute_for_expr(&x);
+
+        let mut ctx = ctx.solve_closure_requirements();
+
+        let y = Expr::from_str(
+            "(fix ((f ()
+                    (fix ((g__2 (g) (halt 0))) 
+                        (record (((@ g__2) (ref 0))) cls__1 
+                            (offset 0 cls__1 g 
+                                (halt g)))))) 
+                ((@ f)))",
         )
         .unwrap();
         assert_eq!(ctx.transform_expr(&x), y);
