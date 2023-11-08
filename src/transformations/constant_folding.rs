@@ -29,7 +29,7 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
         }
     }
 
-    pub fn fold<F: Clone + PartialEq>(&self, expr: &Expr<V, F>) -> Expr<V, F> {
+    pub fn fold<F: Clone + PartialEq>(&mut self, expr: &Expr<V, F>) -> Expr<V, F> {
         match expr {
             Expr::App(rator, rands) => {
                 Expr::App(self.substitute_value(rator), self.substitute_values(rands))
@@ -64,8 +64,28 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
                 })
             }
 
-            Expr::PrimOp(op, args @ Ref([a, b]), Ref([res]), Ref([cnt])) => match op {
-                _ => todo!(),
+            Expr::PrimOp(op, args @ Ref([a, b]), rr @ Ref([res]), Ref([cnt])) => match op {
+                _ => {
+                    let a_ = self.inform(a);
+                    let b_ = self.inform(b);
+
+                    match op {
+                        PrimOp::IAdd => ValueInfo::add(&a_, &b_),
+                        _ => todo!(),
+                    }
+                    .map(|r| {
+                        self.env.insert(res.clone(), r);
+                        self.fold(cnt)
+                    })
+                    .unwrap_or_else(|| {
+                        Expr::PrimOp(
+                            *op,
+                            self.substitute_values(args),
+                            *rr,
+                            Ref::array(vec![self.fold(cnt).into()]),
+                        )
+                    })
+                }
             },
 
             Expr::Halt(val) => Expr::Halt(self.substitute_value(val)),
@@ -75,7 +95,7 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
     }
 
     fn fold_comparison<F: Clone + PartialEq>(
-        &self,
+        &mut self,
         op: impl Fn(&ValueInfo<V>, &ValueInfo<V>) -> Option<bool>,
         a: &Value<V, F>,
         b: &Value<V, F>,
@@ -134,13 +154,25 @@ enum ValueInfo<V> {
     ConstStr(Ref<String>),
 }
 
-impl<V: PartialEq> ValueInfo<V> {
+impl<V: Clone + PartialEq> ValueInfo<V> {
     fn is_eq(&self, other: &Self) -> Option<bool> {
         self.partial_cmp(other).map(|o| o == Ordering::Equal)
     }
 
     fn is_less(&self, other: &Self) -> Option<bool> {
         self.partial_cmp(other).map(|o| o == Ordering::Less)
+    }
+
+    fn add(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (ValueInfo::ConstInt(0), x) | (x, ValueInfo::ConstInt(0)) => Some(x.clone()),
+            (ValueInfo::ConstReal(y), x) | (x, ValueInfo::ConstReal(y)) if *y == 0.0 => {
+                Some(x.clone())
+            }
+            (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => Some(ValueInfo::ConstInt(a + b)),
+            (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => Some(ValueInfo::ConstReal(a + b)),
+            _ => None,
+        }
     }
 }
 
@@ -284,7 +316,7 @@ mod tests {
         let y = Expr::from_str("(halt 20)").unwrap();
         assert_eq!(ConstantFolder::default().fold(&x), y);
 
-        let cf = ConstantFolder {
+        let mut cf = ConstantFolder {
             clicker: Default::default(),
             env: hash_map!["k".into() => ValueInfo::ConstInt(2)],
         };
@@ -362,7 +394,7 @@ mod tests {
 
     #[test]
     fn fold_comparison_over_bound_variables() {
-        let cf = ConstantFolder {
+        let mut cf = ConstantFolder {
             clicker: Default::default(),
             env: hash_map![
                 "a".into() => ValueInfo::ConstInt(1),
