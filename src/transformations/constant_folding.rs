@@ -39,22 +39,43 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
                         .collect(),
                 ),
                 var.clone(),
-                self.fold(cnt).into(),
+                {
+                    let info =
+                        ValueInfo::Record(0, fields.iter().map(|(f, _)| self.inform(f)).collect());
+                    self.env.insert(var.clone(), info);
+                    self.fold(cnt).into()
+                },
             ),
 
-            Expr::Select(idx, rec, var, cnt) => Expr::Select(
-                *idx,
-                self.substitute_value(rec),
-                var.clone(),
-                self.fold(cnt).into(),
-            ),
+            Expr::Select(idx, rec, var, cnt) => {
+                if let ValueInfo::Record(ofs, fields) = self.inform(rec) {
+                    self.env
+                        .insert(var.clone(), fields[(ofs + idx) as usize].clone());
+                    self.fold(cnt)
+                } else {
+                    Expr::Select(
+                        *idx,
+                        self.substitute_value(rec),
+                        var.clone(),
+                        self.fold(cnt).into(),
+                    )
+                }
+            }
 
-            Expr::Offset(idx, rec, var, cnt) => Expr::Offset(
-                *idx,
-                self.substitute_value(rec),
-                var.clone(),
-                self.fold(cnt).into(),
-            ),
+            Expr::Offset(idx, rec, var, cnt) => {
+                if let ValueInfo::Record(ofs, fields) = self.inform(rec) {
+                    self.env
+                        .insert(var.clone(), ValueInfo::Record(ofs + idx, fields.clone()));
+                    self.fold(cnt)
+                } else {
+                    Expr::Offset(
+                        *idx,
+                        self.substitute_value(rec),
+                        var.clone(),
+                        self.fold(cnt).into(),
+                    )
+                }
+            }
 
             Expr::App(rator, rands) => {
                 Expr::App(self.substitute_value(rator), self.substitute_values(rands))
@@ -248,6 +269,7 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
                     Some(ValueInfo::ConstInt(x)) => Value::Int(*x),
                     Some(ValueInfo::ConstReal(x)) => Value::Real(*x),
                     Some(ValueInfo::ConstStr(x)) => Value::String(*x),
+                    Some(ValueInfo::Record(_, _)) => return val.clone(),
                 }
             }
             _ => return val.clone(),
@@ -268,6 +290,7 @@ enum ValueInfo<V> {
     ConstInt(i64),
     ConstReal(f64),
     ConstStr(Ref<String>),
+    Record(isize, Vec<ValueInfo<V>>),
 }
 
 impl<V: Clone + PartialEq> ValueInfo<V> {
@@ -277,6 +300,7 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
             ValueInfo::ConstInt(x) => Some(*x == 0),
             ValueInfo::ConstReal(x) => Some(*x == 0.0),
             ValueInfo::ConstStr(_) => Some(false),
+            ValueInfo::Record(_, _) => Some(false),
         }
     }
 
@@ -286,6 +310,7 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
             ValueInfo::ConstInt(_) => Some(false),
             ValueInfo::ConstReal(_) => Some(false),
             ValueInfo::ConstStr(_) => Some(false), // not sure...
+            ValueInfo::Record(_, _) => Some(true),
         }
     }
 
@@ -303,6 +328,7 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
             ValueInfo::ConstInt(x) => Some(ValueInfo::ConstInt(-x)),
             ValueInfo::ConstReal(x) => Some(ValueInfo::ConstReal(-x)),
             ValueInfo::ConstStr(_) => None,
+            ValueInfo::Record(_, _) => None,
         }
     }
 
@@ -312,6 +338,7 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
             ValueInfo::ConstInt(x) => Some(ValueInfo::ConstInt((x - 1) / 2)),
             ValueInfo::ConstReal(_) => None,
             ValueInfo::ConstStr(_) => None,
+            ValueInfo::Record(_, _) => None,
         }
     }
 
@@ -543,6 +570,35 @@ mod tests {
         // fold-cascade
         let x = Expr::from_str("(primop + (1 2) (y) ((primop + (y y) (z) ((halt z)))))").unwrap();
         let y = Expr::from_str("(halt 6)").unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+    }
+
+    #[test]
+    fn fold_records() {
+        let x = Expr::from_str("(primop const/ptr? (123) () ((no) (yes)))").unwrap();
+        let y = Expr::from_str("(no)").unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+
+        let x = Expr::from_str("(record () r (primop const/ptr? (r) () ((no) (yes))))").unwrap();
+        let y = Expr::from_str("(record () r (yes))").unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+
+        let x = Expr::from_str("(record (1 2 3) r (select 0 r x (halt x)))").unwrap();
+        let y = Expr::from_str("(record (1 2 3) r (halt 1))").unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+
+        let x = Expr::from_str("(record (1 z 3) r (select 1 r x (halt x)))").unwrap();
+        let y = Expr::from_str("(record (1 z 3) r (halt z))").unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+
+        let x =
+            Expr::from_str("(record (1 2 3) r (offset 1 r r (select 0 r x (halt x))))").unwrap();
+        let y = Expr::from_str("(record (1 2 3) r (halt 2))").unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+
+        let x =
+            Expr::from_str("(record (1 2 3) r (offset -1 r r (select 2 r x (halt x))))").unwrap();
+        let y = Expr::from_str("(record (1 2 3) r (halt 2))").unwrap();
         assert_eq!(ConstantFolder::default().fold(&x), y);
     }
 }
