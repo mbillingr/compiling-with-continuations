@@ -1,7 +1,7 @@
 use crate::core::clicker::Clicker;
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
-use crate::languages::cps_lang::ast::{Expr, Value};
+use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -37,32 +37,49 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
                 Ref::array(
                     fields
                         .iter()
-                        .map(|(f, ap)| (self.substitute_value(f), ap.clone()))
+                        .map(|fap| self.substitute_field(fap))
                         .collect(),
                 ),
                 var.clone(),
                 {
-                    let info = ValueInfo::Record(Arc::new(
-                        fields.iter().map(|(f, _)| self.inform(f)).collect(),
-                    ));
+                    let info = ValueInfo::Record(
+                        0,
+                        Arc::new(fields.iter().map(|(f, _)| self.inform(f)).collect()),
+                    );
                     self.env.insert(var.clone(), info);
                     self.fold(cnt).into()
                 },
             ),
 
-            Expr::Select(idx, rec, var, cnt) => {
-                if let Some(x) = self.inform(rec).select(*idx) {
-                    self.env.insert(var.clone(), x);
+            Expr::Select(idx, rec, var, cnt) => match self.inform(rec) {
+                ValueInfo::Record(ofs, fields) => {
+                    self.env
+                        .insert(var.clone(), fields[(ofs + idx) as usize].clone());
                     self.fold(cnt)
-                } else {
-                    Expr::Select(
-                        *idx,
-                        self.substitute_value(rec),
-                        var.clone(),
-                        self.fold(cnt).into(),
-                    )
                 }
-            }
+                ValueInfo::Unknown(v) => {
+                    Expr::Select(*idx, self.substitute_value(rec), var.clone(), {
+                        self.env
+                            .insert(var.clone(), ValueInfo::Select(vec![*idx], v));
+                        self.fold(cnt).into()
+                    })
+                }
+                ValueInfo::Select(mut path, v) => {
+                    path.push(*idx);
+                    Expr::Select(*idx, self.substitute_value(rec), var.clone(), {
+                        self.env.insert(var.clone(), ValueInfo::Select(path, v));
+                        self.fold(cnt).into()
+                    })
+                }
+                ValueInfo::Offset(ofs, v) => {
+                    Expr::Select(ofs + idx, Value::Var(v.clone()), var.clone(), {
+                        self.env
+                            .insert(var.clone(), ValueInfo::Select(vec![ofs + idx], v));
+                        self.fold(cnt).into()
+                    })
+                }
+                _ => unimplemented!(),
+            },
 
             Expr::Offset(0, Value::Var(rec), var, cnt) => {
                 self.env.insert(var.clone(), ValueInfo::Alias(rec.clone()));
@@ -70,15 +87,47 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
                 self.fold(cnt)
             }
 
-            Expr::Offset(idx, rec, var, cnt) => {
-                self.env.insert(var.clone(), self.inform(rec).offset(*idx));
-                Expr::Offset(
-                    *idx,
-                    self.substitute_value(rec),
-                    var.clone(),
-                    self.fold(cnt).into(),
-                )
-            }
+            Expr::Offset(idx, rec, var, cnt) => match self.inform(rec) {
+                ValueInfo::Record(ofs, fields) => {
+                    self.env
+                        .insert(var.clone(), ValueInfo::Record(ofs + idx, fields));
+                    Expr::Offset(
+                        *idx,
+                        self.substitute_value(rec),
+                        var.clone(),
+                        self.fold(cnt).into(),
+                    )
+                }
+                ValueInfo::Unknown(v) => {
+                    self.env.insert(var.clone(), ValueInfo::Offset(*idx, v));
+                    Expr::Offset(
+                        *idx,
+                        self.substitute_value(rec),
+                        var.clone(),
+                        self.fold(cnt).into(),
+                    )
+                }
+                ValueInfo::Select(_, _) => {
+                    let v = if let Value::Var(v) = rec {
+                        v.clone()
+                    } else {
+                        unreachable!()
+                    };
+                    self.env.insert(var.clone(), ValueInfo::Offset(*idx, v));
+                    Expr::Offset(
+                        *idx,
+                        self.substitute_value(rec),
+                        var.clone(),
+                        self.fold(cnt).into(),
+                    )
+                }
+                ValueInfo::Offset(ofs, v) => {
+                    self.env
+                        .insert(var.clone(), ValueInfo::Offset(ofs + idx, v.clone()));
+                    Expr::Offset(ofs + idx, Value::Var(v), var.clone(), self.fold(cnt).into())
+                }
+                _ => todo!(),
+            },
 
             Expr::App(rator, rands) => {
                 Expr::App(self.substitute_value(rator), self.substitute_values(rands))
@@ -281,6 +330,17 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
         vi
     }
 
+    fn substitute_field<F: Clone>(
+        &self,
+        (f, ap): &(Value<V, F>, AccessPath),
+    ) -> (Value<V, F>, AccessPath) {
+        let f_ = self.inform(f);
+        match f_ {
+            ValueInfo::Select(path, r) => (Value::Var(r), ap.preselect(&path)),
+            _ => (self.substitute_value(f), ap.clone()),
+        }
+    }
+
     fn substitute_value<F: Clone>(&self, val: &Value<V, F>) -> Value<V, F> {
         let result = match val {
             Value::Var(name) => {
@@ -299,8 +359,9 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
                         Some(ValueInfo::ConstInt(x)) => Value::Int(*x),
                         Some(ValueInfo::ConstReal(x)) => Value::Real(*x),
                         Some(ValueInfo::ConstStr(x)) => Value::String(*x),
-                        Some(ValueInfo::Record(_)) => return Value::Var(name.clone()),
-                        Some(ValueInfo::RecordView(_, _)) => return Value::Var(name.clone()),
+                        Some(ValueInfo::Record(_, _)) => return Value::Var(name.clone()),
+                        Some(ValueInfo::Offset(_, _)) => return Value::Var(name.clone()),
+                        Some(ValueInfo::Select(_, _)) => return Value::Var(name.clone()),
                     };
                     break r;
                 }
@@ -324,23 +385,12 @@ enum ValueInfo<V> {
     ConstInt(i64),
     ConstReal(f64),
     ConstStr(Ref<String>),
-    Record(Arc<Vec<Self>>),
-    RecordView(isize, Arc<Self>),
+    Record(isize, Arc<Vec<Self>>),
+    Offset(isize, V),
+    Select(Vec<isize>, V),
 }
 
 impl<V: Clone + PartialEq> ValueInfo<V> {
-    fn select(&self, idx: isize) -> Option<Self> {
-        match self {
-            ValueInfo::Alias(_) => unreachable!(),
-            ValueInfo::Record(fields) => Some(fields[idx as usize].clone()),
-            ValueInfo::RecordView(ofs, rec) => rec.select(ofs + idx),
-            _ => None,
-        }
-    }
-    fn offset(&self, idx: isize) -> Self {
-        Self::RecordView(idx, Arc::new(self.clone()))
-    }
-
     fn is_zero(&self) -> Option<bool> {
         match self {
             ValueInfo::Alias(_) => unreachable!(),
@@ -348,8 +398,9 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
             ValueInfo::ConstInt(x) => Some(*x == 0),
             ValueInfo::ConstReal(x) => Some(*x == 0.0),
             ValueInfo::ConstStr(_) => Some(false),
-            ValueInfo::Record(_) => Some(false),
-            ValueInfo::RecordView(_, _) => Some(false),
+            ValueInfo::Record(_, _) => Some(false),
+            ValueInfo::Offset(_, _) => Some(false),
+            ValueInfo::Select(_, _) => None,
         }
     }
 
@@ -360,8 +411,9 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
             ValueInfo::ConstInt(_) => Some(false),
             ValueInfo::ConstReal(_) => Some(false),
             ValueInfo::ConstStr(_) => Some(false), // not sure...
-            ValueInfo::Record(_) => Some(true),
-            ValueInfo::RecordView(_, _) => Some(true),
+            ValueInfo::Record(_, _) => Some(true),
+            ValueInfo::Offset(_, _) => Some(true),
+            ValueInfo::Select(_, _) => None,
         }
     }
 
@@ -380,8 +432,9 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
             ValueInfo::ConstInt(x) => Some(ValueInfo::ConstInt(-x)),
             ValueInfo::ConstReal(x) => Some(ValueInfo::ConstReal(-x)),
             ValueInfo::ConstStr(_) => None,
-            ValueInfo::Record(_) => None,
-            ValueInfo::RecordView(_, _) => None,
+            ValueInfo::Record(_, _) => None,
+            ValueInfo::Offset(_, _) => None,
+            ValueInfo::Select(_, _) => None,
         }
     }
 
@@ -392,8 +445,9 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
             ValueInfo::ConstInt(x) => Some(ValueInfo::ConstInt((x - 1) / 2)),
             ValueInfo::ConstReal(_) => None,
             ValueInfo::ConstStr(_) => None,
-            ValueInfo::Record(_) => None,
-            ValueInfo::RecordView(_, _) => None,
+            ValueInfo::Record(_, _) => None,
+            ValueInfo::Offset(_, _) => None,
+            ValueInfo::Select(_, _) => None,
         }
     }
 
@@ -670,9 +724,34 @@ mod tests {
     }
 
     #[test]
-    fn fold_implied_records() {
-        let x = Expr::from_str("(offset 0 x r (primop const/ptr? (r) () ((no) (yes))))").unwrap();
-        let y = Expr::from_str("(record () r (yes))").unwrap();
+    fn fold_access() {
+        let x = Expr::from_str("(select 1 r x (record (x) s (halt s)))").unwrap();
+        let y = Expr::from_str("(select 1 r x (record ((r (sel 1 (ref 0)))) s (halt s)))").unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+
+        let x = Expr::from_str("(select 2 r y (select 1 y x (record (x) s (halt s))))").unwrap();
+        let y = Expr::from_str(
+            "(select 2 r y (select 1 y x (record ((r (sel 1 (sel 2 (ref 0))))) s (halt s))))",
+        )
+        .unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+
+        let x = Expr::from_str("(offset 2 r y (offset 1 y x (record (x) s (halt s))))").unwrap();
+        let y = Expr::from_str("(offset 2 r y (offset 3 r x (record (x) s (halt s))))").unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+
+        let x = Expr::from_str("(offset 2 r y (select 1 y x (record (x) s (halt s))))").unwrap();
+        let y = Expr::from_str(
+            "(offset 2 r y (select 3 r x (record ((r (sel 3 (ref 0)))) s (halt s))))",
+        )
+        .unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
+
+        let x = Expr::from_str("(select 2 r y (offset 1 y x (record (x) s (halt s))))").unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), x);
+
+        let x = Expr::from_str("(select 1 r x (primop + (x 0) (y) ((halt y))))").unwrap();
+        let y = Expr::from_str("(select 1 r x (halt x))").unwrap();
         assert_eq!(ConstantFolder::default().fold(&x), y);
     }
 }

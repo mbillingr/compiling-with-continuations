@@ -45,3 +45,16 @@ pub enum AccessPath {
     Ref(isize),
     Sel(isize, Ref<AccessPath>),
 }
+
+impl AccessPath {
+    pub fn preselect(&self, path: &[isize]) -> Self {
+        match (self, path) {
+            (AccessPath::Ref(0), [p]) => AccessPath::Sel(*p, Ref::new(AccessPath::Ref(0))),
+            (AccessPath::Ref(0), [ps @ .., p]) => {
+                AccessPath::Sel(*p, Ref::new(AccessPath::Ref(0).preselect(ps)))
+            }
+            (AccessPath::Ref(_), _) => unimplemented!(),
+            (AccessPath::Sel(i, ap), _) => AccessPath::Sel(*i, Ref::new(ap.preselect(path))),
+        }
+    }
+}
