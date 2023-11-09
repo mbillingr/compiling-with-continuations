@@ -1,7 +1,7 @@
 use crate::core::clicker::Clicker;
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
-use crate::languages::cps_lang::ast::{Expr, Transform, Transformed, Value};
+use crate::languages::cps_lang::ast::{Expr, Value};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -31,14 +31,50 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
 
     pub fn fold<F: Clone + PartialEq>(&mut self, expr: &Expr<V, F>) -> Expr<V, F> {
         match expr {
+            Expr::Record(fields, var, cnt) => Expr::Record(
+                Ref::array(
+                    fields
+                        .iter()
+                        .map(|(f, ap)| (self.substitute_value(f), ap.clone()))
+                        .collect(),
+                ),
+                var.clone(),
+                self.fold(cnt).into(),
+            ),
+
+            Expr::Select(idx, rec, var, cnt) => Expr::Select(
+                *idx,
+                self.substitute_value(rec),
+                var.clone(),
+                self.fold(cnt).into(),
+            ),
+
+            Expr::Offset(idx, rec, var, cnt) => Expr::Offset(
+                *idx,
+                self.substitute_value(rec),
+                var.clone(),
+                self.fold(cnt).into(),
+            ),
+
             Expr::App(rator, rands) => {
                 Expr::App(self.substitute_value(rator), self.substitute_values(rands))
+            }
+
+            Expr::Fix(defs, cnt) => {
+                let mut defs_out = vec![];
+                for (f, p, b) in defs.iter() {
+                    defs_out.push((f.clone(), *p, self.fold(b).into()))
+                }
+                Expr::Fix(Ref::array(defs_out), self.fold(cnt).into())
             }
 
             Expr::Switch(k, cnts) => {
                 let k_ = self.inform(k);
                 match k_ {
-                    ValueInfo::ConstInt(idx) => self.fold(&cnts[idx as usize]),
+                    ValueInfo::ConstInt(idx) => {
+                        self.clicker.click();
+                        self.fold(&cnts[idx as usize])
+                    }
                     _ => Expr::Switch(
                         k.clone(),
                         Ref::array(cnts.iter().map(|c| self.fold(c)).map(Ref::new).collect()),
@@ -46,13 +82,27 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
                 }
             }
 
-            Expr::PrimOp(op, args @ Ref([a, b]), vars, Ref([no, yes])) if op.is_branching() => {
+            Expr::PrimOp(
+                op @ (PrimOp::ShowInt | PrimOp::ShowReal | PrimOp::ShowStr),
+                args @ Ref([x]),
+                r @ Ref([res]),
+                Ref([cnt]),
+            ) => {
+                let x_ = self.inform(x);
+                self.env.insert(res.clone(), x_);
+                Expr::PrimOp(
+                    *op,
+                    self.substitute_values(args),
+                    *r,
+                    Ref::array(vec![self.fold(cnt).into()]),
+                )
+            }
+
+            Expr::PrimOp(op, args @ Ref([a]), vars, Ref([no, yes])) if op.is_branching() => {
                 match op {
-                    PrimOp::ISame | PrimOp::FSame | PrimOp::SSame => {
-                        self.fold_comparison(ValueInfo::is_eq, a, b, yes, no)
-                    }
-                    PrimOp::ILess => self.fold_comparison(ValueInfo::is_less, a, b, yes, no),
-                    _ => todo!(),
+                    PrimOp::IsZero => self.fold_predicate(ValueInfo::is_zero, a, yes, no),
+                    PrimOp::CorP => self.fold_predicate(ValueInfo::is_ptr, a, yes, no),
+                    _ => todo!("{op:?}"),
                 }
                 .unwrap_or_else(|| {
                     Expr::PrimOp(
@@ -64,19 +114,35 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
                 })
             }
 
-            Expr::PrimOp(op, args @ Ref([a, b]), rr @ Ref([res]), Ref([cnt])) => match op {
+            Expr::PrimOp(op, args @ Ref([a, b]), vars, Ref([no, yes])) if op.is_branching() => {
+                match op {
+                    PrimOp::ISame | PrimOp::FSame | PrimOp::SSame => {
+                        self.fold_comparison(ValueInfo::is_eq, a, b, yes, no)
+                    }
+                    PrimOp::ILess => self.fold_comparison(ValueInfo::is_less, a, b, yes, no),
+                    _ => todo!("{op:?}"),
+                }
+                .unwrap_or_else(|| {
+                    Expr::PrimOp(
+                        *op,
+                        self.substitute_values(args),
+                        *vars,
+                        Ref::array(vec![self.fold(no).into(), self.fold(yes).into()]),
+                    )
+                })
+            }
+
+            Expr::PrimOp(op, args @ Ref([a]), rr @ Ref([res]), Ref([cnt])) => match op {
                 _ => {
                     let a_ = self.inform(a);
-                    let b_ = self.inform(b);
 
                     match op {
-                        PrimOp::IAdd => ValueInfo::add(&a_, &b_),
-                        PrimOp::ISub => ValueInfo::sub(&a_, &b_),
-                        PrimOp::IMul => ValueInfo::mul(&a_, &b_),
-                        PrimOp::IDiv => ValueInfo::div(&a_, &b_),
-                        _ => todo!(),
+                        PrimOp::INeg => ValueInfo::neg(&a_),
+                        PrimOp::Untag => ValueInfo::untag(&a_),
+                        _ => todo!("{op:?}"),
                     }
                     .map(|r| {
+                        self.clicker.click();
                         self.env.insert(res.clone(), r);
                         self.fold(cnt)
                     })
@@ -91,10 +157,55 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
                 }
             },
 
+            Expr::PrimOp(op, args @ Ref([a, b]), rr @ Ref([res]), Ref([cnt])) => match op {
+                _ => {
+                    let a_ = self.inform(a);
+                    let b_ = self.inform(b);
+
+                    match op {
+                        PrimOp::IAdd => ValueInfo::add(&a_, &b_),
+                        PrimOp::ISub => ValueInfo::sub(&a_, &b_),
+                        PrimOp::IMul => ValueInfo::mul(&a_, &b_),
+                        PrimOp::IDiv => ValueInfo::div(&a_, &b_),
+                        _ => todo!("{op:?}"),
+                    }
+                    .map(|r| {
+                        self.clicker.click();
+                        self.env.insert(res.clone(), r);
+                        self.fold(cnt)
+                    })
+                    .unwrap_or_else(|| {
+                        Expr::PrimOp(
+                            *op,
+                            self.substitute_values(args),
+                            *rr,
+                            Ref::array(vec![self.fold(cnt).into()]),
+                        )
+                    })
+                }
+            },
+
+            Expr::PrimOp(op, _, _, _) => todo!("{op:?}"),
+
             Expr::Halt(val) => Expr::Halt(self.substitute_value(val)),
 
-            _ => todo!(),
+            Expr::Panic(msg) => Expr::Panic(*msg),
         }
+    }
+
+    fn fold_predicate<F: Clone + PartialEq>(
+        &mut self,
+        op: impl Fn(&ValueInfo<V>) -> Option<bool>,
+        a: &Value<V, F>,
+        yes: &Expr<V, F>,
+        no: &Expr<V, F>,
+    ) -> Option<Expr<V, F>> {
+        let a_ = self.inform(a);
+
+        let branch = if op(&a_)? { yes } else { no };
+
+        self.clicker.click();
+        Some(self.fold(branch))
     }
 
     fn fold_comparison<F: Clone + PartialEq>(
@@ -108,11 +219,10 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
         let a_ = self.inform(a);
         let b_ = self.inform(b);
 
-        match op(&a_, &b_) {
-            None => None,
-            Some(true) => Some(self.fold(yes)),
-            Some(false) => Some(self.fold(no)),
-        }
+        let branch = if op(&a_, &b_)? { yes } else { no };
+
+        self.clicker.click();
+        Some(self.fold(branch))
     }
 
     fn inform<F>(&self, val: &Value<V, F>) -> ValueInfo<V> {
@@ -130,18 +240,21 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
     }
 
     fn substitute_value<F: Clone>(&self, val: &Value<V, F>) -> Value<V, F> {
-        match val {
+        let result = match val {
             Value::Var(name) => {
                 match self.env.get(name) {
-                    None => val.clone(),
+                    None => return val.clone(),
                     Some(ValueInfo::Unknown(v)) => Value::Var(v.clone()), // could also return original name... don't know which is better
                     Some(ValueInfo::ConstInt(x)) => Value::Int(*x),
                     Some(ValueInfo::ConstReal(x)) => Value::Real(*x),
                     Some(ValueInfo::ConstStr(x)) => Value::String(*x),
                 }
             }
-            _ => val.clone(),
-        }
+            _ => return val.clone(),
+        };
+
+        self.clicker.click();
+        result
     }
 
     fn substitute_values<F: Clone>(&self, vals: &[Value<V, F>]) -> Ref<[Value<V, F>]> {
@@ -158,12 +271,48 @@ enum ValueInfo<V> {
 }
 
 impl<V: Clone + PartialEq> ValueInfo<V> {
+    fn is_zero(&self) -> Option<bool> {
+        match self {
+            ValueInfo::Unknown(_) => None,
+            ValueInfo::ConstInt(x) => Some(*x == 0),
+            ValueInfo::ConstReal(x) => Some(*x == 0.0),
+            ValueInfo::ConstStr(_) => Some(false),
+        }
+    }
+
+    fn is_ptr(&self) -> Option<bool> {
+        match self {
+            ValueInfo::Unknown(_) => None,
+            ValueInfo::ConstInt(_) => Some(false),
+            ValueInfo::ConstReal(_) => Some(false),
+            ValueInfo::ConstStr(_) => Some(false), // not sure...
+        }
+    }
+
     fn is_eq(&self, other: &Self) -> Option<bool> {
         self.partial_cmp(other).map(|o| o == Ordering::Equal)
     }
 
     fn is_less(&self, other: &Self) -> Option<bool> {
         self.partial_cmp(other).map(|o| o == Ordering::Less)
+    }
+
+    fn neg(&self) -> Option<Self> {
+        match self {
+            ValueInfo::Unknown(_) => None,
+            ValueInfo::ConstInt(x) => Some(ValueInfo::ConstInt(-x)),
+            ValueInfo::ConstReal(x) => Some(ValueInfo::ConstReal(-x)),
+            ValueInfo::ConstStr(_) => None,
+        }
+    }
+
+    fn untag(&self) -> Option<Self> {
+        match self {
+            ValueInfo::Unknown(_) => None,
+            ValueInfo::ConstInt(x) => Some(ValueInfo::ConstInt((x - 1) / 2)),
+            ValueInfo::ConstReal(_) => None,
+            ValueInfo::ConstStr(_) => None,
+        }
     }
 
     fn add(&self, other: &Self) -> Option<Self> {
@@ -227,122 +376,6 @@ impl<V: PartialEq> PartialOrd for ValueInfo<V> {
             (ValueInfo::ConstStr(a), ValueInfo::ConstStr(b)) => str::partial_cmp(a, b),
             _ => None,
         }
-    }
-}
-
-impl<V: Clone + PartialEq, F: Clone + PartialEq> Transform<V, F> for ConstantFolder<V> {
-    fn autoclick(&mut self) {
-        self.clicker.click()
-    }
-
-    fn visit_expr(&mut self, expr: &Expr<V, F>) -> Transformed<Expr<V, F>> {
-        match expr {
-            Expr::Switch(Value::Int(idx), cnts) => {
-                Transformed::Again((*cnts[*idx as usize]).clone())
-            }
-
-            Expr::PrimOp(
-                PrimOp::ISame | PrimOp::FSame | PrimOp::SSame,
-                Ref([a, b]),
-                _,
-                Ref([_, yes]),
-            ) if a == b => Transformed::Again((**yes).clone()),
-
-            // Variables may have any value, so we can never know in advance if they are the same
-            Expr::PrimOp(
-                PrimOp::ISame | PrimOp::FSame | PrimOp::SSame,
-                Ref([Value::Var(_), _] | [_, Value::Var(_)]),
-                _,
-                Ref([_, _]),
-            ) => Transformed::Continue,
-
-            Expr::PrimOp(
-                PrimOp::ISame | PrimOp::FSame | PrimOp::SSame,
-                Ref([_, _]),
-                _,
-                Ref([no, _]),
-            ) => Transformed::Again((**no).clone()),
-
-            Expr::PrimOp(PrimOp::ILess, Ref([Value::Int(a), Value::Int(b)]), _, Ref([no, yes])) => {
-                if a < b {
-                    Transformed::Again((**yes).clone())
-                } else {
-                    Transformed::Again((**no).clone())
-                }
-            }
-
-            Expr::PrimOp(PrimOp::ILess, Ref([Value::Var(a), Value::Var(b)]), _, Ref([no, _]))
-                if a == b =>
-            {
-                Transformed::Again((**no).clone())
-            }
-
-            Expr::PrimOp(
-                PrimOp::IAdd,
-                Ref([Value::Int(a), Value::Int(b)]),
-                Ref([var]),
-                Ref([cnt]),
-            ) => Transformed::Again((**cnt).substitute_var(var, &Value::Int(*a + *b))),
-
-            Expr::PrimOp(PrimOp::IAdd, Ref([Value::Int(0), x]), Ref([var]), Ref([cnt])) => {
-                Transformed::Again((**cnt).substitute_var(var, x))
-            }
-
-            Expr::PrimOp(PrimOp::IAdd, Ref([x, Value::Int(0)]), Ref([var]), Ref([cnt])) => {
-                Transformed::Again((**cnt).substitute_var(var, x))
-            }
-
-            Expr::PrimOp(
-                PrimOp::ISub,
-                Ref([Value::Int(a), Value::Int(b)]),
-                Ref([var]),
-                Ref([cnt]),
-            ) => Transformed::Again((**cnt).substitute_var(var, &Value::Int(*a - *b))),
-
-            Expr::PrimOp(PrimOp::ISub, Ref([x, Value::Int(0)]), Ref([var]), Ref([cnt])) => {
-                Transformed::Again((**cnt).substitute_var(var, x))
-            }
-
-            Expr::PrimOp(
-                PrimOp::IMul,
-                Ref([Value::Int(a), Value::Int(b)]),
-                Ref([var]),
-                Ref([cnt]),
-            ) => Transformed::Again((**cnt).substitute_var(var, &Value::Int(*a * *b))),
-
-            Expr::PrimOp(PrimOp::IMul, Ref([x, Value::Int(1)]), Ref([var]), Ref([cnt])) => {
-                Transformed::Again((**cnt).substitute_var(var, x))
-            }
-
-            Expr::PrimOp(PrimOp::IMul, Ref([Value::Int(1), x]), Ref([var]), Ref([cnt])) => {
-                Transformed::Again((**cnt).substitute_var(var, x))
-            }
-
-            Expr::PrimOp(PrimOp::IMul, Ref([_, Value::Int(0)]), Ref([var]), Ref([cnt])) => {
-                Transformed::Again((**cnt).substitute_var(var, &Value::Int(0)))
-            }
-
-            Expr::PrimOp(PrimOp::IMul, Ref([Value::Int(0), _]), Ref([var]), Ref([cnt])) => {
-                Transformed::Again((**cnt).substitute_var(var, &Value::Int(0)))
-            }
-
-            Expr::PrimOp(
-                PrimOp::IDiv,
-                Ref([Value::Int(a), Value::Int(b)]),
-                Ref([var]),
-                Ref([cnt]),
-            ) => Transformed::Again((**cnt).substitute_var(var, &Value::Int(*a / *b))),
-
-            Expr::PrimOp(PrimOp::IDiv, Ref([x, Value::Int(1)]), Ref([var]), Ref([cnt])) => {
-                Transformed::Again((**cnt).substitute_var(var, x))
-            }
-
-            _ => Transformed::Continue,
-        }
-    }
-
-    fn visit_value(&mut self, _: &Value<V, F>) -> Transformed<Value<V, F>> {
-        Transformed::Continue
     }
 }
 

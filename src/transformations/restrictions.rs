@@ -212,8 +212,8 @@ impl<V> RestrictedAst<V, V> {
     where
         V: Clone + Eq + Hash + PartialEq,
     {
-        let ast = super::constant_folding::ConstantFolder::new(self.clicker.clone())
-            .transform_expr(&self.ast);
+        let ast =
+            super::constant_folding::ConstantFolder::new(self.clicker.clone()).fold(&self.ast);
         RestrictedAst { ast, ..self }
     }
 
