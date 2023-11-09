@@ -71,6 +71,9 @@ impl<V: Clone + Eq + Hash> ConstantFolder<V> {
 
                     match op {
                         PrimOp::IAdd => ValueInfo::add(&a_, &b_),
+                        PrimOp::ISub => ValueInfo::sub(&a_, &b_),
+                        PrimOp::IMul => ValueInfo::mul(&a_, &b_),
+                        PrimOp::IDiv => ValueInfo::div(&a_, &b_),
                         _ => todo!(),
                     }
                     .map(|r| {
@@ -171,6 +174,44 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
             }
             (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => Some(ValueInfo::ConstInt(a + b)),
             (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => Some(ValueInfo::ConstReal(a + b)),
+            _ => None,
+        }
+    }
+
+    fn sub(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (x, ValueInfo::ConstInt(0)) => Some(x.clone()),
+            (x, ValueInfo::ConstReal(y)) if *y == 0.0 => Some(x.clone()),
+            (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => Some(ValueInfo::ConstInt(a - b)),
+            (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => Some(ValueInfo::ConstReal(a - b)),
+            _ => None,
+        }
+    }
+
+    fn mul(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (ValueInfo::ConstInt(0), _) | (_, ValueInfo::ConstInt(0)) => {
+                Some(ValueInfo::ConstInt(0))
+            }
+            (ValueInfo::ConstReal(y), _) | (_, ValueInfo::ConstReal(y)) if *y == 0.0 => {
+                Some(ValueInfo::ConstReal(0.0))
+            }
+            (ValueInfo::ConstInt(1), x) | (x, ValueInfo::ConstInt(1)) => Some(x.clone()),
+            (ValueInfo::ConstReal(y), x) | (x, ValueInfo::ConstReal(y)) if *y == 1.0 => {
+                Some(x.clone())
+            }
+            (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => Some(ValueInfo::ConstInt(a * b)),
+            (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => Some(ValueInfo::ConstReal(a * b)),
+            _ => None,
+        }
+    }
+
+    fn div(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (x, ValueInfo::ConstInt(1)) => Some(x.clone()),
+            (x, ValueInfo::ConstReal(y)) if *y == 1.0 => Some(x.clone()),
+            (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => Some(ValueInfo::ConstInt(a / b)),
+            (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => Some(ValueInfo::ConstReal(a / b)),
             _ => None,
         }
     }
