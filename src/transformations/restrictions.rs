@@ -210,7 +210,7 @@ impl<V> RestrictedAst<V, V> {
     /// Reduce various constant expressions
     pub fn fold_constants(self) -> Self
     where
-        V: Clone + Eq + Hash + PartialEq,
+        V: Clone + Debug + Eq + Hash + PartialEq,
     {
         let ast =
             super::constant_folding::ConstantFolder::new(self.clicker.clone()).fold(&self.ast);
