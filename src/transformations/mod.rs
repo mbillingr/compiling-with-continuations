@@ -253,6 +253,9 @@ mod tests {
         }
 
         let cps = cps.purge_dead_functions();
+        println!("DBG: ");
+        cps.clone().expr().pretty_print();
+        println!("\n");
         let cps = cps.beta_contract();
         println!("DBG: ");
         cps.clone().expr().pretty_print();

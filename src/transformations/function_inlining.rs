@@ -85,7 +85,7 @@ impl<'e, V: Clone + Debug + Eq + Hash + PartialEq, T: InlineHeuristic<V, V>> Tra
 {
     fn visit_expr(&mut self, expr: &Expr<V, V>) -> Transformed<Expr<V, V>> {
         match expr {
-            Expr::App(Value::Label(f), args) => match self.inlineable_functions.get(dbg!(f)) {
+            Expr::App(Value::Label(f), args) => match self.inlineable_functions.get(f) {
                 Some((params, body))
                     if self.heuristic.calc(
                         self.depth,
@@ -219,8 +219,6 @@ impl<V: Clone + Eq + Hash, F> InlineHeuristic<V, F> for InlineDecision {
         }
 
         let s = estimate_savings(body, &known_vars);
-
-        println!("{s}");
 
         s > 5
     }
@@ -388,5 +386,19 @@ mod tests {
         let x = Expr::from_str("(fix ((foo () (panic \"\"))) ((@ foo)))").unwrap();
         let y = Expr::from_str("(fix ((foo () (panic \"\"))) (panic \"\"))").unwrap();
         assert_eq!(inline_trivial_fns(&x, Default::default()), y);
+    }
+
+    #[test]
+    fn beta_contract() {
+        let x = Expr::from_str("(fix ((f (x) (halt x))) ((@ f) 1))").unwrap();
+        let y = Expr::from_str("(fix ((f (x) (halt x))) (halt 1))").unwrap();
+        assert_eq!(beta_contraction(&x, Default::default()), y);
+
+        let x = Expr::from_str(
+            "(fix ((f (x) (fix ((g (y) (primop + (x y) (z) ((halt z))))) ((@ g) 2)))) ((@ f) 1))",
+        )
+        .unwrap();
+        let y = Expr::from_str("(fix () (fix () (primop + (1 2) (z) ((halt z)))))").unwrap();
+        assert_eq!(beta_contraction(&x, Default::default()), y);
     }
 }
