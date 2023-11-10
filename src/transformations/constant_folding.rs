@@ -65,9 +65,7 @@ impl<V: Clone + Debug + Eq + Hash + PartialOrd, F: Clone + Debug + PartialOrd>
                     self.env.insert(var.clone(), out);
                     self.fold(cnt)
                 } else {
-                    let (src, idx) = if let Some((src, [idx])) =
-                        out.path.as_ref().map(|(src, p)| (src, p.as_slice()))
-                    {
+                    let (src, idx) = if let Some((src, [idx])) = out.known_path() {
                         self.clicker.click();
                         (src.clone(), *idx)
                     } else {
@@ -88,9 +86,9 @@ impl<V: Clone + Debug + Eq + Hash + PartialOrd, F: Clone + Debug + PartialOrd>
             Expr::Offset(ofs, rec, var, cnt) => {
                 let rec_ = self.inform(rec);
                 let out = rec_.offset(var, *ofs);
-                let (src_, ofs_) = out.clone().offset.unwrap();
+                let (src_, ofs_) = out.known_offset().unwrap();
                 self.env.insert(var.clone(), out.clone());
-                Expr::Offset(ofs_, src_, var.clone(), self.fold(cnt).into())
+                Expr::Offset(ofs_, src_.clone(), var.clone(), self.fold(cnt).into())
             }
 
             Expr::App(rator, rands) => {
@@ -302,27 +300,31 @@ impl<V: Clone + Debug + Eq + Hash + PartialOrd, F: Clone + Debug + PartialOrd>
 #[derive(Clone, Debug, PartialEq)]
 struct ValueInfo<V: 'static, F: 'static> {
     value: Value<V, F>,
-    offset: Option<(Value<V, F>, isize)>,
     fields: Option<(Vec<Self>, isize)>,
-    path: Option<(Value<V, F>, Vec<isize>)>,
+    access: AccessInfo<V, F>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum AccessInfo<V: 'static, F: 'static> {
+    Nothing,
+    Offset(isize, Value<V, F>),
+    Path(Vec<isize>, Value<V, F>),
 }
 
 impl<V: Clone + PartialOrd, F: Clone + PartialOrd> ValueInfo<V, F> {
     fn unknown(var: &V) -> Self {
         ValueInfo {
             value: Value::Var(var.clone()),
-            offset: None,
             fields: None,
-            path: None,
+            access: AccessInfo::Nothing,
         }
     }
 
     fn new_value(val: Value<V, F>) -> Self {
         ValueInfo {
             value: val,
-            offset: None,
             fields: None,
-            path: None,
+            access: AccessInfo::Nothing,
         }
     }
 
@@ -330,51 +332,51 @@ impl<V: Clone + PartialOrd, F: Clone + PartialOrd> ValueInfo<V, F> {
         // todo: take access paths into account!?
         ValueInfo {
             value: Value::Var(var.clone()),
-            offset: Some((Value::Var(var.clone()), 0)),
             fields: Some((fields.collect(), 0)),
-            path: None,
+            access: AccessInfo::Offset(0, Value::Var(var.clone())),
         }
     }
 
     fn select(&self, var: &V, idx: isize) -> Self {
+        let access = match self.access.clone() {
+            AccessInfo::Nothing => AccessInfo::Path(vec![idx], self.value.clone()),
+            AccessInfo::Offset(ofs, src) => AccessInfo::Path(vec![ofs + idx], src),
+            AccessInfo::Path(mut path, src) => {
+                path.push(idx);
+                AccessInfo::Path(path, src)
+            }
+        };
+
         match &self.fields {
-            Some((fields, ofs)) => fields[(ofs + idx) as usize].clone(),
+            Some((fields, ofs)) => {
+                let vi = fields[(ofs + idx) as usize].clone();
+                ValueInfo { access, ..vi }
+            }
             None => ValueInfo {
                 value: Value::Var(var.clone()),
-                offset: None,
                 fields: None,
-                path: Some(match (self.path.clone(), self.offset.clone()) {
-                    (None, None) => (self.value.clone(), vec![idx]),
-                    (None, Some((src, ofs))) => (src, vec![ofs + idx]),
-                    (Some((src, mut path)), None) => {
-                        path.push(idx);
-                        (src, path)
-                    }
-                    (Some(_), Some(_)) => panic!("can't have path and offset at the same time"),
-                }),
+                access,
             },
         }
     }
 
     fn offset(&self, var: &V, ofs: isize) -> Self {
+        let access = match self.access.clone() {
+            AccessInfo::Offset(o0, src) => AccessInfo::Offset(o0 + ofs, src),
+            _ => AccessInfo::Offset(ofs, self.value.clone()),
+        };
         ValueInfo {
             value: Value::Var(var.clone()),
-            offset: self
-                .offset
-                .clone()
-                .map(|(src, o)| (src, o + ofs))
-                .or_else(|| Some((self.value.clone(), ofs))),
             fields: self.fields.clone().map(|(fields, o)| (fields, o + ofs)),
-            path: None,
+            access,
         }
     }
 
     fn extend_access(&self, ap: &AccessPath) -> (Value<V, F>, AccessPath) {
-        match (&self.path, &self.offset) {
-            (Some((v, path)), None) => (v.clone(), ap.preselect(path)),
-            (None, Some((v, ofs))) => (v.clone(), AccessPath::Ref(*ofs)),
-            (None, None) => (self.value.clone(), AccessPath::Ref(0)),
-            (Some(_), Some(_)) => panic!("can't have path and offset at the same time"),
+        match &self.access {
+            AccessInfo::Nothing => (self.value.clone(), AccessPath::Ref(0)),
+            AccessInfo::Offset(ofs, v) => (v.clone(), AccessPath::Ref(*ofs)),
+            AccessInfo::Path(path, v) => (v.clone(), ap.preselect(path)),
         }
     }
 
@@ -398,6 +400,20 @@ impl<V: Clone + PartialOrd, F: Clone + PartialOrd> ValueInfo<V, F> {
 
     fn known_real(&self) -> Option<f64> {
         todo!()
+    }
+
+    fn known_path(&self) -> Option<(&Value<V, F>, &[isize])> {
+        match &self.access {
+            AccessInfo::Path(path, src) => Some((src, path)),
+            _ => None,
+        }
+    }
+
+    fn known_offset(&self) -> Option<(&Value<V, F>, isize)> {
+        match &self.access {
+            AccessInfo::Offset(ofs, src) => Some((src, *ofs)),
+            _ => None,
+        }
     }
 
     fn concrete_value(&self) -> Value<V, F> {
