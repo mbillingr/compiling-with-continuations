@@ -4,17 +4,16 @@ use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast::{AccessPath, Expr, Value};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::collections::HashSet;
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct ConstantFolder<V> {
+pub struct ConstantFolder<V: 'static, F: 'static> {
     clicker: Clicker,
-    env: HashMap<V, ValueInfo<V>>,
+    env: HashMap<V, ValueInfo<V, F>>,
 }
 
-impl<V> Default for ConstantFolder<V> {
+impl<V, F> Default for ConstantFolder<V, F> {
     fn default() -> Self {
         ConstantFolder {
             clicker: Default::default(),
@@ -23,7 +22,9 @@ impl<V> Default for ConstantFolder<V> {
     }
 }
 
-impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
+impl<V: Clone + Debug + Eq + Hash + PartialOrd, F: Clone + Debug + PartialOrd>
+    ConstantFolder<V, F>
+{
     pub fn new(clicker: Clicker) -> Self {
         ConstantFolder {
             clicker,
@@ -31,7 +32,7 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
         }
     }
 
-    pub fn fold<F: Clone + PartialEq>(&mut self, expr: &Expr<V, F>) -> Expr<V, F> {
+    pub fn fold(&mut self, expr: &Expr<V, F>) -> Expr<V, F> {
         match expr {
             Expr::Record(fields, var, cnt) => Expr::Record(
                 Ref::array(
@@ -42,92 +43,55 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
                 ),
                 var.clone(),
                 {
-                    let info = ValueInfo::Record(
-                        0,
-                        Arc::new(fields.iter().map(|(f, _)| self.inform(f)).collect()),
+                    let info = ValueInfo::new_record(
+                        var,
+                        fields.iter().map(|(f, _)| {
+                            // todo: include access paths
+                            self.inform(f)
+                        }),
                     );
                     self.env.insert(var.clone(), info);
                     self.fold(cnt).into()
                 },
             ),
 
-            Expr::Select(idx, rec, var, cnt) => match self.inform(rec) {
-                ValueInfo::Record(ofs, fields) => {
-                    self.env
-                        .insert(var.clone(), fields[(ofs + idx) as usize].clone());
-                    self.fold(cnt)
-                }
-                ValueInfo::Unknown(v) => {
-                    Expr::Select(*idx, self.substitute_value(rec), var.clone(), {
-                        self.env
-                            .insert(var.clone(), ValueInfo::Select(vec![*idx], v));
-                        self.fold(cnt).into()
-                    })
-                }
-                ValueInfo::Select(mut path, v) => {
-                    path.push(*idx);
-                    Expr::Select(*idx, self.substitute_value(rec), var.clone(), {
-                        self.env.insert(var.clone(), ValueInfo::Select(path, v));
-                        self.fold(cnt).into()
-                    })
-                }
-                ValueInfo::Offset(ofs, v) => {
-                    Expr::Select(ofs + idx, Value::Var(v.clone()), var.clone(), {
-                        self.env
-                            .insert(var.clone(), ValueInfo::Select(vec![ofs + idx], v));
-                        self.fold(cnt).into()
-                    })
-                }
-                _ => unimplemented!(),
-            },
+            Expr::Select(idx, rec, var, cnt) => {
+                let rec_ = self.inform(rec);
 
-            Expr::Offset(0, Value::Var(rec), var, cnt) => {
-                self.env.insert(var.clone(), ValueInfo::Alias(rec.clone()));
-                println!("{:?}", self.env);
+                let out = rec_.select(var, *idx);
+
+                if rec_.has_known_value() {
+                    self.clicker.click();
+                    self.env.insert(var.clone(), out);
+                    self.fold(cnt)
+                } else {
+                    let (src, idx) = if let Some((src, [idx])) =
+                        out.path.as_ref().map(|(src, p)| (src, p.as_slice()))
+                    {
+                        self.clicker.click();
+                        (src.clone(), *idx)
+                    } else {
+                        (rec_.value, *idx)
+                    };
+                    self.env.insert(var.clone(), out);
+                    Expr::Select(idx, src, var.clone(), self.fold(cnt).into())
+                }
+            }
+
+            Expr::Offset(0, rec, var, cnt) => {
+                self.clicker.click();
+                let rec_ = self.inform(rec);
+                self.env.insert(var.clone(), rec_);
                 self.fold(cnt)
             }
 
-            Expr::Offset(idx, rec, var, cnt) => match self.inform(rec) {
-                ValueInfo::Record(ofs, fields) => {
-                    self.env
-                        .insert(var.clone(), ValueInfo::Record(ofs + idx, fields));
-                    Expr::Offset(
-                        *idx,
-                        self.substitute_value(rec),
-                        var.clone(),
-                        self.fold(cnt).into(),
-                    )
-                }
-                ValueInfo::Unknown(v) => {
-                    self.env.insert(var.clone(), ValueInfo::Offset(*idx, v));
-                    Expr::Offset(
-                        *idx,
-                        self.substitute_value(rec),
-                        var.clone(),
-                        self.fold(cnt).into(),
-                    )
-                }
-                ValueInfo::Select(_, _) => {
-                    let v = if let Value::Var(v) = rec {
-                        v.clone()
-                    } else {
-                        unreachable!()
-                    };
-                    self.env.insert(var.clone(), ValueInfo::Offset(*idx, v));
-                    Expr::Offset(
-                        *idx,
-                        self.substitute_value(rec),
-                        var.clone(),
-                        self.fold(cnt).into(),
-                    )
-                }
-                ValueInfo::Offset(ofs, v) => {
-                    self.env
-                        .insert(var.clone(), ValueInfo::Offset(ofs + idx, v.clone()));
-                    Expr::Offset(ofs + idx, Value::Var(v), var.clone(), self.fold(cnt).into())
-                }
-                _ => todo!(),
-            },
+            Expr::Offset(ofs, rec, var, cnt) => {
+                let rec_ = self.inform(rec);
+                let out = rec_.offset(var, *ofs);
+                let (src_, ofs_) = out.clone().offset.unwrap();
+                self.env.insert(var.clone(), out.clone());
+                Expr::Offset(ofs_, src_, var.clone(), self.fold(cnt).into())
+            }
 
             Expr::App(rator, rands) => {
                 Expr::App(self.substitute_value(rator), self.substitute_values(rands))
@@ -143,12 +107,12 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
 
             Expr::Switch(k, cnts) => {
                 let k_ = self.inform(k);
-                match k_ {
-                    ValueInfo::ConstInt(idx) => {
+                match k_.known_int() {
+                    Some(idx) => {
                         self.clicker.click();
                         self.fold(&cnts[idx as usize])
                     }
-                    _ => Expr::Switch(
+                    None => Expr::Switch(
                         k.clone(),
                         Ref::array(cnts.iter().map(|c| self.fold(c)).map(Ref::new).collect()),
                     ),
@@ -266,9 +230,9 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
         }
     }
 
-    fn fold_predicate<F: Clone + PartialEq>(
+    fn fold_predicate(
         &mut self,
-        op: impl Fn(&ValueInfo<V>) -> Option<bool>,
+        op: impl Fn(&ValueInfo<V, F>) -> Option<bool>,
         a: &Value<V, F>,
         yes: &Expr<V, F>,
         no: &Expr<V, F>,
@@ -281,9 +245,9 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
         Some(self.fold(branch))
     }
 
-    fn fold_comparison<F: Clone + PartialEq>(
+    fn fold_comparison(
         &mut self,
-        op: impl Fn(&ValueInfo<V>, &ValueInfo<V>) -> Option<bool>,
+        op: impl Fn(&ValueInfo<V, F>, &ValueInfo<V, F>) -> Option<bool>,
         a: &Value<V, F>,
         b: &Value<V, F>,
         yes: &Expr<V, F>,
@@ -298,122 +262,163 @@ impl<V: Clone + Eq + Hash + std::fmt::Debug> ConstantFolder<V> {
         Some(self.fold(branch))
     }
 
-    fn inform<F>(&self, val: &Value<V, F>) -> ValueInfo<V> {
-        let mut vi = match val {
-            Value::Int(x) => ValueInfo::ConstInt(*x),
-            Value::Real(x) => ValueInfo::ConstReal(*x),
-            Value::String(x) => ValueInfo::ConstStr(*x),
+    fn inform(&self, val: &Value<V, F>) -> ValueInfo<V, F> {
+        match val {
             Value::Var(v) => self
                 .env
                 .get(v)
                 .cloned()
-                .unwrap_or_else(|| ValueInfo::Unknown(v.clone())),
-            _ => todo!(),
-        };
-
-        let mut seen_names = HashSet::new();
-
-        while let ValueInfo::Alias(v) = vi {
-            if seen_names.contains(&v) {
-                panic!("alias loop detected")
-            }
-
-            vi = self
-                .env
-                .get(&v)
-                .cloned()
-                .unwrap_or_else(|| ValueInfo::Unknown(v.clone()));
-
-            seen_names.insert(v);
+                .unwrap_or_else(|| ValueInfo::unknown(v)),
+            _ => ValueInfo::new_value(val.clone()),
         }
-
-        vi
     }
 
-    fn substitute_field<F: Clone>(
-        &self,
-        (f, ap): &(Value<V, F>, AccessPath),
-    ) -> (Value<V, F>, AccessPath) {
+    fn substitute_field(&self, (f, ap): &(Value<V, F>, AccessPath)) -> (Value<V, F>, AccessPath) {
         let f_ = self.inform(f);
-        match f_ {
-            ValueInfo::Select(path, r) => (Value::Var(r), ap.preselect(&path)),
-            _ => (self.substitute_value(f), ap.clone()),
+        f_.extend_access(ap)
+    }
+
+    fn substitute_value(&self, val: &Value<V, F>) -> Value<V, F> {
+        match val {
+            Value::Var(name) => match self.env.get(name) {
+                Some(vi) => {
+                    let v_out = vi.concrete_value();
+                    if &v_out != val {
+                        self.clicker.click();
+                    }
+                    v_out
+                }
+                None => val.clone(),
+            },
+            _ => val.clone(),
         }
     }
 
-    fn substitute_value<F: Clone>(&self, val: &Value<V, F>) -> Value<V, F> {
-        let result = match val {
-            Value::Var(name) => {
-                let mut name = name;
-                loop {
-                    let r = match self.env.get(name) {
-                        None => return val.clone(),
-                        Some(ValueInfo::Unknown(v)) => Value::Var(v.clone()), // could also return original name... don't know which is better
-                        Some(ValueInfo::Alias(v)) => {
-                            if v == name {
-                                panic!("alias loop detected")
-                            }
-                            name = v;
-                            continue;
-                        }
-                        Some(ValueInfo::ConstInt(x)) => Value::Int(*x),
-                        Some(ValueInfo::ConstReal(x)) => Value::Real(*x),
-                        Some(ValueInfo::ConstStr(x)) => Value::String(*x),
-                        Some(ValueInfo::Record(_, _)) => return Value::Var(name.clone()),
-                        Some(ValueInfo::Offset(_, _)) => return Value::Var(name.clone()),
-                        Some(ValueInfo::Select(_, _)) => return Value::Var(name.clone()),
-                    };
-                    break r;
-                }
-            }
-            _ => return val.clone(),
-        };
-
-        self.clicker.click();
-        result
-    }
-
-    fn substitute_values<F: Clone>(&self, vals: &[Value<V, F>]) -> Ref<[Value<V, F>]> {
+    fn substitute_values(&self, vals: &[Value<V, F>]) -> Ref<[Value<V, F>]> {
         Ref::array(vals.iter().map(|v| self.substitute_value(v)).collect())
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum ValueInfo<V> {
-    Unknown(V),
-    Alias(V),
-    ConstInt(i64),
-    ConstReal(f64),
-    ConstStr(Ref<String>),
-    Record(isize, Arc<Vec<Self>>),
-    Offset(isize, V),
-    Select(Vec<isize>, V),
+struct ValueInfo<V: 'static, F: 'static> {
+    value: Value<V, F>,
+    offset: Option<(Value<V, F>, isize)>,
+    fields: Option<(Vec<Self>, isize)>,
+    path: Option<(Value<V, F>, Vec<isize>)>,
 }
 
-impl<V: Clone + PartialEq> ValueInfo<V> {
+impl<V: Clone + PartialOrd, F: Clone + PartialOrd> ValueInfo<V, F> {
+    fn unknown(var: &V) -> Self {
+        ValueInfo {
+            value: Value::Var(var.clone()),
+            offset: None,
+            fields: None,
+            path: None,
+        }
+    }
+
+    fn new_value(val: Value<V, F>) -> Self {
+        ValueInfo {
+            value: val,
+            offset: None,
+            fields: None,
+            path: None,
+        }
+    }
+
+    fn new_record(var: &V, fields: impl Iterator<Item = Self>) -> Self {
+        // todo: take access paths into account!?
+        ValueInfo {
+            value: Value::Var(var.clone()),
+            offset: Some((Value::Var(var.clone()), 0)),
+            fields: Some((fields.collect(), 0)),
+            path: None,
+        }
+    }
+
+    fn select(&self, var: &V, idx: isize) -> Self {
+        match &self.fields {
+            Some((fields, ofs)) => fields[(ofs + idx) as usize].clone(),
+            None => ValueInfo {
+                value: Value::Var(var.clone()),
+                offset: None,
+                fields: None,
+                path: Some(match (self.path.clone(), self.offset.clone()) {
+                    (None, None) => (self.value.clone(), vec![idx]),
+                    (None, Some((src, ofs))) => (src, vec![ofs + idx]),
+                    (Some((src, mut path)), None) => {
+                        path.push(idx);
+                        (src, path)
+                    }
+                    (Some(_), Some(_)) => panic!("can't have path and offset at the same time"),
+                }),
+            },
+        }
+    }
+
+    fn offset(&self, var: &V, ofs: isize) -> Self {
+        ValueInfo {
+            value: Value::Var(var.clone()),
+            offset: self
+                .offset
+                .clone()
+                .map(|(src, o)| (src, o + ofs))
+                .or_else(|| Some((self.value.clone(), ofs))),
+            fields: self.fields.clone().map(|(fields, o)| (fields, o + ofs)),
+            path: None,
+        }
+    }
+
+    fn extend_access(&self, ap: &AccessPath) -> (Value<V, F>, AccessPath) {
+        match (&self.path, &self.offset) {
+            (Some((v, path)), None) => (v.clone(), ap.preselect(path)),
+            (None, Some((v, ofs))) => (v.clone(), AccessPath::Ref(*ofs)),
+            (None, None) => (self.value.clone(), AccessPath::Ref(0)),
+            (Some(_), Some(_)) => panic!("can't have path and offset at the same time"),
+        }
+    }
+
+    fn has_known_value(&self) -> bool {
+        match &self.value {
+            Value::Var(_) => self.fields.is_some(),
+            _ => true,
+        }
+    }
+
+    fn is_record(&self) -> bool {
+        self.fields.is_some()
+    }
+
+    fn known_int(&self) -> Option<i64> {
+        match &self.value {
+            Value::Int(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    fn known_real(&self) -> Option<f64> {
+        todo!()
+    }
+
+    fn concrete_value(&self) -> Value<V, F> {
+        self.value.clone()
+    }
+
     fn is_zero(&self) -> Option<bool> {
-        match self {
-            ValueInfo::Alias(_) => unreachable!(),
-            ValueInfo::Unknown(_) => None,
-            ValueInfo::ConstInt(x) => Some(*x == 0),
-            ValueInfo::ConstReal(x) => Some(*x == 0.0),
-            ValueInfo::ConstStr(_) => Some(false),
-            ValueInfo::Record(_, _) => Some(false),
-            ValueInfo::Offset(_, _) => Some(false),
-            ValueInfo::Select(_, _) => None,
+        match &self.value {
+            Value::Var(_) => None,
+            Value::Label(_) => Some(false),
+            Value::Int(x) => Some(*x == 0),
+            Value::Real(x) => Some(*x == 0.0),
+            Value::String(_) => Some(false),
         }
     }
 
     fn is_ptr(&self) -> Option<bool> {
-        match self {
-            ValueInfo::Alias(_) => unreachable!(),
-            ValueInfo::Unknown(_) => None,
-            ValueInfo::ConstInt(_) => Some(false),
-            ValueInfo::ConstReal(_) => Some(false),
-            ValueInfo::ConstStr(_) => Some(false), // not sure...
-            ValueInfo::Record(_, _) => Some(true),
-            ValueInfo::Offset(_, _) => Some(true),
-            ValueInfo::Select(_, _) => None,
+        if self.has_known_value() {
+            Some(self.is_record())
+        } else {
+            None
         }
     }
 
@@ -426,90 +431,74 @@ impl<V: Clone + PartialEq> ValueInfo<V> {
     }
 
     fn neg(&self) -> Option<Self> {
-        match self {
-            ValueInfo::Alias(_) => unreachable!(),
-            ValueInfo::Unknown(_) => None,
-            ValueInfo::ConstInt(x) => Some(ValueInfo::ConstInt(-x)),
-            ValueInfo::ConstReal(x) => Some(ValueInfo::ConstReal(-x)),
-            ValueInfo::ConstStr(_) => None,
-            ValueInfo::Record(_, _) => None,
-            ValueInfo::Offset(_, _) => None,
-            ValueInfo::Select(_, _) => None,
-        }
+        self.known_int()
+            .map(|x| Value::Int(-x))
+            .or_else(|| self.known_real().map(|x| Value::Real(-x)))
+            .map(Self::new_value)
     }
 
     fn untag(&self) -> Option<Self> {
-        match self {
-            ValueInfo::Alias(_) => unreachable!(),
-            ValueInfo::Unknown(_) => None,
-            ValueInfo::ConstInt(x) => Some(ValueInfo::ConstInt((x - 1) / 2)),
-            ValueInfo::ConstReal(_) => None,
-            ValueInfo::ConstStr(_) => None,
-            ValueInfo::Record(_, _) => None,
-            ValueInfo::Offset(_, _) => None,
-            ValueInfo::Select(_, _) => None,
-        }
+        self.known_int()
+            .map(|x| Value::Int((x - 1) / 2))
+            .map(Self::new_value)
     }
 
     fn add(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
-            (ValueInfo::ConstInt(0), x) | (x, ValueInfo::ConstInt(0)) => Some(x.clone()),
-            (ValueInfo::ConstReal(y), x) | (x, ValueInfo::ConstReal(y)) if *y == 0.0 => {
-                Some(x.clone())
-            }
-            (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => Some(ValueInfo::ConstInt(a + b)),
-            (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => Some(ValueInfo::ConstReal(a + b)),
+        match (&self.value, &other.value) {
+            (Value::Int(0), x) | (x, Value::Int(0)) => Some(x.clone()),
+            (Value::Real(y), x) | (x, Value::Real(y)) if *y == 0.0 => Some(x.clone()),
+            (Value::Int(a), Value::Int(b)) => Some(Value::Int(a + b)),
+            (Value::Real(a), Value::Real(b)) => Some(Value::Real(a + b)),
             _ => None,
         }
+        .map(Self::new_value)
     }
 
     fn sub(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
-            (x, ValueInfo::ConstInt(0)) => Some(x.clone()),
-            (x, ValueInfo::ConstReal(y)) if *y == 0.0 => Some(x.clone()),
-            (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => Some(ValueInfo::ConstInt(a - b)),
-            (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => Some(ValueInfo::ConstReal(a - b)),
+        match (&self.value, &other.value) {
+            (x, Value::Int(0)) => Some(x.clone()),
+            (x, Value::Real(y)) if *y == 0.0 => Some(x.clone()),
+            (Value::Int(a), Value::Int(b)) => Some(Value::Int(a - b)),
+            (Value::Real(a), Value::Real(b)) => Some(Value::Real(a - b)),
             _ => None,
         }
+        .map(Self::new_value)
     }
 
     fn mul(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
-            (ValueInfo::ConstInt(0), _) | (_, ValueInfo::ConstInt(0)) => {
-                Some(ValueInfo::ConstInt(0))
-            }
-            (ValueInfo::ConstReal(y), _) | (_, ValueInfo::ConstReal(y)) if *y == 0.0 => {
-                Some(ValueInfo::ConstReal(0.0))
-            }
-            (ValueInfo::ConstInt(1), x) | (x, ValueInfo::ConstInt(1)) => Some(x.clone()),
-            (ValueInfo::ConstReal(y), x) | (x, ValueInfo::ConstReal(y)) if *y == 1.0 => {
-                Some(x.clone())
-            }
-            (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => Some(ValueInfo::ConstInt(a * b)),
-            (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => Some(ValueInfo::ConstReal(a * b)),
+        match (&self.value, &other.value) {
+            (Value::Int(0), _) | (_, Value::Int(0)) => Some(Value::Int(0)),
+            (Value::Real(y), _) | (_, Value::Real(y)) if *y == 0.0 => Some(Value::Real(0.0)),
+            (Value::Int(1), x) | (x, Value::Int(1)) => Some(x.clone()),
+            (Value::Real(y), x) | (x, Value::Real(y)) if *y == 1.0 => Some(x.clone()),
+            (Value::Int(a), Value::Int(b)) => Some(Value::Int(a * b)),
+            (Value::Real(a), Value::Real(b)) => Some(Value::Real(a * b)),
             _ => None,
         }
+        .map(Self::new_value)
     }
 
     fn div(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
-            (x, ValueInfo::ConstInt(1)) => Some(x.clone()),
-            (x, ValueInfo::ConstReal(y)) if *y == 1.0 => Some(x.clone()),
-            (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => Some(ValueInfo::ConstInt(a / b)),
-            (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => Some(ValueInfo::ConstReal(a / b)),
+        match (&self.value, &other.value) {
+            (x, Value::Int(1)) => Some(x.clone()),
+            (x, Value::Real(y)) if *y == 1.0 => Some(x.clone()),
+            (Value::Int(a), Value::Int(b)) => Some(Value::Int(a / b)),
+            (Value::Real(a), Value::Real(b)) => Some(Value::Real(a / b)),
             _ => None,
         }
+        .map(Self::new_value)
     }
 }
 
-impl<V: PartialEq> PartialOrd for ValueInfo<V> {
+impl<V: PartialOrd, F: PartialOrd> PartialOrd for ValueInfo<V, F> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            (ValueInfo::Unknown(a), ValueInfo::Unknown(b)) if a == b => Some(Ordering::Equal),
-            (ValueInfo::Unknown(_), _) | (_, ValueInfo::Unknown(_)) => None,
-            (ValueInfo::ConstInt(a), ValueInfo::ConstInt(b)) => i64::partial_cmp(a, b),
-            (ValueInfo::ConstReal(a), ValueInfo::ConstReal(b)) => f64::partial_cmp(a, b),
-            (ValueInfo::ConstStr(a), ValueInfo::ConstStr(b)) => str::partial_cmp(a, b),
+        match (&self.value, &other.value) {
+            (Value::Var(a), Value::Var(b)) if a == b => Some(Ordering::Equal),
+            (Value::Var(_), _) | (_, Value::Var(_)) => None,
+            (Value::Label(a), Value::Label(b)) => F::partial_cmp(a, b),
+            (Value::Int(a), Value::Int(b)) => i64::partial_cmp(a, b),
+            (Value::Real(a), Value::Real(b)) => f64::partial_cmp(a, b),
+            (Value::String(a), Value::String(b)) => str::partial_cmp(a, b),
             _ => None,
         }
     }
@@ -528,7 +517,7 @@ mod tests {
 
         let mut cf = ConstantFolder {
             clicker: Default::default(),
-            env: hash_map!["k".into() => ValueInfo::ConstInt(2)],
+            env: hash_map!["k".into() => ValueInfo::new_value(Value::Int(2))],
         };
         let x = Expr::from_str("(switch k (halt 10) (halt 20) (halt 30))").unwrap();
         let y = Expr::from_str("(halt 30)").unwrap();
@@ -607,9 +596,9 @@ mod tests {
         let mut cf = ConstantFolder {
             clicker: Default::default(),
             env: hash_map![
-                "a".into() => ValueInfo::ConstInt(1),
-                "b".into() => ValueInfo::ConstInt(2),
-                "c".into() => ValueInfo::ConstInt(2),
+                "a".into() => ValueInfo::new_value(Value::Int(1)),
+                "b".into() => ValueInfo::new_value(Value::Int(2)),
+                "c".into() => ValueInfo::new_value(Value::Int(2)),
             ],
         };
 
@@ -737,7 +726,8 @@ mod tests {
         assert_eq!(ConstantFolder::default().fold(&x), y);
 
         let x = Expr::from_str("(offset 2 r y (offset 1 y x (record (x) s (halt s))))").unwrap();
-        let y = Expr::from_str("(offset 2 r y (offset 3 r x (record (x) s (halt s))))").unwrap();
+        let y = Expr::from_str("(offset 2 r y (offset 3 r x (record ((r (ref 3))) s (halt s))))")
+            .unwrap();
         assert_eq!(ConstantFolder::default().fold(&x), y);
 
         let x = Expr::from_str("(offset 2 r y (select 1 y x (record (x) s (halt s))))").unwrap();
@@ -748,7 +738,9 @@ mod tests {
         assert_eq!(ConstantFolder::default().fold(&x), y);
 
         let x = Expr::from_str("(select 2 r y (offset 1 y x (record (x) s (halt s))))").unwrap();
-        assert_eq!(ConstantFolder::default().fold(&x), x);
+        let y = Expr::from_str("(select 2 r y (offset 1 y x (record ((y (ref 1))) s (halt s))))")
+            .unwrap();
+        assert_eq!(ConstantFolder::default().fold(&x), y);
 
         let x = Expr::from_str("(select 1 r x (primop + (x 0) (y) ((halt y))))").unwrap();
         let y = Expr::from_str("(select 1 r x (halt x))").unwrap();
