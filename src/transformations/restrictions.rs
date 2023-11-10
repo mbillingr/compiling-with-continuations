@@ -194,7 +194,7 @@ impl<V> RestrictedAst<V, V> {
     /// function inlining pass
     pub fn inline_functions(self) -> Self
     where
-        V: Clone + Eq + Hash + PartialEq,
+        V: Clone + Debug + Eq + Hash + PartialEq,
     {
         assert!(self.all_names_unique);
         assert_eq!(self.ref_usage, RefUsage::LabelsAndVars);

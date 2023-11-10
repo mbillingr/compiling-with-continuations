@@ -66,7 +66,6 @@ impl<V: Clone + Debug + Eq + Hash + PartialOrd, F: Clone + Debug + PartialOrd>
                     self.fold(cnt)
                 } else {
                     let (src, idx) = if let Some((src, [idx])) = out.known_path() {
-                        self.clicker.click();
                         (src.clone(), *idx)
                     } else {
                         (rec_.value, *idx)
@@ -399,7 +398,10 @@ impl<V: Clone + PartialOrd, F: Clone + PartialOrd> ValueInfo<V, F> {
     }
 
     fn known_real(&self) -> Option<f64> {
-        todo!()
+        match &self.value {
+            Value::Real(x) => Some(*x),
+            _ => None,
+        }
     }
 
     fn known_path(&self) -> Option<(&Value<V, F>, &[isize])> {
