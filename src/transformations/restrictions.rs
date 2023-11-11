@@ -132,6 +132,16 @@ impl<V> RestrictedAst<V, V> {
         }
     }
 
+    /// Remove expressions whose results are not used
+    pub fn eliminate_dead_code(self) -> Self
+    where
+        V: Clone + Eq + Hash + Debug,
+    {
+        let ast =
+            super::dead_code_elimination::eliminate_dead_code(&self.ast, self.clicker.clone());
+        RestrictedAst { ast, ..self }
+    }
+
     /// Remove function definitions that trivially wrap another function.
     /// E.g. with `(define (foo x y) (bar x y))` every call to foo is replaced with a call to bar.
     pub fn eta_reduce(self) -> Self

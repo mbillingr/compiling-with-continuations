@@ -47,6 +47,9 @@ impl PrimOp {
             "=s" => Some(PrimOp::SSame),
             "call/cc" => Some(PrimOp::CallCC),
             "throw" => Some(PrimOp::Throw),
+            "show-int" => Some(PrimOp::ShowInt),
+            "show-real" => Some(PrimOp::ShowReal),
+            "show-string" => Some(PrimOp::ShowStr),
             _ => None,
         }
     }
@@ -163,6 +166,14 @@ impl PrimOp {
         use PrimOp::*;
         match self {
             CorP | IsZero | ISame | ILess | FSame | SSame => true,
+            _ => false,
+        }
+    }
+
+    pub fn has_side_effect(&self) -> bool {
+        use PrimOp::*;
+        match self {
+            ShowInt | ShowReal | ShowStr => true,
             _ => false,
         }
     }

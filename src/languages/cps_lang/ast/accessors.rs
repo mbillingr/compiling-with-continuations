@@ -16,12 +16,12 @@ impl<V, F> Expr<V, F> {
         }
     }
 
-    pub fn replace_continuations(&self, cnts: impl Iterator<Item = Expr<V, F>>) -> Expr<V, F>
+    pub fn replace_continuations(&self, cnts: impl IntoIterator<Item = Expr<V, F>>) -> Expr<V, F>
     where
         V: Clone,
         F: Clone,
     {
-        let mut cnts = cnts.map(Ref::new);
+        let mut cnts = cnts.into_iter().map(Ref::new);
         let expr_ = match self {
             Expr::Record(f, v, _) => Expr::Record(*f, v.clone(), cnts.next().unwrap()),
             Expr::Select(i, a, v, _) => {

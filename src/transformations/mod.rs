@@ -12,6 +12,7 @@ pub mod cps_eta_splitting;
 pub mod cps_lang_to_abstract_machine;
 pub mod cps_lang_to_c;
 pub mod cps_uncurrying;
+mod dead_code_elimination;
 pub mod dead_function_removal;
 pub mod function_inlining;
 pub mod label_fixrefs;
@@ -256,6 +257,7 @@ mod tests {
         let cps = cps.purge_dead_functions();
         let cps = cps.beta_contract();
         let cps = cps.fold_constants();
+        let cps = cps.eliminate_dead_code();
 
         let cps = cps.rename_uniquely("__");
 
