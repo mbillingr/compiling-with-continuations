@@ -140,7 +140,16 @@ impl<'e, V: Clone + Debug + Eq + Hash + PartialEq, T: InlineHeuristic<V, V>> Tra
                         // we don't know anything about function arguments
                         self.constant_values.remove(p_);
                     }
-                    defs_out.push((f.clone(), *p, Ref::new(self.transform_expr(b))))
+                    let body_out = self.transform_expr(b);
+
+                    defs_out.push((f.clone(), *p, Ref::new(body_out.clone())));
+
+                    // the body of functions may have changed in this scope, so we have to update
+                    // what we inline.
+                    if self.inlineable_functions.contains_key(f) {
+                        self.inlineable_functions
+                            .insert(f.clone(), (p.to_vec(), body_out));
+                    }
                 }
 
                 self.constant_values = original_constants;
@@ -374,6 +383,53 @@ mod tests {
     }
 
     #[test]
+    fn substitute_in_recursion() {
+        let x = Expr::from_str(
+            "(fix ((f (x)
+                          (fix ((g () 
+                                   (halt x))) 
+                             ((@ g))))) 
+                    ((@ f) 1))",
+        )
+        .unwrap();
+        let y = Expr::from_str(
+            "(fix ((f (x)
+                          (fix ((g () 
+                                   (halt x))) 
+                             (halt x)))) 
+                    (fix ((g () 
+                             (halt 1))) 
+                       (halt 1)))",
+        )
+        .unwrap();
+        assert_eq!(beta_contraction(&x, Default::default()), y);
+
+        let x = Expr::from_str(
+            "(fix ((f (x)
+                          (fix ((g () 
+                                   (halt x))) 
+                             ((@ g))))
+                       (h () ((@ f) 2)))
+                    ((@ h)))",
+        )
+        .unwrap();
+        let y = Expr::from_str(
+            "(fix ((f (x)
+                          (fix ((g () 
+                                   (halt x))) 
+                             (halt x)))
+                       (h () (fix ((g () 
+                                      (halt 2))) 
+                                (halt 2))))
+                    (fix ((g () 
+                             (halt 2))) 
+                       (halt 2)))",
+        )
+        .unwrap();
+        assert_eq!(beta_contraction(&x, Default::default()), y);
+    }
+
+    #[test]
     fn test_trivial_inlining() {
         let x = Expr::from_str("(fix ((foo () ((@ bar)))) ((@ foo)))").unwrap();
         let y = Expr::from_str("(fix ((foo () ((@ bar)))) ((@ bar)))").unwrap();
@@ -386,19 +442,5 @@ mod tests {
         let x = Expr::from_str("(fix ((foo () (panic \"\"))) ((@ foo)))").unwrap();
         let y = Expr::from_str("(fix ((foo () (panic \"\"))) (panic \"\"))").unwrap();
         assert_eq!(inline_trivial_fns(&x, Default::default()), y);
-    }
-
-    #[test]
-    fn beta_contract() {
-        let x = Expr::from_str("(fix ((f (x) (halt x))) ((@ f) 1))").unwrap();
-        let y = Expr::from_str("(fix ((f (x) (halt x))) (halt 1))").unwrap();
-        assert_eq!(beta_contraction(&x, Default::default()), y);
-
-        let x = Expr::from_str(
-            "(fix ((f (x) (fix ((g (y) (primop + (x y) (z) ((halt z))))) ((@ g) 2)))) ((@ f) 1))",
-        )
-        .unwrap();
-        let y = Expr::from_str("(fix () (fix () (primop + (1 2) (z) ((halt z)))))").unwrap();
-        assert_eq!(beta_contraction(&x, Default::default()), y);
     }
 }

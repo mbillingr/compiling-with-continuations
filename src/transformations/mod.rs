@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+mod beta_contraction;
 pub mod closure_conversion;
 pub mod closure_conversion_advanced;
 pub mod constant_folding;
@@ -253,13 +254,7 @@ mod tests {
         }
 
         let cps = cps.purge_dead_functions();
-        println!("DBG: ");
-        cps.clone().expr().pretty_print();
-        println!("\n");
         let cps = cps.beta_contract();
-        println!("DBG: ");
-        cps.clone().expr().pretty_print();
-        println!("\n");
         let cps = cps.fold_constants();
 
         let cps = cps.rename_uniquely("__");
