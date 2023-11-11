@@ -159,13 +159,15 @@ impl<'e, V: Clone + Debug + Eq + Hash + PartialEq, T: InlineHeuristic<V, V>> Tra
                 ))
             }
 
-            Expr::PrimOp(_, args, res, _) => {
+            Expr::PrimOp(op, args, res, _) => {
                 // conservatively assume the result is known if all the results are known
                 // (this does not detect 0*x, for example)
-                if args.iter().all(|a| match a {
-                    Value::Var(v) => self.constant_values.contains(v),
-                    _ => true,
-                }) {
+                if op.is_deterministic()
+                    && args.iter().all(|a| match a {
+                        Value::Var(v) => self.constant_values.contains(v),
+                        _ => true,
+                    })
+                {
                     self.constant_values.extend(res.iter().cloned())
                 }
                 Transformed::Continue
@@ -201,7 +203,7 @@ impl<V, F> InlineHeuristic<V, F> for AlwaysInline {
 
 struct InlineDecision {}
 
-impl<V: Clone + Eq + Hash, F> InlineHeuristic<V, F> for InlineDecision {
+impl<V: Clone + Debug + Eq + Hash, F: Debug> InlineHeuristic<V, F> for InlineDecision {
     fn calc(
         &self,
         _depth: usize,
@@ -229,7 +231,7 @@ impl<V: Clone + Eq + Hash, F> InlineHeuristic<V, F> for InlineDecision {
 
         let s = estimate_savings(body, &known_vars);
 
-        s > 5
+        s > 10
     }
 }
 

@@ -194,6 +194,14 @@ impl PrimOp {
             _ => false,
         }
     }
+
+    pub fn is_deterministic(&self) -> bool {
+        use PrimOp::*;
+        match self {
+            ReadInt => false,
+            _ => true,
+        }
+    }
 }
 
 #[cfg(test)]
