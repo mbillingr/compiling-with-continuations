@@ -202,8 +202,14 @@ mod tests {
         println!("{}", c_code);
         println!("\n");
 
-        let bin = compile_c(c_code);
-        let result = String::from_utf8(Command::new(bin).output().unwrap().stdout).unwrap();
+        let bin_file = compile_c(c_code);
+        let mut bin_cmd = Command::new(bin_file)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        std::io::copy(_inp, bin_cmd.stdin.as_mut().unwrap()).unwrap();
+        let result = String::from_utf8(bin_cmd.wait_with_output().unwrap().stdout).unwrap();
         let result = result.trim();
         write!(out, "{}", result).unwrap();
         Answer::from_usize(0)
@@ -319,8 +325,14 @@ mod tests {
         println!("{}", c_code);
         println!("\n");
 
-        let bin = compile_c(c_code);
-        let result = String::from_utf8(Command::new(bin).output().unwrap().stdout).unwrap();
+        let bin_file = compile_c(c_code);
+        let mut bin_cmd = Command::new(bin_file)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        std::io::copy(_inp, bin_cmd.stdin.as_mut().unwrap()).unwrap();
+        let result = String::from_utf8(bin_cmd.wait_with_output().unwrap().stdout).unwrap();
         let result = result.trim();
         write!(out, "{}", result).unwrap();
         Answer::from_usize(0)
