@@ -11,24 +11,34 @@ macro_rules! make_testsuite_for_mini_lambda {
 
         macro_rules! run_expr {
             ($expr:expr, int) => {{
-                let mut io = std::io::Cursor::new(Vec::<u8>::new());
-                $runner(&Expr::ShowInt(Ref::new($expr)), &mut io);
-                String::from_utf8(io.into_inner()).unwrap().parse::<i64>().unwrap()
+                let mut o = std::io::Cursor::new(Vec::<u8>::new());
+                let mut i = std::io::Cursor::new(Vec::<u8>::new());
+                $runner(&Expr::ShowInt(Ref::new($expr)), &mut o, &mut i);
+                String::from_utf8(o.into_inner()).unwrap().parse::<i64>().unwrap()
+            }};
+            ($expr:expr, int, $stdin:expr) => {{
+                let mut o = std::io::Cursor::new(Vec::<u8>::new());
+                let mut i = std::io::Cursor::new($stdin);
+                $runner(&Expr::ShowInt(Ref::new($expr)), &mut o, &mut i);
+                String::from_utf8(o.into_inner()).unwrap().parse::<i64>().unwrap()
             }};
             ($expr:expr, bool) => {{
-                let mut io = std::io::Cursor::new(Vec::<u8>::new());
-                $runner(&Expr::ShowInt(Ref::new($expr)), &mut io);
-                String::from_utf8(io.into_inner()).unwrap().parse::<i64>().unwrap() != 0
+                let mut o = std::io::Cursor::new(Vec::<u8>::new());
+                let mut i = std::io::Cursor::new(Vec::<u8>::new());
+                $runner(&Expr::ShowInt(Ref::new($expr)), &mut o, &mut i);
+                String::from_utf8(o.into_inner()).unwrap().parse::<i64>().unwrap() != 0
             }};
             ($expr:expr, real) => {{
-                let mut io = std::io::Cursor::new(Vec::<u8>::new());
-                $runner(&Expr::ShowReal(Ref::new($expr)), &mut io);
-                String::from_utf8(io.into_inner()).unwrap().parse::<f64>().unwrap()
+                let mut o = std::io::Cursor::new(Vec::<u8>::new());
+                let mut i = std::io::Cursor::new(Vec::<u8>::new());
+                $runner(&Expr::ShowReal(Ref::new($expr)), &mut o, &mut i);
+                String::from_utf8(o.into_inner()).unwrap().parse::<f64>().unwrap()
             }};
             ($expr:expr, str) => {{
-                let mut io = std::io::Cursor::new(Vec::<u8>::new());
-                $runner(&Expr::ShowStr(Ref::new($expr)), &mut io);
-                String::from_utf8(io.into_inner()).unwrap()
+                let mut o = std::io::Cursor::new(Vec::<u8>::new());
+                let mut i = std::io::Cursor::new(Vec::<u8>::new());
+                $runner(&Expr::ShowStr(Ref::new($expr)), &mut o, &mut i);
+                String::from_utf8(o.into_inner()).unwrap()
             }};
         }
 
@@ -231,9 +241,9 @@ macro_rules! make_testsuite_for_mini_lambda {
                                       (0 ((primitive +)
                                           (record (fib ((primitive -) (record n 2)))
                                                   (fib ((primitive -) (record n 1))))))))))
-                        (fib 5))"
+                        (fib ((primitive read-int) 0)))"
                 ).unwrap();
-                assert_eq!(run_expr!(expr, int), 8);
+                assert_eq!(run_expr!(expr, int, "5"), 8);
             }
         }
 
@@ -248,9 +258,9 @@ macro_rules! make_testsuite_for_mini_lambda {
                                            ((primitive -) (record (select 0 args) 1)) 
                                            ((primitive *) (record (select 0 args) (select 1 args)))
                                           )))))))
-                        (fact (record 5 1)))"
+                        (fact (record ((primitive read-int) 0) 1)))"
                 ).unwrap();
-                assert_eq!(run_expr!(expr, int), 120);
+                assert_eq!(run_expr!(expr, int, "5"), 120);
             }
         }
 

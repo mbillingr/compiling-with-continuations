@@ -241,6 +241,11 @@ impl<
                 self.generate_c(cnt, stmts)
             }
 
+            Expr::PrimOp(PrimOp::ReadInt, Ref([_]), Ref([var]), Ref([cnt])) => {
+                let stmts = self.c_read_int(register(var), stmts);
+                self.generate_c(cnt, stmts)
+            }
+
             Expr::Halt(value) => {
                 let value = self.generate_value(value);
                 self.c_halt(value, stmts)
@@ -412,6 +417,11 @@ impl<
 
     fn c_print_str(&self, value: impl std::fmt::Display, mut stmts: Vec<String>) -> Vec<String> {
         stmts.push(format!("printf(\"%s\\n\", {value});"));
+        stmts
+    }
+
+    fn c_read_int(&self, target: impl std::fmt::Display, mut stmts: Vec<String>) -> Vec<String> {
+        stmts.push(format!("scanf(\"%ld\", &{target});"));
         stmts
     }
 

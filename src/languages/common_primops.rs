@@ -1,7 +1,7 @@
 use crate::core::answer::Answer;
 use crate::core::ptr_tagging::{maybe_pointer, untag};
 use crate::core::reference::Ref;
-use std::io::Write;
+use std::io::{BufRead, Write};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PrimOp {
@@ -25,6 +25,7 @@ pub enum PrimOp {
     ShowInt,
     ShowReal,
     ShowStr,
+    ReadInt,
 }
 
 impl PrimOp {
@@ -50,6 +51,7 @@ impl PrimOp {
             "show-int" => Some(PrimOp::ShowInt),
             "show-real" => Some(PrimOp::ShowReal),
             "show-string" => Some(PrimOp::ShowStr),
+            "read-int" => Some(PrimOp::ReadInt),
             _ => None,
         }
     }
@@ -75,10 +77,16 @@ impl PrimOp {
             PrimOp::ShowInt => "show-int",
             PrimOp::ShowReal => "show-real",
             PrimOp::ShowStr => "show-string",
+            PrimOp::ReadInt => "read-int",
         }
     }
 
-    pub unsafe fn apply(&self, args: Vec<Answer>, out: &mut impl Write) -> Answer {
+    pub unsafe fn apply(
+        &self,
+        args: Vec<Answer>,
+        out: &mut impl Write,
+        inp: &mut impl BufRead,
+    ) -> Answer {
         use PrimOp::*;
         match self {
             CorP => Answer::from_bool(maybe_pointer(args[0].repr())),
@@ -119,6 +127,12 @@ impl PrimOp {
                 write!(out, "{}", x.as_str()).unwrap();
                 x
             }
+            ReadInt => {
+                let mut buf = String::new();
+                inp.read_line(&mut buf).unwrap();
+                let x = buf.trim().parse().unwrap_or(0);
+                Answer::from_int(x)
+            }
         }
     }
 
@@ -139,6 +153,7 @@ impl PrimOp {
             CallCC => 1,
             Throw => 2,
             ShowInt | ShowReal | ShowStr => 1,
+            ReadInt => 1,
         }
     }
 
@@ -159,6 +174,7 @@ impl PrimOp {
             CallCC => 1,
             Throw => 0,
             ShowInt | ShowReal | ShowStr => 1,
+            ReadInt => 1,
         }
     }
 
@@ -174,6 +190,7 @@ impl PrimOp {
         use PrimOp::*;
         match self {
             ShowInt | ShowReal | ShowStr => true,
+            ReadInt => true,
             _ => false,
         }
     }
@@ -185,12 +202,23 @@ mod tests {
     use std::io::Cursor;
     #[test]
     fn boxes() {
-        let mut cc = Cursor::new(vec![]);
+        let mut out = Cursor::new(vec![]);
+        let mut inp = Cursor::new(vec![]);
         unsafe {
-            let boxed = PrimOp::MkBox.apply(vec![Answer::from_int(123)], &mut cc);
-            assert_eq!(PrimOp::BoxGet.apply(vec![boxed], &mut cc).as_int(), 123);
-            PrimOp::BoxSet.apply(vec![boxed, Answer::from_int(42)], &mut cc);
-            assert_eq!(PrimOp::BoxGet.apply(vec![boxed], &mut cc).as_int(), 42);
+            let boxed = PrimOp::MkBox.apply(vec![Answer::from_int(123)], &mut out, &mut inp);
+            assert_eq!(
+                PrimOp::BoxGet
+                    .apply(vec![boxed], &mut out, &mut inp)
+                    .as_int(),
+                123
+            );
+            PrimOp::BoxSet.apply(vec![boxed, Answer::from_int(42)], &mut out, &mut inp);
+            assert_eq!(
+                PrimOp::BoxGet
+                    .apply(vec![boxed], &mut out, &mut inp)
+                    .as_int(),
+                42
+            );
         }
     }
 }

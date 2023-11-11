@@ -51,7 +51,7 @@ fn interpret_cps() {
     let expr_in = Expr::from_str(&src).unwrap();
 
     unsafe {
-        crate::languages::cps_lang::interpreter::exec(&expr_in, &mut stdout());
+        crate::languages::cps_lang::interpreter::exec(&expr_in, &mut stdout(), &mut stdin().lock());
     }
 }
 

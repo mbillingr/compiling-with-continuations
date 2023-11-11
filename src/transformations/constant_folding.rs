@@ -173,6 +173,7 @@ impl<V: Clone + Debug + Eq + Hash + PartialOrd, F: Clone + Debug + PartialOrd>
                     match op {
                         PrimOp::INeg => ValueInfo::neg(&a_),
                         PrimOp::Untag => ValueInfo::untag(&a_),
+                        PrimOp::ReadInt => None,
                         _ => todo!("{op:?}"),
                     }
                     .map(|r| {

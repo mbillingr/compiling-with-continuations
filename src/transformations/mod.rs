@@ -112,7 +112,7 @@ impl GenSym for &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{BufRead, Write};
     use std::process::{Command, Stdio};
     use uuid::Uuid;
 
@@ -127,6 +127,7 @@ mod tests {
     unsafe fn run_in_unoptimized_cps(
         mini_lambda_expr: &ml::Expr<Ref<str>>,
         out: &mut impl Write,
+        _inp: &mut impl BufRead,
     ) -> Answer {
         let expr = mini_lambda_expr.clone();
 
@@ -211,6 +212,7 @@ mod tests {
     unsafe fn run_in_optimized_cps(
         mini_lambda_expr: &ml::Expr<Ref<str>>,
         out: &mut impl Write,
+        _inp: &mut impl BufRead,
     ) -> Answer {
         let expr = mini_lambda_expr.clone();
 

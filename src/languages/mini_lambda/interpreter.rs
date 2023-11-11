@@ -3,7 +3,7 @@ use crate::core::env::Env;
 use crate::core::reference::Ref;
 use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
-use std::io::Write;
+use std::io::{BufRead, Write};
 
 type Expr = ast::Expr<Ref<str>>;
 
@@ -13,11 +13,16 @@ pub struct Closure {
     body: Ref<Expr>,
 }
 
-pub unsafe fn exec(expr: &Expr, out: &mut impl Write) {
-    eval(expr, Env::Empty, out);
+pub unsafe fn exec(expr: &Expr, out: &mut impl Write, inp: &mut impl BufRead) {
+    eval(expr, Env::Empty, out, inp);
 }
 
-pub unsafe fn eval(mut expr: &Expr, mut env: Env, out: &mut impl Write) -> Answer {
+pub unsafe fn eval(
+    mut expr: &Expr,
+    mut env: Env,
+    out: &mut impl Write,
+    inp: &mut impl BufRead,
+) -> Answer {
     loop {
         match expr {
             Expr::Var(v) => return env.lookup(&**v),
@@ -62,22 +67,25 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env, out: &mut impl Write) -> Answe
 
             Expr::App(rator, rand) => match (&**rator, &**rand) {
                 (Expr::Prim(op), _) if op.n_args() == 1 => {
-                    return op.apply(vec![eval(&**rand, env, out)], out)
+                    return op.apply(vec![eval(&**rand, env, out, inp)], out, inp)
                 }
                 (Expr::Prim(op), Expr::Record(args)) => {
-                    let args = (0..op.n_args()).map(|i| eval(&args[i], env, out)).collect();
-                    return op.apply(args, out);
+                    let args = (0..op.n_args())
+                        .map(|i| eval(&args[i], env, out, inp))
+                        .collect();
+                    return op.apply(args, out, inp);
                 }
                 (Expr::Prim(op), _) => {
-                    let arg = eval(rand, env, out);
+                    let arg = eval(rand, env, out, inp);
                     return op.apply(
                         (0..op.n_args()).map(|i| arg.get_item(i as isize)).collect(),
                         out,
+                        inp,
                     );
                 }
                 _ => {
-                    let f = eval(&**rator, env, out);
-                    let a = eval(&**rand, env, out);
+                    let f = eval(&**rator, env, out, inp);
+                    let a = eval(&**rand, env, out, inp);
                     let cls = f.as_ref::<Closure>();
                     env = cls.captured_env.extend(cls.var, a);
                     expr = &cls.body;
@@ -91,7 +99,7 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env, out: &mut impl Write) -> Answe
             Expr::String(s) => return Answer::from_str(*s),
 
             Expr::Switch(x, _conrep, branches, default) => {
-                let val = eval(x, env, out);
+                let val = eval(x, env, out, inp);
                 let mut cont = None;
                 for (cnd, branch) in &**branches {
                     if matches(val, cnd) {
@@ -107,11 +115,11 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env, out: &mut impl Write) -> Answe
             }
 
             Expr::Con(ConRep::Tagged(tag), val) => {
-                return Answer::tuple(vec![eval(val, env, out), Answer::from_usize(*tag)])
+                return Answer::tuple(vec![eval(val, env, out, inp), Answer::from_usize(*tag)])
             }
 
             Expr::DeCon(ConRep::Tagged(tag), val) => {
-                let value = eval(val, env, out);
+                let value = eval(val, env, out, inp);
                 if value.get_item(1).as_usize() != *tag {
                     panic!(
                         "expected tag {}, but got {}",
@@ -142,25 +150,25 @@ pub unsafe fn eval(mut expr: &Expr, mut env: Env, out: &mut impl Write) -> Answe
             Expr::Record(fields) => {
                 let mut data = Vec::with_capacity(fields.len());
                 for f in &**fields {
-                    data.push(eval(f, env, out));
+                    data.push(eval(f, env, out, inp));
                 }
                 return Answer::tuple(data);
             }
 
-            Expr::Select(idx, rec) => return eval(rec, env, out).get_item(*idx),
+            Expr::Select(idx, rec) => return eval(rec, env, out, inp).get_item(*idx),
 
             Expr::ShowInt(value) => {
-                let v = eval(value, env, out);
+                let v = eval(value, env, out, inp);
                 write!(out, "{}", v.as_int()).unwrap();
                 return v;
             }
             Expr::ShowReal(value) => {
-                let v = eval(value, env, out);
+                let v = eval(value, env, out, inp);
                 write!(out, "{}", v.as_float()).unwrap();
                 return v;
             }
             Expr::ShowStr(value) => {
-                let v = eval(value, env, out);
+                let v = eval(value, env, out, inp);
                 write!(out, "{}", v.as_str()).unwrap();
                 return v;
             }

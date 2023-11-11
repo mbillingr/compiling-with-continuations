@@ -27,6 +27,7 @@ pub enum Op<V, F> {
     Untag(Rand<V, F>, R<V>),
 
     IntShow(Rand<V, F>),
+    IntRead(R<V>),
     IntIsEq(Rand<V, F>, Rand<V, F>, R<V>),
     IntIsLess(Rand<V, F>, Rand<V, F>, R<V>),
     IntNegate(Rand<V, F>, R<V>),
@@ -233,6 +234,11 @@ impl<V: Clone + PartialEq + Debug + Display, F: Clone + Eq + Hash + GenSym + Deb
                 let a_ = self.generate_operand(a);
                 ops.push(Op::StrShow(a_.clone()));
                 ops.push(Op::Copy(a_, R::R(var.clone())));
+                self.linearize(cnt, ops)
+            }
+
+            Expr::PrimOp(PrimOp::ReadInt, Ref([_]), Ref([var]), Ref([cnt])) => {
+                ops.push(Op::IntRead(R::R(var.clone())));
                 self.linearize(cnt, ops)
             }
 

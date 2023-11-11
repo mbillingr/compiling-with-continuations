@@ -550,7 +550,7 @@ impl Context {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{BufRead, Write};
 
     use crate::core::answer::Answer;
     use crate::languages::cps_lang;
@@ -854,9 +854,9 @@ mod tests {
         );
     }
 
-    unsafe fn run_in_cps(mini_lambda_expr: &LExpr, out: &mut impl Write) -> Answer {
+    unsafe fn run_in_cps(mini_lambda_expr: &LExpr, out: &mut impl Write, inp: &mut impl BufRead) -> Answer {
         let cps_expr = convert_program(mini_lambda_expr.clone());
-        cps_lang::interpreter::exec(&cps_expr, out)
+        cps_lang::interpreter::exec(&cps_expr, out, inp)
     }
 
     make_testsuite_for_mini_lambda!(run_in_cps continuation_tests);
