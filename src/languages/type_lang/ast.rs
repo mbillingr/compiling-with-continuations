@@ -8,8 +8,6 @@ pub enum Expr {
     Apply(Rc<Expr>, Rc<Expr>),
     Lambda {
         param: String,
-        ptype: TyExpr,
-        rtype: TyExpr,
         body: Rc<Expr>,
     },
     Fix {

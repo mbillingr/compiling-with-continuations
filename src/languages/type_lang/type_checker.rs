@@ -56,14 +56,9 @@ impl Checker {
                 Ok(tr)
             }
 
-            Expr::Lambda {
-                ptype,
-                rtype,
-                param,
-                body,
-            } => {
-                let at = teval(ptype, tenv);
-                let rt = teval(rtype, tenv);
+            Expr::Lambda { param, body } => {
+                let at = self.fresh();
+                let rt = self.fresh();
 
                 let mut env_ = env.clone();
                 env_.insert(param.clone(), at.clone());
@@ -249,8 +244,6 @@ mod tests {
         let x = Expr::Apply(
             Rc::new(Expr::Lambda {
                 param: "x".to_string(),
-                ptype: TyExpr::Int,
-                rtype: TyExpr::Int,
                 body: Rc::new(Expr::Ref("x".to_string())),
             }),
             Rc::new(Expr::Int(0)),
@@ -260,8 +253,6 @@ mod tests {
         let x = Expr::Apply(
             Rc::new(Expr::Lambda {
                 param: "x".to_string(),
-                ptype: TyExpr::Real,
-                rtype: TyExpr::Int,
                 body: Rc::new(Expr::Ref("x".to_string())),
             }),
             Rc::new(Expr::Real(0.0)),
@@ -354,8 +345,6 @@ mod tests {
             ))),
             fbody: Rc::new(Expr::Lambda {
                 param: "y".to_string(),
-                ptype: TyExpr::Var("S".to_string()),
-                rtype: TyExpr::Var("T".to_string()),
                 body: Rc::new(Expr::Ref("x".to_string())),
             }),
             body: Rc::new(Expr::Apply(
