@@ -7,7 +7,13 @@ pub enum Expr {
     Ref(String),
     Apply(Rc<(Expr, Expr)>),
     Lambda(Rc<Lambda>),
-    Fix(Rc<(FixDef, Expr)>),
+    Defs(Rc<(Vec<Def>, Expr)>),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Def {
+    Func(FnDef),
+    Enum(EnumDef),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -25,13 +31,25 @@ pub struct Lambda {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct FixDef {
+pub struct FnDef {
     pub fname: String,
     pub tvars: Vec<String>,
     pub param: String,
     pub ptype: TyExpr,
     pub rtype: TyExpr,
     pub body: Expr,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct EnumDef {
+    pub tname: String,
+    pub variants: Vec<EnumVariant>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum EnumVariant {
+    Constant,
+    Constructor(TyExpr),
 }
 
 impl Expr {
@@ -61,15 +79,15 @@ impl Expr {
         }))
     }
 
-    pub fn fix<T>(def: impl Into<FixDef>, body: T) -> Self
+    pub fn defs<T>(defs: impl Into<Vec<Def>>, body: T) -> Self
     where
         Expr: From<T>,
     {
-        Expr::Fix(Rc::new((def.into(), body.into())))
+        Expr::Defs(Rc::new((defs.into(), body.into())))
     }
 }
 
-impl FixDef {
+impl FnDef {
     pub fn new<V, P, R, B>(
         fname: impl ToString,
         tvars: impl IntoIterator<Item = V>,
@@ -84,7 +102,7 @@ impl FixDef {
         TyExpr: From<R>,
         Expr: From<B>,
     {
-        FixDef {
+        FnDef {
             fname: fname.to_string(),
             tvars: tvars.into_iter().map(|v| v.to_string()).collect(),
             param: param.to_string(),

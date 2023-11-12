@@ -1,4 +1,4 @@
-use crate::languages::type_lang::ast::{Expr, TyExpr};
+use crate::languages::type_lang::ast::{Def, Expr, TyExpr};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
@@ -67,38 +67,48 @@ impl Checker {
                 Ok(Type::Fn(Rc::new((at, rt))))
             }
 
-            Expr::Fix(fix) => {
-                let (def, body) = &**fix;
-                {
-                    let mut tenv_ = tenv.clone();
-                    tenv_.extend(
-                        def.tvars
-                            .iter()
-                            .map(|tv| (tv.to_string(), Type::Named(tv.to_string()))),
-                    );
+            Expr::Defs(defs) => {
+                let (defs, body) = &**defs;
+                let mut env_ = env.clone();
+                let mut tenv_ = tenv.clone();
 
-                    let rt = teval(&def.rtype, &tenv_);
-                    let pt = teval(&def.ptype, &tenv_);
-                    let ft = Type::Fn(Rc::new((pt.clone(), rt.clone())));
+                for def in defs {
+                    match def {
+                        Def::Func(def) => {
+                            {
+                                // check function
+                                tenv_.extend(
+                                    def.tvars
+                                        .iter()
+                                        .map(|tv| (tv.to_string(), Type::Named(tv.to_string()))),
+                                );
 
-                    let mut env_ = env.clone();
-                    env_.insert(def.fname.clone(), ft);
-                    env_.insert(def.param.clone(), pt);
+                                let rt = teval(&def.rtype, &tenv_);
+                                let pt = teval(&def.ptype, &tenv_);
+                                let ft = Type::Fn(Rc::new((pt.clone(), rt.clone())));
 
-                    self.check_expr(&def.body, rt, &env_, &tenv_)?;
+                                let mut env_ = env.clone();
+                                env_.insert(def.fname.clone(), ft);
+                                env_.insert(def.param.clone(), pt);
+
+                                self.check_expr(&def.body, rt, &env_, &tenv_)?;
+                            }
+                            {
+                                // define function
+                                let ft = Type::Generic(Rc::new(GenericFn {
+                                    tvars: def.tvars.clone(),
+                                    ptype: def.ptype.clone(),
+                                    rtype: def.rtype.clone(),
+                                }));
+
+                                env_.insert(def.fname.clone(), ft);
+                            }
+                        }
+                        Def::Enum(_) => todo!(),
+                    }
                 }
-                {
-                    let ft = Type::Generic(Rc::new(GenericFn {
-                        tvars: def.tvars.clone(),
-                        ptype: def.ptype.clone(),
-                        rtype: def.rtype.clone(),
-                    }));
 
-                    let mut env_ = env.clone();
-                    env_.insert(def.fname.clone(), ft);
-
-                    self.infer(body, &env_, tenv)
-                }
+                self.infer(body, &env_, tenv)
             }
         }
     }
@@ -216,7 +226,7 @@ impl GenericType for GenericFn {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::languages::type_lang::ast::FixDef;
+    use crate::languages::type_lang::ast::FnDef;
 
     #[test]
     fn check_primitives() {
@@ -244,8 +254,8 @@ mod tests {
 
     #[test]
     fn check_generic() {
-        let x = Expr::fix(
-            FixDef::new("fn", vec!["T"], "T", "T", "x", "x"),
+        let x = Expr::defs(
+            [Def::Func(FnDef::new("fn", vec!["T"], "T", "T", "x", "x"))],
             Expr::apply("fn", 0),
         );
         assert_eq!(Checker::check_program(&x), Ok(()));
@@ -253,8 +263,8 @@ mod tests {
 
     #[test]
     fn fail_generic_def() {
-        let x = Expr::fix(
-            FixDef::new("fn", vec!["T"], "T", "T", "x", 0),
+        let x = Expr::defs(
+            [Def::Func(FnDef::new("fn", vec!["T"], "T", "T", "x", 0))],
             Expr::apply("fn", 0),
         );
         assert!(Checker::check_program(&x).is_err());
@@ -262,8 +272,8 @@ mod tests {
 
     #[test]
     fn fail_generic_use() {
-        let x = Expr::fix(
-            FixDef::new("fn", vec!["T"], "T", "T", "x", "x"),
+        let x = Expr::defs(
+            [Def::Func(FnDef::new("fn", vec!["T"], "T", "T", "x", "x"))],
             Expr::apply("fn", 1.2),
         );
         assert!(Checker::check_program(&x).is_err());
@@ -272,8 +282,8 @@ mod tests {
     #[test]
     fn check_generic_different_uses() {
         // (let ((id (lambda (x) x))) ((id id) 42))
-        let x = Expr::fix(
-            FixDef::new("id", vec!["T"], "T", "T", "x", "x"),
+        let x = Expr::defs(
+            [Def::Func(FnDef::new("id", vec!["T"], "T", "T", "x", "x"))],
             Expr::apply(Expr::apply("id", "id"), 42),
         );
         assert_eq!(Checker::check_program(&x), Ok(()));
@@ -281,15 +291,15 @@ mod tests {
 
     #[test]
     fn check_outer_generic() {
-        let x = Expr::fix(
-            FixDef::new(
+        let x = Expr::defs(
+            [Def::Func(FnDef::new(
                 "f",
                 vec!["T", "S"],
                 "T",
                 TyExpr::func("S", "T"),
                 "x",
                 Expr::lambda("y", "x"),
-            ),
+            ))],
             Expr::apply(Expr::apply("f", 42), 1.2),
         );
         assert_eq!(Checker::check_program(&x), Ok(()));
