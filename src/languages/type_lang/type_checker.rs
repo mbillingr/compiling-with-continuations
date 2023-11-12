@@ -48,61 +48,54 @@ impl Checker {
                 Some(t) => Ok(t.clone()),
             },
 
-            Expr::Apply(f, a) => {
+            Expr::Apply(app) => {
                 let tr = self.fresh();
-                let t = self.infer(f, env, tenv)?;
-                let ta = self.infer(a, env, tenv)?;
+                let t = self.infer(&app.0, env, tenv)?;
+                let ta = self.infer(&app.1, env, tenv)?;
                 self.unify(t, Type::Fn(Rc::new((ta, tr.clone()))))?;
                 Ok(tr)
             }
 
-            Expr::Lambda { param, body } => {
+            Expr::Lambda(lam) => {
                 let at = self.fresh();
                 let rt = self.fresh();
 
                 let mut env_ = env.clone();
-                env_.insert(param.clone(), at.clone());
-                self.check_expr(body, rt.clone(), &env_, &tenv)?;
+                env_.insert(lam.param.clone(), at.clone());
+                self.check_expr(&lam.body, rt.clone(), &env_, &tenv)?;
 
                 Ok(Type::Fn(Rc::new((at, rt))))
             }
 
-            Expr::Fix {
-                fname,
-                tvars,
-                param,
-                ptype,
-                rtype,
-                fbody,
-                body,
-            } => {
+            Expr::Fix(fix) => {
+                let (def, body) = &**fix;
                 {
                     let mut tenv_ = tenv.clone();
                     tenv_.extend(
-                        tvars
+                        def.tvars
                             .iter()
                             .map(|tv| (tv.to_string(), Type::Named(tv.to_string()))),
                     );
 
-                    let rt = teval(rtype, &tenv_);
-                    let pt = teval(ptype, &tenv_);
+                    let rt = teval(&def.rtype, &tenv_);
+                    let pt = teval(&def.ptype, &tenv_);
                     let ft = Type::Fn(Rc::new((pt.clone(), rt.clone())));
 
                     let mut env_ = env.clone();
-                    env_.insert(fname.clone(), ft);
-                    env_.insert(param.clone(), pt);
+                    env_.insert(def.fname.clone(), ft);
+                    env_.insert(def.param.clone(), pt);
 
-                    self.check_expr(fbody, rt, &env_, &tenv_)?;
+                    self.check_expr(&def.body, rt, &env_, &tenv_)?;
                 }
                 {
                     let ft = Type::Generic(Rc::new(GenericFn {
-                        tvars: tvars.clone(),
-                        ptype: ptype.clone(),
-                        rtype: rtype.clone(),
+                        tvars: def.tvars.clone(),
+                        ptype: def.ptype.clone(),
+                        rtype: def.rtype.clone(),
                     }));
 
                     let mut env_ = env.clone();
-                    env_.insert(fname.clone(), ft);
+                    env_.insert(def.fname.clone(), ft);
 
                     self.infer(body, &env_, tenv)
                 }
@@ -223,14 +216,15 @@ impl GenericType for GenericFn {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::languages::type_lang::ast::FixDef;
 
     #[test]
     fn check_primitives() {
-        assert_eq!(Checker::check_program(&Expr::Int(42)), Ok(()));
-        assert!(Checker::check_program(&Expr::Real(4.2)).is_err());
+        assert_eq!(Checker::check_program(&Expr::int(42)), Ok(()));
+        assert!(Checker::check_program(&Expr::real(4.2)).is_err());
         assert_eq!(
             Checker::new().check_expr(
-                &Expr::Real(4.2),
+                &Expr::real(4.2),
                 Type::Real,
                 &HashMap::new(),
                 &HashMap::new()
@@ -241,120 +235,63 @@ mod tests {
 
     #[test]
     fn check_lambdas() {
-        let x = Expr::Apply(
-            Rc::new(Expr::Lambda {
-                param: "x".to_string(),
-                body: Rc::new(Expr::Ref("x".to_string())),
-            }),
-            Rc::new(Expr::Int(0)),
-        );
+        let x = Expr::apply(Expr::lambda("x", "x"), Expr::int(0));
         assert_eq!(Checker::check_program(&x), Ok(()));
 
-        let x = Expr::Apply(
-            Rc::new(Expr::Lambda {
-                param: "x".to_string(),
-                body: Rc::new(Expr::Ref("x".to_string())),
-            }),
-            Rc::new(Expr::Real(0.0)),
-        );
+        let x = Expr::apply(Expr::lambda("x", "x"), Expr::Real(0.0));
         assert!(Checker::check_program(&x).is_err());
     }
 
     #[test]
     fn check_generic() {
-        let x = Expr::Fix {
-            fname: "fn".to_string(),
-            tvars: vec!["T".into()],
-            param: "x".to_string(),
-            ptype: TyExpr::Var("T".to_string()),
-            rtype: TyExpr::Var("T".to_string()),
-            fbody: Rc::new(Expr::Ref("x".to_string())),
-            body: Rc::new(Expr::Apply(
-                Rc::new(Expr::Ref("fn".to_string())),
-                Rc::new(Expr::Int(0)),
-            )),
-        };
+        let x = Expr::fix(
+            FixDef::new("fn", vec!["T"], "T", "T", "x", "x"),
+            Expr::apply("fn", 0),
+        );
         assert_eq!(Checker::check_program(&x), Ok(()));
     }
 
     #[test]
     fn fail_generic_def() {
-        let x = Expr::Fix {
-            fname: "fn".to_string(),
-            tvars: vec!["T".into()],
-            param: "x".to_string(),
-            ptype: TyExpr::Var("T".to_string()),
-            rtype: TyExpr::Var("T".to_string()),
-            fbody: Rc::new(Expr::Int(0)),
-            body: Rc::new(Expr::Apply(
-                Rc::new(Expr::Ref("fn".to_string())),
-                Rc::new(Expr::Int(0)),
-            )),
-        };
+        let x = Expr::fix(
+            FixDef::new("fn", vec!["T"], "T", "T", "x", 0),
+            Expr::apply("fn", 0),
+        );
         assert!(Checker::check_program(&x).is_err());
     }
 
     #[test]
     fn fail_generic_use() {
-        let x = Expr::Fix {
-            fname: "fn".to_string(),
-            tvars: vec!["T".into()],
-            param: "x".to_string(),
-            ptype: TyExpr::Var("T".to_string()),
-            rtype: TyExpr::Var("T".to_string()),
-            fbody: Rc::new(Expr::Ref("x".to_string())),
-            body: Rc::new(Expr::Apply(
-                Rc::new(Expr::Ref("fn".to_string())),
-                Rc::new(Expr::Real(1.2)),
-            )),
-        };
+        let x = Expr::fix(
+            FixDef::new("fn", vec!["T"], "T", "T", "x", "x"),
+            Expr::apply("fn", 1.2),
+        );
         assert!(Checker::check_program(&x).is_err());
     }
 
     #[test]
     fn check_generic_different_uses() {
         // (let ((id (lambda (x) x))) ((id id) 42))
-        let x = Expr::Fix {
-            fname: "id".to_string(),
-            tvars: vec!["T".into()],
-            param: "x".to_string(),
-            ptype: TyExpr::Var("T".to_string()),
-            rtype: TyExpr::Var("T".to_string()),
-            fbody: Rc::new(Expr::Ref("x".to_string())),
-            body: Rc::new(Expr::Apply(
-                Rc::new(Expr::Apply(
-                    Rc::new(Expr::Ref("id".to_string())),
-                    Rc::new(Expr::Ref("id".to_string())),
-                )),
-                Rc::new(Expr::Int(42)),
-            )),
-        };
+        let x = Expr::fix(
+            FixDef::new("id", vec!["T"], "T", "T", "x", "x"),
+            Expr::apply(Expr::apply("id", "id"), 42),
+        );
         assert_eq!(Checker::check_program(&x), Ok(()));
     }
 
     #[test]
     fn check_outer_generic() {
-        let x = Expr::Fix {
-            fname: "f".to_string(),
-            tvars: vec!["T".into(), "S".into()],
-            param: "x".to_string(),
-            ptype: TyExpr::Var("T".to_string()),
-            rtype: TyExpr::Fn(Rc::new((
-                TyExpr::Var("S".to_string()),
-                TyExpr::Var("T".to_string()),
-            ))),
-            fbody: Rc::new(Expr::Lambda {
-                param: "y".to_string(),
-                body: Rc::new(Expr::Ref("x".to_string())),
-            }),
-            body: Rc::new(Expr::Apply(
-                Rc::new(Expr::Apply(
-                    Rc::new(Expr::Ref("f".to_string())),
-                    Rc::new(Expr::Int(42)),
-                )),
-                Rc::new(Expr::Real(1.2)),
-            )),
-        };
+        let x = Expr::fix(
+            FixDef::new(
+                "f",
+                vec!["T", "S"],
+                "T",
+                TyExpr::func("S", "T"),
+                "x",
+                Expr::lambda("y", "x"),
+            ),
+            Expr::apply(Expr::apply("f", 42), 1.2),
+        );
         assert_eq!(Checker::check_program(&x), Ok(()));
     }
 }
