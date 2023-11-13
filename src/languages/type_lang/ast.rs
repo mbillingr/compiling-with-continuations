@@ -17,6 +17,9 @@ pub enum Expr {
     /// Enum variant construction
     Cons(Rc<(String, String, Vec<Expr>)>),
 
+    /// Enum deconstruction (will be replaced by pattern matching)
+    Decons(Rc<(Expr, String, Vec<String>, Expr, Expr)>),
+
     /// Anonymous function
     Lambda(Rc<Lambda>),
 
@@ -84,6 +87,22 @@ impl Expr {
             ety.to_string(),
             variant.to_string(),
             args.build(),
+        )))
+    }
+
+    pub fn decons(
+        value: impl Into<Expr>,
+        variant: impl ToString,
+        vars: impl ListBuilder<String>,
+        matches: impl Into<Expr>,
+        mismatch: impl Into<Expr>,
+    ) -> Self {
+        Expr::Decons(Rc::new((
+            value.into(),
+            variant.to_string(),
+            vars.build(),
+            matches.into(),
+            mismatch.into(),
         )))
     }
 

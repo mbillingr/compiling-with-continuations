@@ -54,12 +54,13 @@ impl Checker {
                     .get(ety)
                     .ok_or_else(|| format!("Unknown type: {ety}"))?;
                 match t {
-                    Type::Enum(variants) => {
+                    Type::Enum(enum_) => {
+                        let (name, variants) = &**enum_;
                         let var = variants
                             .get(variant)
-                            .ok_or_else(|| format!("Unknown variant: {ety} {variant}"))?;
+                            .ok_or_else(|| format!("Unknown variant: {name} {variant}"))?;
                         if args.len() != var.len() {
-                            return Err(format!("Wrong number of argumnts: {ety} {variant}"));
+                            return Err(format!("Wrong number of argumnts: {name} {variant}"));
                         }
                         for (v, a) in var.iter().zip(args) {
                             self.check_expr(a, v, env, tenv)?;
@@ -68,6 +69,33 @@ impl Checker {
                     }
                     _ => Err(format!("Not an enum: {ety}")),
                 }
+            }
+
+            Expr::Decons(de) => {
+                let (value, variant, vars, matches, mismatch) = &**de;
+
+                let ety = self.infer(value, env, tenv)?;
+                let (name, variants) = &*match ety {
+                    Type::Enum(enum_) => enum_,
+                    _ => return Err(format!("Not an enum: {ety:?}")),
+                };
+
+                let constructor = variants
+                    .get(variant)
+                    .ok_or_else(|| format!("Unknown variant: {name} {variant}"))?;
+                if vars.len() != constructor.len() {
+                    return Err(format!("Wrong number of bindings: {name} {variant}"));
+                }
+
+                let mut match_env = env.clone();
+                match_env.extend(vars.iter().cloned().zip(constructor.iter().cloned()));
+
+                let t1 = self.infer(matches, &match_env, tenv)?;
+                let t2 = self.infer(mismatch, env, tenv)?;
+
+                // not sure if it's ok like this. maybe need to return a fresh typevar that's unified with both.
+                self.unify(&t1, &t2)?;
+                Ok(t1)
             }
 
             Expr::Apply(app) => {
@@ -103,7 +131,7 @@ impl Checker {
                                 tenv_.extend(
                                     def.tvars
                                         .iter()
-                                        .map(|tv| (tv.to_string(), Type::Named(tv.to_string()))),
+                                        .map(|tv| (tv.to_string(), Type::Opaque(tv.to_string()))),
                                 );
 
                                 let rt = teval(&def.rtype, &tenv_);
@@ -140,7 +168,10 @@ impl Checker {
                                 }
                             }
 
-                            def_tenv.insert(def.tname.clone(), Type::Enum(Rc::new(variants)));
+                            def_tenv.insert(
+                                def.tname.clone(),
+                                Type::Enum(Rc::new((def.tname.clone(), variants))),
+                            );
                         }
                     }
                 }
@@ -199,11 +230,11 @@ impl Checker {
 enum Type {
     Int,
     Real,
-    Named(String),
+    Opaque(String),
     Var(usize),
     Fn(Rc<(Type, Type)>),
     Generic(Rc<dyn GenericType>),
-    Enum(Rc<HashMap<String, Vec<Type>>>),
+    Enum(Rc<(String, HashMap<String, Vec<Type>>)>),
 }
 
 impl Debug for Type {
@@ -211,11 +242,11 @@ impl Debug for Type {
         match self {
             Type::Int => write!(f, "Int"),
             Type::Real => write!(f, "Real"),
-            Type::Named(name) => write!(f, "{name}"),
+            Type::Opaque(name) => write!(f, "{name}"),
             Type::Var(nr) => write!(f, "'{nr}"),
             Type::Fn(sig) => write!(f, "({:?} -> {:?})", sig.0, sig.1),
             Type::Generic(g) => write!(f, "{g:?}"),
-            Type::Enum(variants) => write!(f, "<Enum with {} variants>", variants.len()),
+            Type::Enum(e) => write!(f, "<Enum {}>", e.0),
         }
     }
 }
@@ -225,7 +256,7 @@ impl PartialEq for Type {
         match (self, other) {
             (Type::Int, Type::Int) => true,
             (Type::Real, Type::Real) => true,
-            (Type::Named(a), Type::Named(b)) => a == b,
+            (Type::Opaque(a), Type::Opaque(b)) => a == b,
             (Type::Var(a), Type::Var(b)) => a == b,
             (Type::Fn(a), Type::Fn(b)) => a == b,
             _ => false,
@@ -363,6 +394,15 @@ mod tests {
                 )],
                 Expr::apply("f", Expr::cons("Foo", "B", [1])),
             ),
+        );
+        assert_eq!(Checker::check_program(&x), Ok(()));
+    }
+
+    #[test]
+    fn check_enum_deconstruction() {
+        let x = Expr::defs(
+            [Def::enum_("Foo", ("A", ("B", TyExpr::Int), ()))],
+            Expr::decons(Expr::cons("Foo", "B", [1]), "B", ["x"], "x", 0),
         );
         assert_eq!(Checker::check_program(&x), Ok(()));
     }
