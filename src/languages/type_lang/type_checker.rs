@@ -1,4 +1,4 @@
-use crate::languages::type_lang::ast::{Def, Expr, TyExpr};
+use crate::languages::type_lang::ast::{Def, EnumVariant, Expr, TyExpr};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
@@ -14,20 +14,20 @@ impl Checker {
         }
     }
     fn check_program(expr: &Expr) -> Result<(), String> {
-        Checker::new().check_expr(expr, Type::Int, &HashMap::new(), &HashMap::new())
+        Checker::new().check_expr(expr, &Type::Int, &HashMap::new(), &HashMap::new())
     }
 
     fn check_expr(
         &mut self,
         expr: &Expr,
-        ty: Type,
+        ty: &Type,
         env: &HashMap<String, Type>,  // types of variables
         tenv: &HashMap<String, Type>, // defined types
     ) -> Result<(), String> {
         match expr {
             _ => {
                 let t = self.infer(expr, env, tenv)?;
-                self.unify(t, ty)
+                self.unify(&t, ty)
             }
         }
     }
@@ -44,15 +44,36 @@ impl Checker {
 
             Expr::Ref(var) => match env.get(var) {
                 None => Err(format!("unbound {var}")),
-                Some(Type::Generic(g)) => Ok(g.instantiate(self)),
+                Some(Type::Generic(g)) => Ok(g.instantiate(self, tenv)),
                 Some(t) => Ok(t.clone()),
             },
+
+            Expr::Cons(ety, variant, args) => {
+                let t = tenv
+                    .get(ety)
+                    .ok_or_else(|| format!("Unknown type: {ety}"))?;
+                match t {
+                    Type::Enum(variants) => {
+                        let var = variants
+                            .get(variant)
+                            .ok_or_else(|| format!("Unknown variant: {ety} {variant}"))?;
+                        if args.len() != var.len() {
+                            return Err(format!("Wrong number of argumnts: {ety} {variant}"));
+                        }
+                        for (v, a) in var.iter().zip(args) {
+                            self.check_expr(a, v, env, tenv)?;
+                        }
+                        Ok(t.clone())
+                    }
+                    _ => Err(format!("Not an enum: {ety}")),
+                }
+            }
 
             Expr::Apply(app) => {
                 let tr = self.fresh();
                 let t = self.infer(&app.0, env, tenv)?;
                 let ta = self.infer(&app.1, env, tenv)?;
-                self.unify(t, Type::Fn(Rc::new((ta, tr.clone()))))?;
+                self.unify(&t, &Type::Fn(Rc::new((ta, tr.clone()))))?;
                 Ok(tr)
             }
 
@@ -62,21 +83,22 @@ impl Checker {
 
                 let mut env_ = env.clone();
                 env_.insert(lam.param.clone(), at.clone());
-                self.check_expr(&lam.body, rt.clone(), &env_, &tenv)?;
+                self.check_expr(&lam.body, &rt, &env_, &tenv)?;
 
                 Ok(Type::Fn(Rc::new((at, rt))))
             }
 
             Expr::Defs(defs) => {
                 let (defs, body) = &**defs;
-                let mut env_ = env.clone();
-                let mut tenv_ = tenv.clone();
+                let mut def_env = env.clone();
+                let mut def_tenv = tenv.clone();
 
                 for def in defs {
                     match def {
                         Def::Func(def) => {
                             {
                                 // check function
+                                let mut tenv_ = tenv.clone();
                                 tenv_.extend(
                                     def.tvars
                                         .iter()
@@ -91,7 +113,7 @@ impl Checker {
                                 env_.insert(def.fname.clone(), ft);
                                 env_.insert(def.param.clone(), pt);
 
-                                self.check_expr(&def.body, rt, &env_, &tenv_)?;
+                                self.check_expr(&def.body, &rt, &env_, &tenv_)?;
                             }
                             {
                                 // define function
@@ -101,19 +123,33 @@ impl Checker {
                                     rtype: def.rtype.clone(),
                                 }));
 
-                                env_.insert(def.fname.clone(), ft);
+                                def_env.insert(def.fname.clone(), ft);
                             }
                         }
-                        Def::Enum(_) => todo!(),
+                        Def::Enum(def) => {
+                            let mut variants = HashMap::new();
+                            for v in &def.variants {
+                                match v {
+                                    EnumVariant::Constant(vn) => {
+                                        variants.insert(vn.clone(), vec![]);
+                                    }
+                                    EnumVariant::Constructor(vn, tx) => {
+                                        variants.insert(vn.clone(), vec![teval(tx, tenv)]);
+                                    }
+                                }
+                            }
+
+                            def_tenv.insert(def.tname.clone(), Type::Enum(Rc::new(variants)));
+                        }
                     }
                 }
 
-                self.infer(body, &env_, tenv)
+                self.infer(body, &def_env, &def_tenv)
             }
         }
     }
 
-    fn unify(&mut self, t1: Type, t2: Type) -> Result<(), String> {
+    fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), String> {
         use Type::*;
         let t1_ = self.resolve(t1);
         let t2_ = self.resolve(t2);
@@ -125,10 +161,18 @@ impl Checker {
             }
 
             (Fn(a), Fn(b)) => {
-                let (pa, ra) = (*a).clone();
-                let (pb, rb) = (*b).clone();
+                let (pa, ra) = &*a;
+                let (pb, rb) = &*b;
                 self.unify(pa, pb)?;
                 self.unify(ra, rb)
+            }
+
+            (Enum(a), Enum(b)) => {
+                if Rc::ptr_eq(&a, &b) {
+                    Ok(())
+                } else {
+                    Err(format!("different enums"))
+                }
             }
 
             (a, b) if a == b => Ok(()),
@@ -136,10 +180,10 @@ impl Checker {
         }
     }
 
-    fn resolve(&self, t: Type) -> Type {
+    fn resolve(&self, t: &Type) -> Type {
         match t {
-            Type::Var(nr) => self.substitutions[nr].clone().unwrap_or(Type::Var(nr)),
-            _ => t,
+            Type::Var(nr) => self.substitutions[*nr].clone().unwrap_or(Type::Var(*nr)),
+            _ => t.clone(),
         }
     }
 
@@ -158,6 +202,7 @@ enum Type {
     Var(usize),
     Fn(Rc<(Type, Type)>),
     Generic(Rc<dyn GenericType>),
+    Enum(Rc<HashMap<String, Vec<Type>>>),
 }
 
 impl Debug for Type {
@@ -169,6 +214,7 @@ impl Debug for Type {
             Type::Var(nr) => write!(f, "'{nr}"),
             Type::Fn(sig) => write!(f, "({:?} -> {:?})", sig.0, sig.1),
             Type::Generic(g) => write!(f, "{g:?}"),
+            Type::Enum(variants) => write!(f, "<Enum with {} variants>", variants.len()),
         }
     }
 }
@@ -199,7 +245,7 @@ fn teval(tx: &TyExpr, tenv: &HashMap<String, Type>) -> Type {
 }
 
 trait GenericType: Debug {
-    fn instantiate(&self, ctx: &mut Checker) -> Type;
+    fn instantiate(&self, ctx: &mut Checker, tenv: &HashMap<String, Type>) -> Type;
 }
 
 #[derive(Debug)]
@@ -210,12 +256,9 @@ struct GenericFn {
 }
 
 impl GenericType for GenericFn {
-    fn instantiate(&self, ctx: &mut Checker) -> Type {
-        let tenv: HashMap<_, _> = self
-            .tvars
-            .iter()
-            .map(|tv| (tv.to_string(), ctx.fresh()))
-            .collect();
+    fn instantiate(&self, ctx: &mut Checker, tenv: &HashMap<String, Type>) -> Type {
+        let mut tenv = tenv.clone();
+        tenv.extend(self.tvars.iter().map(|tv| (tv.to_string(), ctx.fresh())));
 
         let rt = teval(&self.rtype, &tenv);
         let pt = teval(&self.ptype, &tenv);
@@ -226,7 +269,6 @@ impl GenericType for GenericFn {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::languages::type_lang::ast::FnDef;
 
     #[test]
     fn check_primitives() {
@@ -235,7 +277,7 @@ mod tests {
         assert_eq!(
             Checker::new().check_expr(
                 &Expr::real(4.2),
-                Type::Real,
+                &Type::Real,
                 &HashMap::new(),
                 &HashMap::new()
             ),
@@ -255,7 +297,7 @@ mod tests {
     #[test]
     fn check_generic() {
         let x = Expr::defs(
-            [Def::Func(FnDef::new("fn", vec!["T"], "T", "T", "x", "x"))],
+            [Def::func("fn", vec!["T"], "T", "T", "x", "x")],
             Expr::apply("fn", 0),
         );
         assert_eq!(Checker::check_program(&x), Ok(()));
@@ -264,7 +306,7 @@ mod tests {
     #[test]
     fn fail_generic_def() {
         let x = Expr::defs(
-            [Def::Func(FnDef::new("fn", vec!["T"], "T", "T", "x", 0))],
+            [Def::func("fn", vec!["T"], "T", "T", "x", 0)],
             Expr::apply("fn", 0),
         );
         assert!(Checker::check_program(&x).is_err());
@@ -273,7 +315,7 @@ mod tests {
     #[test]
     fn fail_generic_use() {
         let x = Expr::defs(
-            [Def::Func(FnDef::new("fn", vec!["T"], "T", "T", "x", "x"))],
+            [Def::func("fn", vec!["T"], "T", "T", "x", "x")],
             Expr::apply("fn", 1.2),
         );
         assert!(Checker::check_program(&x).is_err());
@@ -283,7 +325,7 @@ mod tests {
     fn check_generic_different_uses() {
         // (let ((id (lambda (x) x))) ((id id) 42))
         let x = Expr::defs(
-            [Def::Func(FnDef::new("id", vec!["T"], "T", "T", "x", "x"))],
+            [Def::func("id", vec!["T"], "T", "T", "x", "x")],
             Expr::apply(Expr::apply("id", "id"), 42),
         );
         assert_eq!(Checker::check_program(&x), Ok(()));
@@ -292,15 +334,34 @@ mod tests {
     #[test]
     fn check_outer_generic() {
         let x = Expr::defs(
-            [Def::Func(FnDef::new(
+            [Def::func(
                 "f",
                 vec!["T", "S"],
                 "T",
                 TyExpr::func("S", "T"),
                 "x",
                 Expr::lambda("y", "x"),
-            ))],
+            )],
             Expr::apply(Expr::apply("f", 42), 1.2),
+        );
+        assert_eq!(Checker::check_program(&x), Ok(()));
+    }
+
+    #[test]
+    fn check_enum() {
+        let x = Expr::defs(
+            [Def::enum_("Foo", ("A", ("B", TyExpr::Int), ()))],
+            Expr::defs(
+                [Def::func(
+                    "f",
+                    vec![] as Vec<&str>,
+                    "Foo",
+                    TyExpr::Int,
+                    "x",
+                    Expr::Int(0),
+                )],
+                Expr::apply("f", Expr::cons("Foo", "B", [1])),
+            ),
         );
         assert_eq!(Checker::check_program(&x), Ok(()));
     }

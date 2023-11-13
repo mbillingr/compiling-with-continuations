@@ -2,18 +2,26 @@ use std::rc::Rc;
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {
+    /// Integer constant
     Int(i64),
-    Real(f64),
-    Ref(String),
-    Apply(Rc<(Expr, Expr)>),
-    Lambda(Rc<Lambda>),
-    Defs(Rc<(Vec<Def>, Expr)>),
-}
 
-#[derive(Debug, PartialEq)]
-pub enum Def {
-    Func(FnDef),
-    Enum(EnumDef),
+    /// Real constant
+    Real(f64),
+
+    /// Variable reference
+    Ref(String),
+
+    /// Enum variant construction
+    Cons(String, String, Vec<Expr>),
+
+    /// Function application
+    Apply(Rc<(Expr, Expr)>),
+
+    /// Anonymous function
+    Lambda(Rc<Lambda>),
+
+    /// Definition scope
+    Defs(Rc<(Vec<Def>, Expr)>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -28,6 +36,12 @@ pub enum TyExpr {
 pub struct Lambda {
     pub param: String,
     pub body: Expr,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Def {
+    Func(FnDef),
+    Enum(EnumDef),
 }
 
 #[derive(Debug, PartialEq)]
@@ -48,8 +62,8 @@ pub struct EnumDef {
 
 #[derive(Debug, PartialEq)]
 pub enum EnumVariant {
-    Constant,
-    Constructor(TyExpr),
+    Constant(String),
+    Constructor(String, TyExpr),
 }
 
 impl Expr {
@@ -63,6 +77,10 @@ impl Expr {
 
     pub fn var(name: impl ToString) -> Self {
         Expr::Ref(name.to_string())
+    }
+
+    pub fn cons(ety: impl ToString, variant: impl ToString, args: impl ListBuilder<Expr>) -> Self {
+        Expr::Cons(ety.to_string(), variant.to_string(), args.build())
     }
 
     pub fn apply(f: impl Into<Expr>, a: impl Into<Expr>) -> Self {
@@ -87,8 +105,8 @@ impl Expr {
     }
 }
 
-impl FnDef {
-    pub fn new<V, P, R, B>(
+impl Def {
+    pub fn func<V, P, R, B>(
         fname: impl ToString,
         tvars: impl IntoIterator<Item = V>,
         ptype: P,
@@ -102,14 +120,21 @@ impl FnDef {
         TyExpr: From<R>,
         Expr: From<B>,
     {
-        FnDef {
+        Def::Func(FnDef {
             fname: fname.to_string(),
             tvars: tvars.into_iter().map(|v| v.to_string()).collect(),
             param: param.to_string(),
             ptype: ptype.into(),
             rtype: rtype.into(),
             body: body.into(),
-        }
+        })
+    }
+
+    pub fn enum_(tname: impl ToString, variants: impl ListBuilder<EnumVariant>) -> Self {
+        Def::Enum(EnumDef {
+            tname: tname.to_string(),
+            variants: variants.build(),
+        })
     }
 }
 
@@ -144,5 +169,88 @@ impl From<f64> for Expr {
 impl From<&str> for TyExpr {
     fn from(value: &str) -> Self {
         TyExpr::Var(value.to_string())
+    }
+}
+
+impl From<&str> for EnumVariant {
+    fn from(name: &str) -> Self {
+        EnumVariant::Constant(name.into())
+    }
+}
+
+impl From<(&str, TyExpr)> for EnumVariant {
+    fn from((name, ty): (&str, TyExpr)) -> Self {
+        EnumVariant::Constructor(name.into(), ty)
+    }
+}
+
+pub trait ListBuilder<T> {
+    fn build(self) -> Vec<T>
+    where
+        Self: Sized,
+    {
+        let mut list = vec![];
+        self.build_into(&mut list);
+        list
+    }
+    fn build_into(self, buf: &mut Vec<T>);
+}
+
+impl<T> ListBuilder<T> for Vec<T> {
+    fn build(self) -> Vec<T>
+    where
+        Self: Sized,
+    {
+        self
+    }
+
+    fn build_into(self, buf: &mut Vec<T>) {
+        buf.extend(self)
+    }
+}
+
+impl<T> ListBuilder<T> for () {
+    fn build_into(self, _: &mut Vec<T>) {}
+}
+
+impl<A, OUT> ListBuilder<OUT> for (A,)
+where
+    A: Into<OUT>,
+{
+    fn build_into(self, buf: &mut Vec<OUT>) {
+        buf.push(self.0.into());
+    }
+}
+
+impl<A, Z, OUT> ListBuilder<OUT> for (A, Z)
+where
+    Z: ListBuilder<OUT>,
+    A: Into<OUT>,
+{
+    fn build_into(self, buf: &mut Vec<OUT>) {
+        buf.push(self.0.into());
+        self.1.build_into(buf);
+    }
+}
+
+impl<A, B, Z, OUT> ListBuilder<OUT> for (A, B, Z)
+where
+    Z: ListBuilder<OUT>,
+    A: Into<OUT>,
+    B: Into<OUT>,
+{
+    fn build_into(self, buf: &mut Vec<OUT>) {
+        buf.push(self.0.into());
+        buf.push(self.1.into());
+        self.2.build_into(buf);
+    }
+}
+
+impl<A, OUT, const N: usize> ListBuilder<OUT> for [A; N]
+where
+    A: Into<OUT>,
+{
+    fn build_into(self, buf: &mut Vec<OUT>) {
+        buf.extend(self.into_iter().map(|x| x.into()))
     }
 }
