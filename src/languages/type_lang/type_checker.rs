@@ -48,7 +48,8 @@ impl Checker {
                 Some(t) => Ok(t.clone()),
             },
 
-            Expr::Cons(ety, variant, args) => {
+            Expr::Cons(cons) => {
+                let (ety, variant, args) = &**cons;
                 let t = tenv
                     .get(ety)
                     .ok_or_else(|| format!("Unknown type: {ety}"))?;

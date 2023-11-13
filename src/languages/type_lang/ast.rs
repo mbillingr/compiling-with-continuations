@@ -11,11 +11,11 @@ pub enum Expr {
     /// Variable reference
     Ref(String),
 
-    /// Enum variant construction
-    Cons(String, String, Vec<Expr>),
-
     /// Function application
     Apply(Rc<(Expr, Expr)>),
+
+    /// Enum variant construction
+    Cons(Rc<(String, String, Vec<Expr>)>),
 
     /// Anonymous function
     Lambda(Rc<Lambda>),
@@ -80,7 +80,11 @@ impl Expr {
     }
 
     pub fn cons(ety: impl ToString, variant: impl ToString, args: impl ListBuilder<Expr>) -> Self {
-        Expr::Cons(ety.to_string(), variant.to_string(), args.build())
+        Expr::Cons(Rc::new((
+            ety.to_string(),
+            variant.to_string(),
+            args.build(),
+        )))
     }
 
     pub fn apply(f: impl Into<Expr>, a: impl Into<Expr>) -> Self {
