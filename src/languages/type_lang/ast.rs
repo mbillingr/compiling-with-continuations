@@ -25,6 +25,11 @@ pub enum Expr {
 
     /// Definition scope
     Defs(Rc<(Vec<Def>, Expr)>),
+
+    /// Placeholders for more general primitives
+    Add(Rc<(Expr, Expr)>),
+    Read(),
+    Show(Rc<Expr>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -125,6 +130,10 @@ impl Expr {
         Expr: From<T>,
     {
         Expr::Defs(Rc::new((defs.into(), body.into())))
+    }
+
+    pub fn add(a: impl Into<Expr>, b: impl Into<Expr>) -> Self {
+        Expr::Add(Rc::new((a.into(), b.into())))
     }
 }
 

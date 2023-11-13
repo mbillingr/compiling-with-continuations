@@ -14,7 +14,12 @@ impl Checker {
         }
     }
     fn check_program(expr: &Expr) -> Result<(), String> {
-        Checker::new().check_expr(expr, &Type::Int, &HashMap::new(), &HashMap::new())
+        let mut checker = Checker::new();
+        checker.check_expr(expr, &Type::Int, &HashMap::new(), &HashMap::new())?;
+
+        println!("{:?}", checker.substitutions);
+
+        Ok(())
     }
 
     fn check_expr(
@@ -178,6 +183,21 @@ impl Checker {
 
                 self.infer(body, &def_env, &def_tenv)
             }
+
+            Expr::Add(ops) => {
+                let (a, b) = &**ops;
+                let t1 = self.infer(a, env, tenv)?;
+                let t2 = self.infer(b, env, tenv)?;
+                self.unify(&t1, &t2)?;
+                Ok(t1)
+            }
+
+            Expr::Read() => Ok(self.fresh()),
+
+            Expr::Show(arg) => {
+                self.infer(arg, env, tenv)?;
+                Ok(Type::Unit)
+            }
         }
     }
 
@@ -212,11 +232,14 @@ impl Checker {
         }
     }
 
-    fn resolve(&self, t: &Type) -> Type {
-        match t {
-            Type::Var(nr) => self.substitutions[*nr].clone().unwrap_or(Type::Var(*nr)),
-            _ => t.clone(),
+    fn resolve<'a>(&'a self, mut t: &'a Type) -> Type {
+        while let Type::Var(nr) = t {
+            match &self.substitutions[*nr] {
+                None => break,
+                Some(t_) => t = t_,
+            }
         }
+        t.clone()
     }
 
     fn fresh(&mut self) -> Type {
@@ -228,6 +251,7 @@ impl Checker {
 
 #[derive(Clone)]
 enum Type {
+    Unit,
     Int,
     Real,
     Opaque(String),
@@ -240,6 +264,7 @@ enum Type {
 impl Debug for Type {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Type::Unit => write!(f, "<unit>"),
             Type::Int => write!(f, "Int"),
             Type::Real => write!(f, "Real"),
             Type::Opaque(name) => write!(f, "{name}"),
@@ -254,6 +279,7 @@ impl Debug for Type {
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (Type::Unit, Type::Unit) => true,
             (Type::Int, Type::Int) => true,
             (Type::Real, Type::Real) => true,
             (Type::Opaque(a), Type::Opaque(b)) => a == b,
@@ -301,6 +327,33 @@ impl GenericType for GenericFn {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_substitution() {
+        assert_eq!(
+            Checker {
+                substitutions: vec![]
+            }
+            .resolve(&Type::Real),
+            Type::Real
+        );
+
+        assert_eq!(
+            Checker {
+                substitutions: vec![Some(Type::Int)]
+            }
+            .resolve(&Type::Var(0)),
+            Type::Int
+        );
+
+        assert_eq!(
+            Checker {
+                substitutions: vec![Some(Type::Var(1)), Some(Type::Int)]
+            }
+            .resolve(&Type::Var(0)),
+            Type::Int
+        );
+    }
 
     #[test]
     fn check_primitives() {
@@ -403,6 +456,54 @@ mod tests {
         let x = Expr::defs(
             [Def::enum_("Foo", ("A", ("B", TyExpr::Int), ()))],
             Expr::decons(Expr::cons("Foo", "B", [1]), "B", ["x"], "x", 0),
+        );
+        assert_eq!(Checker::check_program(&x), Ok(()));
+    }
+
+    #[test]
+    fn check_add() {
+        assert_eq!(
+            Checker::new().check_expr(
+                &Expr::add(1, 2),
+                &Type::Int,
+                &HashMap::new(),
+                &HashMap::new()
+            ),
+            Ok(())
+        );
+
+        assert_eq!(
+            Checker::new().check_expr(
+                &Expr::add(1.0, 2.0),
+                &Type::Real,
+                &HashMap::new(),
+                &HashMap::new()
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn check_generic_with_primitive() {
+        let x = Expr::defs(
+            [Def::func(
+                "double",
+                vec!["T"],
+                "T",
+                "T",
+                "x",
+                Expr::add("x", "x"),
+            )],
+            Expr::apply("double", 21),
+        );
+        assert_eq!(Checker::check_program(&x), Ok(()));
+    }
+
+    #[test]
+    fn cant_infer() {
+        let x = Expr::defs(
+            [Def::func("foo", vec!["T"], "T", TyExpr::Int, "x", 0)],
+            Expr::apply("foo", Expr::Read()),
         );
         assert_eq!(Checker::check_program(&x), Ok(()));
     }
