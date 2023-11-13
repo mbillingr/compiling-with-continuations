@@ -12,24 +12,24 @@ pub enum Expr {
     Ref(String),
 
     /// Function application
-    Apply(Rc<(Expr, Expr)>),
+    Apply(Rc<(Self, Self)>),
 
     /// Enum variant construction
-    Cons(Rc<(String, String, Vec<Expr>)>),
+    Cons(Rc<(String, String, Vec<Self>)>),
 
     /// Enum deconstruction (will be replaced by pattern matching)
-    Decons(Rc<(Expr, String, Vec<String>, Expr, Expr)>),
+    Decons(Rc<(Self, String, Vec<String>, Self, Self)>),
 
     /// Anonymous function
-    Lambda(Rc<Lambda>),
+    Lambda(Rc<Lambda<Self>>),
 
     /// Definition scope
-    Defs(Rc<(Vec<Def>, Expr)>),
+    Defs(Rc<(Vec<Def>, Self)>),
 
     /// Placeholders for more general primitives
-    Add(Rc<(Expr, Expr)>),
+    Add(Rc<(Self, Self)>),
     Read(),
-    Show(Rc<Expr>),
+    Show(Rc<Self>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -41,9 +41,9 @@ pub enum TyExpr {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Lambda {
+pub struct Lambda<E> {
     pub param: String,
-    pub body: Expr,
+    pub body: E,
 }
 
 #[derive(Debug, PartialEq)]
