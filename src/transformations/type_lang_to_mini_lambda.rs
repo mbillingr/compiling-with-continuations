@@ -1,6 +1,6 @@
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
-use crate::languages::type_lang::ast::Type;
+use crate::languages::type_lang::ast::{Def, Type};
 
 pub type LExp = crate::languages::mini_lambda::ast::Expr<Ref<str>>;
 pub type TExp = crate::languages::type_lang::ast::Expr;
@@ -22,6 +22,25 @@ impl Context {
             TExp::Ref(x) => LExp::var(x),
             TExp::Apply(app) => LExp::apply(self.convert(&app.0), self.convert(&app.1)),
             TExp::Lambda(lam) => LExp::func(&lam.param, self.convert(&lam.body)),
+
+            TExp::Defs(dfs) => {
+                let (defs, body) = &**dfs;
+
+                let mut names = vec![];
+                let mut fns = vec![];
+                for def in defs {
+                    match def {
+                        Def::Func(_) => panic!("Uninferred func: {def:?}"),
+                        Def::Enum(_) => {}
+                        Def::InferredFunc(d) => {
+                            names.push(d.fname.clone());
+                            fns.push(LExp::func(&d.param, self.convert(&d.body)));
+                        }
+                    }
+                }
+
+                LExp::fix(names, fns, self.convert(body))
+            }
 
             TExp::Add(_) => panic!("Unannotated add: {expr:?}"),
 
@@ -60,6 +79,7 @@ impl Context {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::languages::type_lang::ast::Def;
 
     #[test]
     fn convert_constants() {
@@ -147,6 +167,17 @@ mod tests {
 
     #[test]
     fn convert_fndefs() {
-        todo!()
+        assert_eq!(
+            Context::new().convert(&TExp::defs(
+                [Def::inferred_func(
+                    Type::func(Type::Int, Type::Int),
+                    "fn",
+                    "x",
+                    "x"
+                )],
+                TExp::apply("fn", 123)
+            )),
+            LExp::from_str("(fix ((fn x x)) (fn 123))").unwrap()
+        );
     }
 }

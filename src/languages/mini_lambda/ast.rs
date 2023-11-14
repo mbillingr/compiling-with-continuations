@@ -83,6 +83,14 @@ impl<V> Expr<V> {
         Self::Fn(param.into(), body.into())
     }
 
+    pub fn fix(
+        names: impl Into<Ref<[V]>>,
+        fns: impl Into<Ref<[Self]>>,
+        body: impl Into<Ref<Self>>,
+    ) -> Self {
+        Self::Fix(names.into(), fns.into(), body.into())
+    }
+
     pub fn record(fields: impl Into<Ref<[Self]>>) -> Self {
         Self::Record(fields.into())
     }

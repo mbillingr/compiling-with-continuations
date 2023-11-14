@@ -103,6 +103,12 @@ impl<T> From<Vec<T>> for Ref<[T]> {
     }
 }
 
+impl From<Vec<String>> for Ref<[Ref<str>]> {
+    fn from(value: Vec<String>) -> Self {
+        Ref::array(value.into_iter().map(Ref::from).collect())
+    }
+}
+
 impl<T> From<T> for Ref<T> {
     fn from(obj: T) -> Self {
         Ref::new(obj)
