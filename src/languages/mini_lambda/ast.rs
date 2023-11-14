@@ -58,6 +58,36 @@ impl<'i> From<sexpr_parser::Error<'i>> for Error<'i> {
     }
 }
 
+impl<V> Expr<V> {
+    pub fn int(x: impl Into<i64>) -> Self {
+        Expr::Int(x.into())
+    }
+
+    pub fn real(x: impl Into<f64>) -> Self {
+        Expr::Real(x.into())
+    }
+
+    pub fn string(x: impl Into<Ref<String>>) -> Self {
+        Expr::String(x.into())
+    }
+
+    pub fn var(x: impl Into<V>) -> Self {
+        Self::Var(x.into())
+    }
+
+    pub fn apply(f: impl Into<Ref<Self>>, arg: impl Into<Ref<Self>>) -> Self {
+        Self::App(f.into(), arg.into())
+    }
+
+    pub fn func(param: impl Into<V>, body: impl Into<Ref<Self>>) -> Self {
+        Self::Fn(param.into(), body.into())
+    }
+
+    pub fn record(fields: impl Into<Ref<[Self]>>) -> Self {
+        Self::Record(fields.into())
+    }
+}
+
 impl Expr<Ref<str>> {
     pub fn from_str<'i>(s: &'i str) -> Result<Self, Error<'i>> {
         let sexpr = sexpr::SF.parse(s)?;
@@ -318,6 +348,18 @@ impl std::fmt::Display for Con {
             Con::Real(x) => write!(f, "{}", x),
             Con::String(x) => write!(f, "{}", x),
         }
+    }
+}
+
+impl<V> From<PrimOp> for Expr<V> {
+    fn from(op: PrimOp) -> Self {
+        Expr::Prim(op)
+    }
+}
+
+impl<V> From<PrimOp> for Ref<Expr<V>> {
+    fn from(op: PrimOp) -> Self {
+        Ref::new(Expr::Prim(op))
     }
 }
 

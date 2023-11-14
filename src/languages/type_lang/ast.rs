@@ -12,6 +12,9 @@ pub enum Expr {
     /// Real constant
     Real(f64),
 
+    /// String constant
+    String(String),
+
     /// Variable reference
     Ref(String),
 
@@ -45,6 +48,7 @@ pub enum Expr {
 pub enum TyExpr {
     Int,
     Real,
+    String,
     Var(String),
     Fn(Rc<(TyExpr, TyExpr)>),
 }
@@ -108,6 +112,10 @@ impl Expr {
 
     pub fn real(x: impl Into<f64>) -> Self {
         Expr::Real(x.into())
+    }
+
+    pub fn string(x: impl Into<String>) -> Self {
+        Expr::String(x.into())
     }
 
     pub fn var(name: impl ToString) -> Self {
@@ -281,6 +289,7 @@ pub enum Type {
     Unit,
     Int,
     Real,
+    String,
     Opaque(String),
     Var(usize),
     Fn(Rc<(Type, Type)>),
@@ -294,6 +303,7 @@ impl Debug for Type {
             Type::Unit => write!(f, "<unit>"),
             Type::Int => write!(f, "Int"),
             Type::Real => write!(f, "Real"),
+            Type::String => write!(f, "String"),
             Type::Opaque(name) => write!(f, "{name}"),
             Type::Var(nr) => write!(f, "'{nr}"),
             Type::Fn(sig) => write!(f, "({:?} -> {:?})", sig.0, sig.1),

@@ -44,6 +44,7 @@ impl Checker {
         match expr {
             Expr::Int(x) => Ok(Expr::Int(*x)),
             Expr::Real(x) => Ok(Expr::Real(*x)),
+            Expr::String(x) => Ok(Expr::String(x.clone())),
 
             Expr::Ref(var) => match env.get(var) {
                 None => Err(format!("unbound {var}")),
@@ -229,6 +230,7 @@ impl Checker {
         match expr {
             Expr::Int(x) => Ok(Expr::Int(*x)),
             Expr::Real(x) => Ok(Expr::Real(*x)),
+            Expr::String(x) => Ok(Expr::String(x.clone())),
             Expr::Ref(x) => Ok(Expr::Ref(x.clone())),
 
             Expr::Apply(app) => Ok(Expr::apply(
@@ -335,7 +337,7 @@ impl Checker {
 
     fn resolve_fully<'a>(&'a self, t: &'a Type) -> Result<Type, String> {
         match t {
-            Type::Unit | Type::Int | Type::Real | Type::Opaque(_) => Ok(t.clone()),
+            Type::Unit | Type::Int | Type::Real | Type::String | Type::Opaque(_) => Ok(t.clone()),
 
             Type::Var(_) => match self.resolve(t) {
                 t_ @ Type::Var(_) => Err(format!("{t:?} resolves to {t_:?}")),
@@ -376,6 +378,7 @@ fn teval(tx: &TyExpr, tenv: &HashMap<String, Type>) -> Type {
     match tx {
         TyExpr::Int => Type::Int,
         TyExpr::Real => Type::Real,
+        TyExpr::String => Type::String,
         TyExpr::Var(v) => tenv
             .get(v)
             .cloned()
@@ -584,23 +587,20 @@ mod tests {
 
     #[test]
     fn check_add() {
-        assert!(Checker::new()
-            .check_expr(
-                &Expr::add(1, 2),
-                &Type::Int,
-                &HashMap::new(),
-                &HashMap::new()
-            )
-            .is_ok());
+        assert_eq!(
+            Checker::new().infer(&Expr::add(1, 2), &HashMap::new(), &HashMap::new()),
+            Ok(Expr::annotate(Type::Int, Expr::add(1, 2)))
+        );
 
-        assert!(Checker::new()
-            .check_expr(
-                &Expr::add(1.0, 2.0),
-                &Type::Real,
-                &HashMap::new(),
-                &HashMap::new()
-            )
-            .is_ok());
+        assert_eq!(
+            Checker::new().infer(&Expr::add(1.0, 2.0), &HashMap::new(), &HashMap::new()),
+            Ok(Expr::annotate(Type::Real, Expr::add(1.0, 2.0)))
+        );
+
+        assert_eq!(
+            Checker::new().infer(&Expr::add(1, 2.0), &HashMap::new(), &HashMap::new()),
+            Err("Int != Real".into())
+        );
     }
 
     #[test]

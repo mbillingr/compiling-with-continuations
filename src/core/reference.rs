@@ -79,6 +79,30 @@ impl From<String> for Ref<str> {
     }
 }
 
+impl From<&String> for Ref<str> {
+    fn from(value: &String) -> Self {
+        Ref(Box::leak(value.to_string().into_boxed_str()))
+    }
+}
+
+impl From<&str> for Ref<String> {
+    fn from(value: &str) -> Self {
+        Ref::new(value.to_string())
+    }
+}
+
+impl From<&String> for Ref<String> {
+    fn from(value: &String) -> Self {
+        Ref::new(value.clone())
+    }
+}
+
+impl<T> From<Vec<T>> for Ref<[T]> {
+    fn from(value: Vec<T>) -> Self {
+        Ref::array(value)
+    }
+}
+
 impl<T> From<T> for Ref<T> {
     fn from(obj: T) -> Self {
         Ref::new(obj)

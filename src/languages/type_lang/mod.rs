@@ -1,2 +1,2 @@
-mod ast;
-mod type_checker;
+pub mod ast;
+pub mod type_checker;
