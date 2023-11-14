@@ -14,7 +14,9 @@ impl Checker {
         }
     }
     fn check_program(expr: &Expr) -> Result<Expr, String> {
-        Checker::new().check_expr(expr, &Type::Int, &HashMap::new(), &HashMap::new())
+        let mut checker = Checker::new();
+        let expr_ = checker.check_expr(expr, &Type::Int, &HashMap::new(), &HashMap::new())?;
+        checker.resolve_expr(&expr_)
     }
 
     fn check_expr(
@@ -222,6 +224,72 @@ impl Checker {
         }
     }
 
+    /// resolve remaining type variables in the annotations
+    fn resolve_expr(&self, expr: &Expr) -> Result<Expr, String> {
+        match expr {
+            Expr::Int(x) => Ok(Expr::Int(*x)),
+            Expr::Real(x) => Ok(Expr::Real(*x)),
+            Expr::Ref(x) => Ok(Expr::Ref(x.clone())),
+
+            Expr::Apply(app) => Ok(Expr::apply(
+                self.resolve_expr(&app.0)?,
+                self.resolve_expr(&app.1)?,
+            )),
+
+            Expr::Cons(cons) => Ok(Expr::cons(
+                &cons.0,
+                &cons.1,
+                cons.2
+                    .iter()
+                    .map(|x| self.resolve_expr(x))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )),
+
+            Expr::Decons(deco) => Ok(Expr::decons(
+                self.resolve_expr(&deco.0)?,
+                &deco.1,
+                deco.2.to_vec(),
+                self.resolve_expr(&deco.3)?,
+                self.resolve_expr(&deco.4)?,
+            )),
+
+            Expr::Lambda(lam) => Ok(Expr::lambda(&lam.param, self.resolve_expr(&lam.body)?)),
+
+            Expr::Defs(defs) => {
+                let mut defs_ = vec![];
+
+                for d in &defs.0 {
+                    match d {
+                        Def::Func(_) => unreachable!(),
+                        Def::Enum(_) => unreachable!(),
+                        Def::InferredFunc(fun) => defs_.push(Def::inferred_func(
+                            self.resolve_fully(&fun.signature)?,
+                            &fun.fname,
+                            &fun.param,
+                            self.resolve_expr(&fun.body)?,
+                        )),
+                    }
+                }
+
+                Ok(Expr::defs(defs_, self.resolve_expr(&defs.1)?))
+            }
+
+            Expr::Add(add) => Ok(Expr::add(
+                self.resolve_expr(&add.0)?,
+                self.resolve_expr(&add.1)?,
+            )),
+
+            Expr::Read() => Ok(Expr::Read()),
+
+            Expr::Show(x) => Ok(Expr::show(self.resolve_expr(x)?)),
+
+            Expr::Annotation(ann) => Ok(Expr::annotate(
+                self.resolve_fully(&ann.0)?,
+                self.resolve_expr(&ann.1)?,
+            )),
+        }
+    }
+
     fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), String> {
         use crate::languages::type_lang::ast::Type::*;
         let t1_ = self.resolve(t1);
@@ -265,6 +333,38 @@ impl Checker {
         t.clone()
     }
 
+    fn resolve_fully<'a>(&'a self, t: &'a Type) -> Result<Type, String> {
+        match t {
+            Type::Unit | Type::Int | Type::Real | Type::Opaque(_) => Ok(t.clone()),
+
+            Type::Var(_) => match self.resolve(t) {
+                t_ @ Type::Var(_) => Err(format!("{t:?} resolves to {t_:?}")),
+                t_ => Ok(t_),
+            },
+
+            Type::Fn(fun) => Ok(Type::func(
+                self.resolve_fully(&fun.0)?,
+                self.resolve_fully(&fun.1)?,
+            )),
+
+            Type::Generic(_) => Ok(t.clone()),
+
+            Type::Enum(enu) => enu
+                .1
+                .iter()
+                .map(|(v, args)| {
+                    args.iter()
+                        .map(|a| self.resolve_fully(a))
+                        .collect::<Result<Vec<_>, _>>()
+                        .map(|r| (v.clone(), r))
+                })
+                .collect::<Result<HashMap<_, _>, _>>()
+                .map(|vars| (enu.0.to_string(), vars))
+                .map(Rc::new)
+                .map(Type::Enum),
+        }
+    }
+
     fn fresh(&mut self) -> Type {
         let nr = self.substitutions.len();
         self.substitutions.push(None);
@@ -291,13 +391,6 @@ pub enum GenericType {
         ptype: TyExpr,
         rtype: TyExpr,
     },
-}
-
-#[derive(Debug)]
-struct GenericFn {
-    tvars: Vec<String>,
-    ptype: TyExpr,
-    rtype: TyExpr,
 }
 
 impl GenericType {
@@ -391,17 +484,12 @@ mod tests {
                 Expr::annotate(Type::Int, "x"),
             )],
             Expr::annotate(
-                Type::Var(0), // not yet resolved
+                Type::Int,
                 Expr::apply(Expr::annotate(Type::func(Type::Int, Type::Int), "fn"), 0),
             ),
         );
 
-        let mut chk = Checker::new();
-        let r = chk
-            .check_expr(&x, &Type::Int, &Default::default(), &Default::default())
-            .unwrap();
-        println!("{:?}", chk.substitutions);
-        assert_eq!(r, y);
+        assert_eq!(Checker::check_program(&x), Ok(y));
     }
 
     #[test]
@@ -537,6 +625,9 @@ mod tests {
             [Def::func("foo", vec!["T"], "T", TyExpr::Int, "x", 0)],
             Expr::apply("foo", Expr::Read()),
         );
-        assert!(Checker::check_program(&x).is_ok());
+        assert_eq!(
+            Checker::check_program(&x),
+            Err("'1 resolves to '2".to_string())
+        );
     }
 }
