@@ -140,38 +140,41 @@ impl Checker {
                 let mut def_env = env.clone();
                 let mut def_tenv = tenv.clone();
 
+                let mut defs_ = vec![];
+
                 for def in defs {
                     match def {
                         Def::Func(def) => {
-                            {
-                                // check function
-                                let mut tenv_ = tenv.clone();
-                                tenv_.extend(
-                                    def.tvars
-                                        .iter()
-                                        .map(|tv| (tv.to_string(), Type::Opaque(tv.to_string()))),
-                                );
+                            let mut tenv_ = tenv.clone();
+                            tenv_.extend(
+                                def.tvars
+                                    .iter()
+                                    .map(|tv| (tv.to_string(), Type::Opaque(tv.to_string()))),
+                            );
 
-                                let rt = teval(&def.rtype, &tenv_);
-                                let pt = teval(&def.ptype, &tenv_);
-                                let ft = Type::Fn(Rc::new((pt.clone(), rt.clone())));
+                            let rt = teval(&def.rtype, &tenv_);
+                            let pt = teval(&def.ptype, &tenv_);
+                            let ft = Type::Fn(Rc::new((pt.clone(), rt.clone())));
 
-                                let mut env_ = env.clone();
-                                env_.insert(def.fname.clone(), ft);
-                                env_.insert(def.param.clone(), pt);
+                            let mut env_ = env.clone();
+                            env_.insert(def.fname.clone(), ft);
+                            env_.insert(def.param.clone(), pt);
 
-                                self.check_expr(&def.body, &rt, &env_, &tenv_)?;
-                            }
-                            {
-                                // define function
-                                let ft = Type::Generic(Rc::new(GenericFn {
-                                    tvars: def.tvars.clone(),
-                                    ptype: def.ptype.clone(),
-                                    rtype: def.rtype.clone(),
-                                }));
+                            let signature = Type::Generic(Rc::new(GenericType::GenericFn {
+                                tvars: def.tvars.clone(),
+                                ptype: def.ptype.clone(),
+                                rtype: def.rtype.clone(),
+                            }));
 
-                                def_env.insert(def.fname.clone(), ft);
-                            }
+                            let body_ = self.check_expr(&def.body, &rt, &env_, &tenv_)?;
+                            defs_.push(Def::inferred_func(
+                                signature.clone(),
+                                &def.fname,
+                                &def.param,
+                                body_,
+                            ));
+
+                            def_env.insert(def.fname.clone(), signature);
                         }
                         Def::Enum(def) => {
                             let mut variants = HashMap::new();
@@ -191,10 +194,12 @@ impl Checker {
                                 Type::Enum(Rc::new((def.tname.clone(), variants))),
                             );
                         }
+                        Def::InferredFunc(_) => unreachable!(),
                     }
                 }
 
-                self.infer(body, &def_env, &def_tenv)
+                let body_ = self.infer(body, &def_env, &def_tenv)?;
+                Ok(Expr::defs(defs_, body_))
             }
 
             Expr::Add(ops) => {
@@ -243,7 +248,9 @@ impl Checker {
                 }
             }
 
-            (a, b) if a == b => Ok(()),
+            (Opaque(a), Opaque(b)) if a == b => Ok(()),
+            (Unit, Unit) | (Int, Int) | (Real, Real) => Ok(()),
+
             (a, b) => Err(format!("{a:?} != {b:?}")),
         }
     }
@@ -277,8 +284,13 @@ fn teval(tx: &TyExpr, tenv: &HashMap<String, Type>) -> Type {
     }
 }
 
-pub trait GenericType: Debug {
-    fn instantiate(&self, ctx: &mut Checker, tenv: &HashMap<String, Type>) -> Type;
+#[derive(Debug, PartialEq)]
+pub enum GenericType {
+    GenericFn {
+        tvars: Vec<String>,
+        ptype: TyExpr,
+        rtype: TyExpr,
+    },
 }
 
 #[derive(Debug)]
@@ -288,14 +300,22 @@ struct GenericFn {
     rtype: TyExpr,
 }
 
-impl GenericType for GenericFn {
+impl GenericType {
     fn instantiate(&self, ctx: &mut Checker, tenv: &HashMap<String, Type>) -> Type {
-        let mut tenv = tenv.clone();
-        tenv.extend(self.tvars.iter().map(|tv| (tv.to_string(), ctx.fresh())));
+        match self {
+            GenericType::GenericFn {
+                tvars,
+                ptype,
+                rtype,
+            } => {
+                let mut tenv = tenv.clone();
+                tenv.extend(tvars.iter().map(|tv| (tv.to_string(), ctx.fresh())));
 
-        let rt = teval(&self.rtype, &tenv);
-        let pt = teval(&self.ptype, &tenv);
-        Type::Fn(Rc::new((pt.clone(), rt.clone())))
+                let rt = teval(rtype, &tenv);
+                let pt = teval(ptype, &tenv);
+                Type::Fn(Rc::new((pt.clone(), rt.clone())))
+            }
+        }
     }
 }
 
@@ -360,24 +380,28 @@ mod tests {
         );
 
         let y = Expr::defs(
-            [Def::func(
+            [Def::inferred_func(
+                Type::Generic(Rc::new(GenericType::GenericFn {
+                    tvars: vec![],
+                    ptype: TyExpr::Int,
+                    rtype: TyExpr::Int,
+                })),
                 "fn",
-                vec![] as Vec<&str>,
-                TyExpr::Int,
-                TyExpr::Int,
                 "x",
                 Expr::annotate(Type::Int, "x"),
             )],
             Expr::annotate(
-                Type::Int,
-                Expr::apply(
-                    Expr::annotate(Type::func(Type::Int, Type::Int), "fn"),
-                    Expr::annotate(Type::Int, 0),
-                ),
+                Type::Var(0), // not yet resolved
+                Expr::apply(Expr::annotate(Type::func(Type::Int, Type::Int), "fn"), 0),
             ),
         );
 
-        assert_eq!(Checker::check_program(&x).unwrap(), y);
+        let mut chk = Checker::new();
+        let r = chk
+            .check_expr(&x, &Type::Int, &Default::default(), &Default::default())
+            .unwrap();
+        println!("{:?}", chk.substitutions);
+        assert_eq!(r, y);
     }
 
     #[test]

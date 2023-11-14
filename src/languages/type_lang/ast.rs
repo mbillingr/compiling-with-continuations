@@ -63,9 +63,11 @@ pub enum Def {
     Func(FnDef),
     /// Enum definition
     Enum(EnumDef),
+    /// Function definition
+    InferredFunc(TFnDef),
 }
 
-/// Function Definition
+/// Function Definition with explicit types
 #[derive(Debug, PartialEq)]
 pub struct FnDef {
     pub fname: String,
@@ -73,6 +75,15 @@ pub struct FnDef {
     pub param: String,
     pub ptype: TyExpr,
     pub rtype: TyExpr,
+    pub body: Expr,
+}
+
+/// Function Definition with inferred signature
+#[derive(Debug, PartialEq)]
+pub struct TFnDef {
+    pub signature: Type,
+    pub fname: String,
+    pub param: String,
     pub body: Expr,
 }
 
@@ -165,6 +176,7 @@ impl Expr {
             Expr::Int(_) => &Type::Int,
             Expr::Real(_) => &Type::Real,
             Expr::Show(_) => &Type::Unit,
+            Expr::Defs(defs) => defs.1.get_type(),
             Expr::Annotation(ann) => &ann.0,
             _ => panic!("unannotated expression: {self:?}"),
         }
@@ -200,6 +212,19 @@ impl Def {
         Def::Enum(EnumDef {
             tname: tname.to_string(),
             variants: variants.build(),
+        })
+    }
+    pub fn inferred_func(
+        sig: impl Into<Type>,
+        fname: impl ToString,
+        param: impl ToString,
+        body: impl Into<Expr>,
+    ) -> Self {
+        Def::InferredFunc(TFnDef {
+            signature: sig.into(),
+            fname: fname.to_string(),
+            param: param.to_string(),
+            body: body.into(),
         })
     }
 }
@@ -251,7 +276,7 @@ impl From<(&str, TyExpr)> for EnumVariant {
 }
 
 /// Internal representation of types, as produces by the type checker
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum Type {
     Unit,
     Int,
@@ -259,7 +284,7 @@ pub enum Type {
     Opaque(String),
     Var(usize),
     Fn(Rc<(Type, Type)>),
-    Generic(Rc<dyn GenericType>),
+    Generic(Rc<GenericType>),
     Enum(Rc<(String, HashMap<String, Vec<Type>>)>),
 }
 
@@ -274,20 +299,6 @@ impl Debug for Type {
             Type::Fn(sig) => write!(f, "({:?} -> {:?})", sig.0, sig.1),
             Type::Generic(g) => write!(f, "{g:?}"),
             Type::Enum(e) => write!(f, "<Enum {}>", e.0),
-        }
-    }
-}
-
-impl PartialEq for Type {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Type::Unit, Type::Unit) => true,
-            (Type::Int, Type::Int) => true,
-            (Type::Real, Type::Real) => true,
-            (Type::Opaque(a), Type::Opaque(b)) => a == b,
-            (Type::Var(a), Type::Var(b)) => a == b,
-            (Type::Fn(a), Type::Fn(b)) => a == b,
-            _ => false,
         }
     }
 }
