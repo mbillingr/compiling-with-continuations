@@ -1,5 +1,9 @@
+use crate::languages::type_lang::type_checker::GenericType;
+use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
+/// Nodes of the abstract syntax tree
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     /// Integer constant
@@ -30,8 +34,13 @@ pub enum Expr {
     Add(Rc<(Self, Self)>),
     Read(),
     Show(Rc<Self>),
+
+    /// Internal type annotations are not part of the syntax. They are produced by the type checker
+    /// to augment the AST with typing information.
+    Annotation(Rc<(Type, Self)>),
 }
 
+/// Syntax for representing types
 #[derive(Clone, Debug, PartialEq)]
 pub enum TyExpr {
     Int,
@@ -40,18 +49,23 @@ pub enum TyExpr {
     Fn(Rc<(TyExpr, TyExpr)>),
 }
 
+/// The AST of an anonymous function
 #[derive(Debug, PartialEq)]
 pub struct Lambda<E> {
     pub param: String,
     pub body: E,
 }
 
+/// Different variants of definitions
 #[derive(Debug, PartialEq)]
 pub enum Def {
+    /// Function definition
     Func(FnDef),
+    /// Enum definition
     Enum(EnumDef),
 }
 
+/// Function Definition
 #[derive(Debug, PartialEq)]
 pub struct FnDef {
     pub fname: String,
@@ -62,12 +76,14 @@ pub struct FnDef {
     pub body: Expr,
 }
 
+/// Enum definition
 #[derive(Debug, PartialEq)]
 pub struct EnumDef {
     pub tname: String,
     pub variants: Vec<EnumVariant>,
 }
 
+/// Possible enum variants
 #[derive(Debug, PartialEq)]
 pub enum EnumVariant {
     Constant(String),
@@ -134,6 +150,24 @@ impl Expr {
 
     pub fn add(a: impl Into<Expr>, b: impl Into<Expr>) -> Self {
         Expr::Add(Rc::new((a.into(), b.into())))
+    }
+
+    pub fn show(val: impl Into<Expr>) -> Self {
+        Expr::Show(Rc::new(val.into()))
+    }
+
+    pub fn annotate(t: impl Into<Type>, x: impl Into<Self>) -> Self {
+        Expr::Annotation(Rc::new((t.into(), x.into())))
+    }
+
+    pub fn get_type(&self) -> &Type {
+        match self {
+            Expr::Int(_) => &Type::Int,
+            Expr::Real(_) => &Type::Real,
+            Expr::Show(_) => &Type::Unit,
+            Expr::Annotation(ann) => &ann.0,
+            _ => panic!("unannotated expression: {self:?}"),
+        }
     }
 }
 
@@ -216,6 +250,54 @@ impl From<(&str, TyExpr)> for EnumVariant {
     }
 }
 
+/// Internal representation of types, as produces by the type checker
+#[derive(Clone)]
+pub enum Type {
+    Unit,
+    Int,
+    Real,
+    Opaque(String),
+    Var(usize),
+    Fn(Rc<(Type, Type)>),
+    Generic(Rc<dyn GenericType>),
+    Enum(Rc<(String, HashMap<String, Vec<Type>>)>),
+}
+
+impl Debug for Type {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Unit => write!(f, "<unit>"),
+            Type::Int => write!(f, "Int"),
+            Type::Real => write!(f, "Real"),
+            Type::Opaque(name) => write!(f, "{name}"),
+            Type::Var(nr) => write!(f, "'{nr}"),
+            Type::Fn(sig) => write!(f, "({:?} -> {:?})", sig.0, sig.1),
+            Type::Generic(g) => write!(f, "{g:?}"),
+            Type::Enum(e) => write!(f, "<Enum {}>", e.0),
+        }
+    }
+}
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Type::Unit, Type::Unit) => true,
+            (Type::Int, Type::Int) => true,
+            (Type::Real, Type::Real) => true,
+            (Type::Opaque(a), Type::Opaque(b)) => a == b,
+            (Type::Var(a), Type::Var(b)) => a == b,
+            (Type::Fn(a), Type::Fn(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Type {
+    pub fn func(f: impl Into<Type>, p: impl Into<Type>) -> Self {
+        Self::Fn(Rc::new((f.into(), p.into())))
+    }
+}
+
 pub trait ListBuilder<T> {
     fn build(self) -> Vec<T>
     where
@@ -238,6 +320,19 @@ impl<T> ListBuilder<T> for Vec<T> {
 
     fn build_into(self, buf: &mut Vec<T>) {
         buf.extend(self)
+    }
+}
+
+impl<T: Clone> ListBuilder<T> for &[T] {
+    fn build(self) -> Vec<T>
+    where
+        Self: Sized,
+    {
+        self.to_vec()
+    }
+
+    fn build_into(self, buf: &mut Vec<T>) {
+        buf.extend(self.iter().cloned())
     }
 }
 

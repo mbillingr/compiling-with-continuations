@@ -1,5 +1,4 @@
-use crate::languages::type_lang::ast::{Def, EnumVariant, Expr, Lambda, TyExpr};
-use crate::languages::type_lang::ast_typed::{TExpr, Type};
+use crate::languages::type_lang::ast::{Def, EnumVariant, Expr, TyExpr, Type};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -14,7 +13,7 @@ impl Checker {
             substitutions: vec![],
         }
     }
-    fn check_program(expr: &Expr) -> Result<TExpr, String> {
+    fn check_program(expr: &Expr) -> Result<Expr, String> {
         Checker::new().check_expr(expr, &Type::Int, &HashMap::new(), &HashMap::new())
     }
 
@@ -24,7 +23,7 @@ impl Checker {
         ty: &Type,
         env: &HashMap<String, Type>,  // types of variables
         tenv: &HashMap<String, Type>, // defined types
-    ) -> Result<TExpr, String> {
+    ) -> Result<Expr, String> {
         match expr {
             _ => {
                 let typed = self.infer(expr, env, tenv)?;
@@ -39,16 +38,18 @@ impl Checker {
         expr: &Expr,
         env: &HashMap<String, Type>,
         tenv: &HashMap<String, Type>,
-    ) -> Result<TExpr, String> {
+    ) -> Result<Expr, String> {
         match expr {
-            Expr::Int(x) => Ok(TExpr::Int(*x)),
-            Expr::Real(x) => Ok(TExpr::Real(*x)),
+            Expr::Int(x) => Ok(Expr::Int(*x)),
+            Expr::Real(x) => Ok(Expr::Real(*x)),
 
             Expr::Ref(var) => match env.get(var) {
                 None => Err(format!("unbound {var}")),
-                Some(Type::Generic(g)) => Ok(TExpr::Ref(g.instantiate(self, tenv), var.clone())),
-                Some(t) => Ok(TExpr::Ref(t.clone(), var.clone())),
-            },
+                Some(Type::Generic(g)) => Ok((g.instantiate(self, tenv), Expr::var(var))),
+                Some(t) => Ok((t.clone(), Expr::var(var))),
+            }
+            .map(|(t, x)| Rc::new((t, x)))
+            .map(Expr::Annotation),
 
             Expr::Cons(cons) => {
                 let (ety, variant, args) = &**cons;
@@ -72,7 +73,7 @@ impl Checker {
                             .zip(var)
                             .map(|(a, v)| self.check_expr(a, v, env, tenv))
                             .collect();
-                        Ok(TExpr::Cons(t.clone(), Rc::new((variant.clone(), targs?))))
+                        Ok(Expr::annotate(t.clone(), Expr::cons(ety, variant, targs?)))
                     }
                     _ => Err(format!("Not an enum: {ety}")),
                 }
@@ -105,9 +106,9 @@ impl Checker {
                 self.unify(&t1, &t2)?;
                 let t = t1.clone();
 
-                Ok(TExpr::Decons(
+                Ok(Expr::annotate(
                     t,
-                    Rc::new((value_, variant.clone(), vars.clone(), tma, tmi)),
+                    Expr::decons(value_, variant, vars.to_vec(), tma, tmi),
                 ))
             }
 
@@ -117,7 +118,7 @@ impl Checker {
                 let a_ = self.infer(&app.1, env, tenv)?;
                 let ty = Type::Fn(Rc::new((a_.get_type().clone(), r_.clone())));
                 self.unify(f_.get_type(), &ty)?;
-                Ok(TExpr::Apply(r_, Rc::new((f_, a_))))
+                Ok(Expr::annotate(r_, Expr::apply(f_, a_)))
             }
 
             Expr::Lambda(lam) => {
@@ -128,12 +129,9 @@ impl Checker {
                 env_.insert(lam.param.clone(), at.clone());
                 let body_ = self.check_expr(&lam.body, &rt, &env_, &tenv)?;
 
-                Ok(TExpr::Lambda(
+                Ok(Expr::annotate(
                     Type::Fn(Rc::new((at, rt))),
-                    Rc::new(Lambda {
-                        param: lam.param.clone(),
-                        body: body_,
-                    }),
+                    Expr::lambda(&lam.param, body_),
                 ))
             }
 
@@ -204,17 +202,23 @@ impl Checker {
                 let a_ = self.infer(a, env, tenv)?;
                 let b_ = self.infer(b, env, tenv)?;
                 self.unify(a_.get_type(), b_.get_type())?;
-                Ok(TExpr::Add(a_.get_type().clone(), Rc::new((a_, b_))))
+                Ok(Expr::annotate(a_.get_type().clone(), Expr::add(a_, b_)))
             }
 
-            Expr::Read() => Ok(TExpr::Read(self.fresh())),
+            Expr::Read() => Ok(Expr::annotate(self.fresh(), Expr::Read())),
 
-            Expr::Show(arg) => self.infer(arg, env, tenv).map(Rc::new).map(TExpr::Show),
+            Expr::Show(arg) => self.infer(arg, env, tenv).map(Expr::show),
+
+            Expr::Annotation(ann) => {
+                let (ty, ex) = &**ann;
+                let ex_ = self.check_expr(ex, ty, env, tenv)?;
+                Ok(Expr::annotate(ty.clone(), ex_))
+            }
         }
     }
 
     fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), String> {
-        use crate::languages::type_lang::ast_typed::Type::*;
+        use crate::languages::type_lang::ast::Type::*;
         let t1_ = self.resolve(t1);
         let t2_ = self.resolve(t2);
         match (t1_, t2_) {
@@ -298,7 +302,6 @@ impl GenericType for GenericFn {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::languages::type_lang::ast_typed::{TDef, TFnDef};
 
     #[test]
     fn resolve_substitution() {
@@ -329,7 +332,7 @@ mod tests {
 
     #[test]
     fn check_primitives() {
-        assert_eq!(Checker::check_program(&Expr::int(42)), Ok(TExpr::Int(42)));
+        assert_eq!(Checker::check_program(&Expr::int(42)), Ok(Expr::int(42)));
         assert!(Checker::check_program(&Expr::real(4.2)).is_err());
         assert_eq!(
             Checker::new().check_expr(
@@ -338,7 +341,7 @@ mod tests {
                 &HashMap::new(),
                 &HashMap::new()
             ),
-            Ok(TExpr::Real(4.2))
+            Ok(Expr::real(4.2))
         );
     }
 
@@ -356,23 +359,23 @@ mod tests {
             Expr::apply("fn", 0),
         );
 
-        let y = TExpr::Defs(Rc::new((
-            vec![TDef::Func(TFnDef {
-                fname: "fn".to_string(),
-                tvars: vec![],
-                ptype: Type::Int,
-                rtype: Type::Int,
-                param: "x".to_string(),
-                body: TExpr::Ref(Type::Int, "x".to_string()),
-            })],
-            TExpr::Apply(
+        let y = Expr::defs(
+            [Def::func(
+                "fn",
+                vec![] as Vec<&str>,
+                TyExpr::Int,
+                TyExpr::Int,
+                "x",
+                Expr::annotate(Type::Int, "x"),
+            )],
+            Expr::annotate(
                 Type::Int,
-                Rc::new((
-                    TExpr::Ref(Type::Fn(Rc::new((Type::Int, Type::Int))), "fn".to_string()),
-                    TExpr::Int(0),
-                )),
+                Expr::apply(
+                    Expr::annotate(Type::func(Type::Int, Type::Int), "fn"),
+                    Expr::annotate(Type::Int, 0),
+                ),
             ),
-        )));
+        );
 
         assert_eq!(Checker::check_program(&x).unwrap(), y);
     }
