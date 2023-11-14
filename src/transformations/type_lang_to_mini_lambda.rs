@@ -80,6 +80,7 @@ impl Context {
 mod tests {
     use super::*;
     use crate::languages::type_lang::ast::Def;
+    use crate::languages::type_lang::type_checker::Checker;
 
     #[test]
     fn convert_constants() {

@@ -4,7 +4,7 @@ use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 /// Nodes of the abstract syntax tree
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     /// Integer constant
     Int(i64),
@@ -20,6 +20,9 @@ pub enum Expr {
 
     /// Function application
     Apply(Rc<(Self, Self)>),
+
+    /// Tuple construction
+    Record(Rc<Vec<Self>>),
 
     /// Enum variant construction
     Cons(Rc<(String, String, Vec<Self>)>),
@@ -120,6 +123,10 @@ impl Expr {
 
     pub fn var(name: impl ToString) -> Self {
         Expr::Ref(name.to_string())
+    }
+
+    pub fn record(fields: impl ListBuilder<Expr>) -> Self {
+        Expr::Record(Rc::new(fields.build()))
     }
 
     pub fn cons(ety: impl ToString, variant: impl ToString, args: impl ListBuilder<Expr>) -> Self {
@@ -294,6 +301,7 @@ pub enum Type {
     Var(usize),
     Fn(Rc<(Type, Type)>),
     Generic(Rc<GenericType>),
+    Record(Rc<Vec<Type>>),
     Enum(Rc<(String, HashMap<String, Vec<Type>>)>),
 }
 
@@ -308,6 +316,14 @@ impl Debug for Type {
             Type::Var(nr) => write!(f, "'{nr}"),
             Type::Fn(sig) => write!(f, "({:?} -> {:?})", sig.0, sig.1),
             Type::Generic(g) => write!(f, "{g:?}"),
+            Type::Record(xs) => write!(
+                f,
+                "[{}]",
+                xs.iter()
+                    .map(|x| format!("{:?}", x))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
             Type::Enum(e) => write!(f, "<Enum {}>", e.0),
         }
     }

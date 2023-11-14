@@ -13,7 +13,7 @@ impl Checker {
             substitutions: vec![],
         }
     }
-    fn check_program(expr: &Expr) -> Result<Expr, String> {
+    pub fn check_program(expr: &Expr) -> Result<Expr, String> {
         let mut checker = Checker::new();
         let expr_ = checker.check_expr(expr, &Type::Int, &HashMap::new(), &HashMap::new())?;
         checker.resolve_expr(&expr_)
@@ -53,6 +53,18 @@ impl Checker {
             }
             .map(|(t, x)| Rc::new((t, x)))
             .map(Expr::Annotation),
+
+            Expr::Record(fields) => {
+                let fields_: Vec<_> = fields
+                    .iter()
+                    .map(|f| self.infer(f, env, tenv))
+                    .collect::<Result<_, _>>()?;
+                let field_types: Vec<_> = fields_.iter().map(Expr::get_type).cloned().collect();
+                Ok(Expr::annotate(
+                    Type::Record(field_types.into()),
+                    Expr::record(fields_),
+                ))
+            }
 
             Expr::Cons(cons) => {
                 let (ety, variant, args) = &**cons;
@@ -238,6 +250,12 @@ impl Checker {
                 self.resolve_expr(&app.1)?,
             )),
 
+            Expr::Record(fields) => fields
+                .iter()
+                .map(|f| self.resolve_expr(f))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Expr::record),
+
             Expr::Cons(cons) => Ok(Expr::cons(
                 &cons.0,
                 &cons.1,
@@ -341,7 +359,7 @@ impl Checker {
 
             Type::Var(_) => match self.resolve(t) {
                 t_ @ Type::Var(_) => Err(format!("{t:?} resolves to {t_:?}")),
-                t_ => Ok(t_),
+                t_ => self.resolve_fully(&t_),
             },
 
             Type::Fn(fun) => Ok(Type::func(
@@ -350,6 +368,13 @@ impl Checker {
             )),
 
             Type::Generic(_) => Ok(t.clone()),
+
+            Type::Record(fields) => fields
+                .iter()
+                .map(|f| self.resolve_fully(f))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Rc::new)
+                .map(Type::Record),
 
             Type::Enum(enu) => enu
                 .1
@@ -538,7 +563,53 @@ mod tests {
             [Def::func("id", vec!["T"], "T", "T", "x", "x")],
             Expr::apply(Expr::apply("id", "id"), 42),
         );
-        assert!(Checker::check_program(&x).is_ok());
+
+        let y = Expr::defs(
+            [Def::inferred_func(
+                Type::Generic(Rc::new(GenericType::GenericFn {
+                    tvars: vec!["T".into()],
+                    ptype: TyExpr::Var("T".into()),
+                    rtype: TyExpr::Var("T".into()),
+                })),
+                "id",
+                "x",
+                Expr::annotate(Type::Opaque("T".into()), "x"),
+            )],
+            Expr::annotate(
+                Type::Int,
+                Expr::apply(
+                    Expr::annotate(
+                        Type::func(Type::Int, Type::Int),
+                        Expr::apply(
+                            Expr::annotate(
+                                Type::func(
+                                    Type::func(Type::Int, Type::Int),
+                                    Type::func(Type::Int, Type::Int),
+                                ),
+                                "id",
+                            ),
+                            Expr::annotate(Type::func(Type::Int, Type::Int), "id"),
+                        ),
+                    ),
+                    42,
+                ),
+            ),
+        );
+
+        assert_eq!(Checker::check_program(&x), Ok(y));
+
+        let x = Expr::defs(
+            [
+                Def::func("twice", vec!["T"], "T", "T", "x", Expr::add("x", "x")),
+                Def::func("swallow", vec!["T"], "T", TyExpr::Int, "x", 0),
+            ],
+            Expr::apply(
+                "swallow",
+                Expr::record([Expr::apply("twice", 21), Expr::apply("twice", 1.23)]),
+            ),
+        );
+
+        Checker::check_program(&x).unwrap();
     }
 
     #[test]
@@ -555,6 +626,33 @@ mod tests {
             Expr::apply(Expr::apply("f", 42), 1.2),
         );
         assert!(Checker::check_program(&x).is_ok());
+    }
+
+    #[test]
+    fn check_record() {
+        assert_eq!(
+            Checker::new().infer(
+                &Expr::record([] as [&str; 0]),
+                &Default::default(),
+                &Default::default()
+            ),
+            Ok(Expr::annotate(
+                Type::Record(Rc::new(vec![])),
+                Expr::record([] as [&str; 0])
+            ))
+        );
+
+        assert_eq!(
+            Checker::new().infer(
+                &Expr::record([1, 2, 3]),
+                &Default::default(),
+                &Default::default()
+            ),
+            Ok(Expr::annotate(
+                Type::Record(Rc::new(vec![Type::Int, Type::Int, Type::Int])),
+                Expr::record([1, 2, 3])
+            ))
+        );
     }
 
     #[test]
