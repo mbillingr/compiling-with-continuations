@@ -197,7 +197,8 @@ impl Context {
 mod tests {
     use super::*;
     use crate::languages::mini_lambda::ast::{Con, ConRep};
-    use crate::languages::type_lang::ast::Def;
+    use crate::languages::type_lang::ast::{Def, EnumDef};
+    use crate::languages::type_lang::type_checker::GenericType;
 
     #[test]
     fn convert_constants() {
@@ -277,7 +278,11 @@ mod tests {
     fn convert_simple_enum() {
         let x = TExp::annotate(
             Type::enum_(
-                "ABC",
+                Rc::new(GenericType::GenericEnum(EnumDef {
+                    tname: "ABC".to_string(),
+                    tvars: vec![],
+                    variants: vec![].into(),
+                })),
                 [
                     ("A".to_string(), vec![]),
                     ("B".to_string(), vec![]),
@@ -296,7 +301,11 @@ mod tests {
     fn convert_enum_with_variants() {
         let mut ctx = Context::new();
         let ety = Type::enum_(
-            "ABC",
+            Rc::new(GenericType::GenericEnum(EnumDef {
+                tname: "ABC".to_string(),
+                tvars: vec![],
+                variants: vec![].into(),
+            })),
             [
                 ("A".to_string(), vec![]),
                 ("B".to_string(), vec![Type::Int]),
@@ -323,7 +332,14 @@ mod tests {
     #[test]
     fn convert_transparent_enum() {
         let x = TExp::annotate(
-            Type::enum_("Foo", [("X".to_string(), vec![Type::Int])]),
+            Type::enum_(
+                Rc::new(GenericType::GenericEnum(EnumDef {
+                    tname: "Foo".to_string(),
+                    tvars: vec![],
+                    variants: vec![].into(),
+                })),
+                [("X".to_string(), vec![Type::Int])],
+            ),
             TExp::cons("Foo", "X", [42]),
         );
 
@@ -336,7 +352,11 @@ mod tests {
     fn convert_decons_only_constants() {
         let mut ctx = Context::new();
         let ety = Type::enum_(
-            "ABC",
+            Rc::new(GenericType::GenericEnum(EnumDef {
+                tname: "ABC".to_string(),
+                tvars: vec![],
+                variants: vec![].into(),
+            })),
             [
                 ("A".to_string(), vec![]),
                 ("B".to_string(), vec![]),
@@ -364,7 +384,11 @@ mod tests {
     fn convert_decons_tagged() {
         let mut ctx = Context::new();
         let ety = Type::enum_(
-            "ABC",
+            Rc::new(GenericType::GenericEnum(EnumDef {
+                tname: "ABC".to_string(),
+                tvars: vec![],
+                variants: vec![].into(),
+            })),
             [
                 ("A".to_string(), vec![]),
                 ("B".to_string(), vec![Type::Int]),
@@ -416,7 +440,14 @@ mod tests {
     #[test]
     fn convert_decons_transparent() {
         let mut ctx = Context::new();
-        let ety = Type::enum_("Foo", [("X".to_string(), vec![Type::Int])]);
+        let ety = Type::enum_(
+            Rc::new(GenericType::GenericEnum(EnumDef {
+                tname: "Foo".to_string(),
+                tvars: vec![],
+                variants: vec![].into(),
+            })),
+            [("X".to_string(), vec![Type::Int])],
+        );
 
         let x = TExp::decons(TExp::annotate(ety.clone(), "x"), "X", ["y"], "y", 0);
         let y = LExp::bind(

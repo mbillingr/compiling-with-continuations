@@ -1,6 +1,7 @@
 use crate::languages::type_lang::type_checker::GenericType;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 /// Nodes of the abstract syntax tree
@@ -54,6 +55,7 @@ pub enum TyExpr {
     String,
     Var(String),
     Fn(Rc<(TyExpr, TyExpr)>),
+    Construct(Rc<Vec<TyExpr>>),
 }
 
 /// The AST of an anonymous function
@@ -95,10 +97,11 @@ pub struct TFnDef {
 }
 
 /// Enum definition
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct EnumDef {
     pub tname: String,
-    pub variants: Vec<EnumVariant>,
+    pub tvars: Vec<String>,
+    pub variants: Rc<Vec<EnumVariant>>,
 }
 
 /// Possible enum variants
@@ -223,10 +226,15 @@ impl Def {
         })
     }
 
-    pub fn enum_(tname: impl ToString, variants: impl ListBuilder<EnumVariant>) -> Self {
+    pub fn enum_<V: ToString>(
+        tname: impl ToString,
+        tvars: impl IntoIterator<Item = V>,
+        variants: impl ListBuilder<EnumVariant>,
+    ) -> Self {
         Def::Enum(EnumDef {
             tname: tname.to_string(),
-            variants: variants.build(),
+            tvars: tvars.into_iter().map(|v| v.to_string()).collect(),
+            variants: Rc::new(variants.build()),
         })
     }
     pub fn inferred_func(
@@ -278,15 +286,27 @@ impl From<&str> for TyExpr {
     }
 }
 
+impl<A: Into<TyExpr>> From<(A,)> for TyExpr {
+    fn from((a,): (A,)) -> Self {
+        TyExpr::Construct(Rc::new(vec![a.into()]))
+    }
+}
+
+impl<A: Into<TyExpr>, B: Into<TyExpr>> From<(A, B)> for TyExpr {
+    fn from((a, b): (A, B)) -> Self {
+        TyExpr::Construct(Rc::new(vec![a.into(), b.into()]))
+    }
+}
+
 impl From<&str> for EnumVariant {
     fn from(name: &str) -> Self {
         EnumVariant::Constant(name.into())
     }
 }
 
-impl From<(&str, TyExpr)> for EnumVariant {
-    fn from((name, ty): (&str, TyExpr)) -> Self {
-        EnumVariant::Constructor(name.into(), ty)
+impl<T: Into<TyExpr>> From<(&str, T)> for EnumVariant {
+    fn from((name, ty): (&str, T)) -> Self {
+        EnumVariant::Constructor(name.into(), ty.into())
     }
 }
 
@@ -307,8 +327,38 @@ pub enum Type {
 
 #[derive(PartialEq)]
 pub struct EnumType {
-    pub name: String,
+    pub template: Rc<GenericType>,
     pub variants: HashMap<String, Vec<Type>>,
+}
+
+impl Debug for EnumType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "<enum {} {:p}>",
+            self.template.get_name(),
+            Rc::as_ptr(&self.template)
+        )
+    }
+}
+
+impl Eq for Type {}
+
+impl Hash for Type {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Type::Unit => 0.hash(state),
+            Type::Int => 1.hash(state),
+            Type::Real => 2.hash(state),
+            Type::String => 3.hash(state),
+            Type::Opaque(name) => name.hash(state),
+            Type::Var(v) => v.hash(state),
+            Type::Fn(rc) => Rc::as_ptr(rc).hash(state),
+            Type::Generic(rc) => Rc::as_ptr(rc).hash(state),
+            Type::Record(rc) => Rc::as_ptr(rc).hash(state),
+            Type::Enum(rc) => Rc::as_ptr(rc).hash(state),
+        }
+    }
 }
 
 impl Debug for Type {
@@ -330,7 +380,7 @@ impl Debug for Type {
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
-            Type::Enum(e) => write!(f, "<Enum {}>", e.name),
+            Type::Enum(e) => write!(f, "{:?}", e),
         }
     }
 }
@@ -340,9 +390,12 @@ impl Type {
         Self::Fn(Rc::new((f.into(), p.into())))
     }
 
-    pub fn enum_(name: impl Into<String>, variants: impl ListBuilder<(String, Vec<Self>)>) -> Self {
+    pub fn enum_(
+        template: Rc<GenericType>,
+        variants: impl ListBuilder<(String, Vec<Self>)>,
+    ) -> Self {
         Self::Enum(Rc::new(EnumType {
-            name: name.into(),
+            template,
             variants: variants.build().into_iter().collect(),
         }))
     }
