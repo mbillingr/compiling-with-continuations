@@ -1,0 +1,394 @@
+use crate::core::reference::Ref;
+use crate::core::sexpr::{S, SF};
+use crate::languages::type_lang::ast::{Def, EnumDef, EnumVariant, Expr, FnDef, TyExpr};
+use sexpr_parser::Parser;
+use std::iter::once;
+use std::rc::Rc;
+
+impl std::fmt::Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_sexpr())
+    }
+}
+
+impl Expr {
+    pub fn from_str<'i>(src: &'i str) -> Result<Self, Error<'i>> {
+        let sexpr = SF.parse(src)?;
+        Self::from_sexpr(&sexpr)
+    }
+
+    pub fn from_sexpr(s: &S) -> Result<Self, Error<'static>> {
+        use S::*;
+        match s {
+            Int(x) => Ok(Expr::int(*x)),
+
+            Float(x) => Ok(Expr::real(*x)),
+
+            String(x) => Ok(Expr::string(&**x)),
+
+            Symbol(x) => Ok(Expr::var(&**x)),
+
+            List(Ref([Symbol(Ref("record")), fields @ ..])) => fields
+                .iter()
+                .map(|f| Self::from_sexpr(f))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Expr::record),
+
+            List(Ref(
+                [Symbol(Ref("construct")), Symbol(Ref(enum_)), Symbol(Ref(variant)), args @ ..],
+            )) => args
+                .iter()
+                .map(|a| Self::from_sexpr(a))
+                .collect::<Result<Vec<_>, _>>()
+                .map(|args| Expr::cons(enum_, variant, args)),
+
+            List(Ref(
+                [Symbol(Ref("deconstruct")), val, List(Ref([List(Ref([Symbol(Ref(variant)), vars @ ..])), matches])), List(Ref([Symbol(Ref("else")), mismatch]))],
+            )) => parse_symbol_list(vars).and_then(|vars| {
+                Ok(Expr::decons(
+                    Self::from_sexpr(val)?,
+                    variant,
+                    vars,
+                    Self::from_sexpr(matches)?,
+                    Self::from_sexpr(mismatch)?,
+                ))
+            }),
+
+            List(Ref([Symbol(Ref("lambda")), Symbol(Ref(var)), body])) => {
+                Self::from_sexpr(body).map(|b| Expr::lambda(var, b))
+            }
+
+            List(Ref([Symbol(Ref("define")), List(defs), body])) => defs
+                .iter()
+                .map(Def::from_sexpr)
+                .collect::<Result<Vec<_>, _>>()
+                .and_then(|defs| Ok(Expr::defs(defs, Self::from_sexpr(body)?))),
+
+            List(Ref([Symbol(Ref("+")), a, b])) => {
+                Ok(Self::add(Self::from_sexpr(a)?, Self::from_sexpr(b)?))
+            }
+
+            List(Ref([Symbol(Ref("read"))])) => Ok(Self::Read()),
+
+            List(Ref([Symbol(Ref("show")), x])) => Ok(Self::show(Self::from_sexpr(x)?)),
+
+            List(Ref([f, a])) => Ok(Expr::apply(Self::from_sexpr(f)?, Self::from_sexpr(a)?)),
+
+            _ => Err(Error::Syntax(s.clone())),
+        }
+    }
+
+    pub fn to_sexpr(&self) -> S {
+        match self {
+            Expr::Int(x) => S::Int(*x),
+
+            Expr::Real(x) => S::Float(*x),
+
+            Expr::String(x) => S::String(x.into()),
+
+            Expr::Ref(x) => S::Symbol(x.into()),
+
+            Expr::Record(rec) => S::list(
+                once(S::symbol("record"))
+                    .chain(rec.iter().map(Self::to_sexpr))
+                    .collect(),
+            ),
+
+            Expr::Cons(cons) => S::list(
+                vec![
+                    S::symbol("construct"),
+                    S::Symbol(cons.0.clone().into()),
+                    S::Symbol(cons.1.clone().into()),
+                ]
+                .into_iter()
+                .chain(cons.2.iter().map(|x| x.to_sexpr()))
+                .collect(),
+            ),
+
+            Expr::Decons(deco) => S::list(vec![
+                S::symbol("deconstruct"),
+                deco.0.to_sexpr(),
+                S::list(vec![
+                    S::list(
+                        once(S::Symbol(deco.1.clone().into()))
+                            .chain(deco.2.iter().map(|v| S::Symbol(v.clone().into())))
+                            .collect(),
+                    ),
+                    deco.3.to_sexpr(),
+                ]),
+                S::list(vec![S::symbol("else"), deco.4.to_sexpr()]),
+            ]),
+
+            Expr::Lambda(lam) => S::list(vec![
+                S::symbol("lambda"),
+                S::Symbol(lam.param.clone().into()),
+                lam.body.to_sexpr(),
+            ]),
+
+            Expr::Defs(defs) => S::list(vec![
+                S::symbol("define"),
+                S::list(defs.0.iter().map(|d| d.to_sexpr()).collect()),
+                defs.1.to_sexpr(),
+            ]),
+
+            Expr::Add(rands) => {
+                S::list(vec![S::symbol("+"), rands.0.to_sexpr(), rands.1.to_sexpr()])
+            }
+
+            Expr::Read() => S::list(vec![S::symbol("read")]),
+
+            Expr::Show(rand) => S::list(vec![S::symbol("show"), rand.to_sexpr()]),
+
+            Expr::Apply(app) => S::list(vec![app.0.to_sexpr(), app.1.to_sexpr()]),
+            _ => todo!("{:?}", self),
+        }
+    }
+}
+
+impl Def {
+    fn to_sexpr(&self) -> S {
+        match self {
+            Def::Enum(EnumDef {
+                tname,
+                tvars,
+                variants,
+            }) => S::list(
+                vec![
+                    S::symbol("enum"),
+                    S::list(
+                        vec![S::Symbol(tname.clone().into())]
+                            .into_iter()
+                            .chain(tvars.iter().map(|v| S::Symbol(v.clone().into())))
+                            .collect(),
+                    ),
+                ]
+                .into_iter()
+                .chain(variants.iter().map(|va| match va {
+                    EnumVariant::Constant(c) => S::Symbol(c.clone().into()),
+                    EnumVariant::Constructor(c, x) => {
+                        S::list(vec![S::Symbol(c.clone().into()), x.to_sexpr()])
+                    }
+                }))
+                .collect(),
+            ),
+            Def::Func(FnDef {
+                fname,
+                tvars,
+                param,
+                ptype,
+                rtype,
+                body,
+            }) => S::list(vec![
+                S::symbol("func"),
+                S::list(tvars.iter().map(|v| S::Symbol(v.clone().into())).collect()),
+                S::list(vec![
+                    S::Symbol(fname.clone().into()),
+                    S::Symbol(param.clone().into()),
+                    S::symbol(":"),
+                    ptype.to_sexpr(),
+                    S::symbol("->"),
+                    rtype.to_sexpr(),
+                ]),
+                body.to_sexpr(),
+            ]),
+            Def::InferredFunc(_) => unimplemented!(),
+        }
+    }
+
+    fn from_sexpr(s: &S) -> Result<Self, Error> {
+        match s {
+            S::List(Ref(
+                [S::Symbol(Ref("enum")), S::List(Ref([S::Symbol(Ref(tname)), tvars @ ..])), variants @ ..],
+            )) => {
+                let tname = tname.to_string();
+                let tvars = parse_symbol_list(tvars)?;
+                let variants = variants
+                    .iter()
+                    .map(|v| match v {
+                        S::Symbol(name) => Ok(EnumVariant::Constant(name.to_string())),
+                        S::List(Ref([S::Symbol(name), tyx])) => Ok(EnumVariant::Constructor(
+                            name.to_string(),
+                            TyExpr::from_sexpr(tyx)?,
+                        )),
+                        _ => Err(Error::Syntax(v.clone())),
+                    })
+                    .collect::<Result<_, _>>()?;
+                Ok(Def::Enum(EnumDef {
+                    tname,
+                    tvars,
+                    variants: Rc::new(variants),
+                }))
+            }
+            S::List(Ref(
+                [S::Symbol(Ref("func")), S::List(Ref(tvars)), S::List(Ref(
+                    [S::Symbol(Ref(fname)), S::Symbol(Ref(var)), S::Symbol(Ref(":")), ptype, S::Symbol(Ref("->")), rtype],
+                )), body],
+            )) => {
+                let fname = fname.to_string();
+                let tvars = parse_symbol_list(tvars)?;
+                let param = var.to_string();
+                let ptype = TyExpr::from_sexpr(ptype)?;
+                let rtype = TyExpr::from_sexpr(rtype)?;
+                let body = Expr::from_sexpr(body)?;
+                Ok(Def::Func(FnDef {
+                    fname,
+                    tvars,
+                    param,
+                    ptype,
+                    rtype,
+                    body,
+                }))
+            }
+            _ => Err(Error::Syntax(s.clone())),
+        }
+    }
+}
+
+fn parse_symbol_list(xs: &[S]) -> Result<Vec<String>, Error> {
+    xs.iter()
+        .map(|x| {
+            if let S::Symbol(s) = x {
+                Ok(s.to_string())
+            } else {
+                Err(Error::Syntax(x.clone()))
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()
+}
+
+impl TyExpr {
+    fn to_sexpr(&self) -> S {
+        match self {
+            TyExpr::Int => S::symbol("Int"),
+            TyExpr::Real => S::symbol("Real"),
+            TyExpr::String => S::symbol("String"),
+            TyExpr::Var(v) => S::Symbol(v.clone().into()),
+            _ => todo!("{self:?}"),
+        }
+    }
+
+    fn from_sexpr(s: &S) -> Result<Self, Error> {
+        match s {
+            S::Symbol(Ref("Int")) => Ok(TyExpr::Int),
+            S::Symbol(Ref("Real")) => Ok(TyExpr::Real),
+            S::Symbol(Ref("String")) => Ok(TyExpr::String),
+            S::Symbol(Ref(v)) => Ok(TyExpr::Var(v.to_string())),
+            _ => Err(Error::Syntax(s.clone())),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Error<'i> {
+    ParseError(sexpr_parser::Error<'i>),
+    Syntax(S),
+}
+
+impl<'i> From<sexpr_parser::Error<'i>> for Error<'i> {
+    fn from(e: sexpr_parser::Error<'i>) -> Self {
+        Error::ParseError(e)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_literals() {
+        let repr = "123";
+        let expr = Expr::int(123);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+
+        let repr = "12.34";
+        let expr = Expr::real(12.34);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+
+        let repr = "\"hello, world!\"";
+        let expr = Expr::string("hello, world!");
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn test_variable_ref() {
+        let repr = "foo";
+        let expr = Expr::var("foo");
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn test_application() {
+        let repr = "((foo bar) (f 42))";
+        let expr = Expr::apply(Expr::apply("foo", "bar"), Expr::apply("f", 42));
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn test_record() {
+        let repr = "(record 1 x 2)";
+        let expr = Expr::record((1, "x", 2, ()));
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn test_cons() {
+        let repr = "(construct Foo Bar 1)";
+        let expr = Expr::cons("Foo", "Bar", [1]);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn test_decons() {
+        let repr = "(deconstruct foo ((Bar x) x) (else 42))";
+        let expr = Expr::decons("foo", "Bar", ["x"], "x", 42);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn test_lambda() {
+        let repr = "(lambda x 42)";
+        let expr = Expr::lambda("x", 42);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn test_defs() {
+        let repr = "(define ((enum (Option T) None (Some T)) (func (T) (foo x : T -> Int) 42)) 0)";
+        let expr = Expr::defs(
+            vec![
+                Def::enum_("Option", ["T"], ("None", ("Some", "T"), ())),
+                Def::func("foo", ["T"], "T", TyExpr::Int, "x", 42),
+            ],
+            0,
+        );
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn test_primitives() {
+        let repr = "(+ x y)";
+        let expr = Expr::add("x", "y");
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+
+        let repr = "(read)";
+        let expr = Expr::Read();
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+
+        let repr = "(show this)";
+        let expr = Expr::show("this");
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+}

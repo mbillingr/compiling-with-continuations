@@ -476,6 +476,21 @@ where
     }
 }
 
+impl<A, B, C, Z, OUT> ListBuilder<OUT> for (A, B, C, Z)
+where
+    Z: ListBuilder<OUT>,
+    A: Into<OUT>,
+    B: Into<OUT>,
+    C: Into<OUT>,
+{
+    fn build_into(self, buf: &mut Vec<OUT>) {
+        buf.push(self.0.into());
+        buf.push(self.1.into());
+        buf.push(self.2.into());
+        self.3.build_into(buf);
+    }
+}
+
 impl<A, OUT, const N: usize> ListBuilder<OUT> for [A; N]
 where
     A: Into<OUT>,
