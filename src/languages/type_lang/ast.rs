@@ -302,7 +302,13 @@ pub enum Type {
     Fn(Rc<(Type, Type)>),
     Generic(Rc<GenericType>),
     Record(Rc<Vec<Type>>),
-    Enum(Rc<(String, HashMap<String, Vec<Type>>)>),
+    Enum(Rc<EnumType>),
+}
+
+#[derive(PartialEq)]
+pub struct EnumType {
+    pub name: String,
+    pub variants: HashMap<String, Vec<Type>>,
 }
 
 impl Debug for Type {
@@ -324,7 +330,7 @@ impl Debug for Type {
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
-            Type::Enum(e) => write!(f, "<Enum {}>", e.0),
+            Type::Enum(e) => write!(f, "<Enum {}>", e.name),
         }
     }
 }
@@ -332,6 +338,13 @@ impl Debug for Type {
 impl Type {
     pub fn func(f: impl Into<Type>, p: impl Into<Type>) -> Self {
         Self::Fn(Rc::new((f.into(), p.into())))
+    }
+
+    pub fn enum_(name: impl Into<String>, variants: impl ListBuilder<(String, Vec<Self>)>) -> Self {
+        Self::Enum(Rc::new(EnumType {
+            name: name.into(),
+            variants: variants.build().into_iter().collect(),
+        }))
     }
 }
 

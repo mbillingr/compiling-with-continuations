@@ -1,4 +1,4 @@
-use crate::languages::type_lang::ast::{Def, EnumVariant, Expr, TyExpr, Type};
+use crate::languages::type_lang::ast::{Def, EnumType, EnumVariant, Expr, TyExpr, Type};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -73,12 +73,15 @@ impl Checker {
                     .ok_or_else(|| format!("Unknown type: {ety}"))?;
                 match t {
                     Type::Enum(enum_) => {
-                        let (name, variants) = &**enum_;
-                        let var = variants
+                        let var = enum_
+                            .variants
                             .get(variant)
-                            .ok_or_else(|| format!("Unknown variant: {name} {variant}"))?;
+                            .ok_or_else(|| format!("Unknown variant: {} {variant}", enum_.name))?;
                         if args.len() != var.len() {
-                            return Err(format!("Wrong number of argumnts: {name} {variant}"));
+                            return Err(format!(
+                                "Wrong number of arguments: {} {variant}",
+                                enum_.name
+                            ));
                         }
                         for (v, a) in var.iter().zip(args) {
                             self.check_expr(a, v, env, tenv)?;
@@ -98,16 +101,20 @@ impl Checker {
                 let (value, variant, vars, matches, mismatch) = &**de;
 
                 let value_ = self.infer(value, env, tenv)?;
-                let (name, variants) = &**match value_.get_type() {
+                let enum_ = &**match value_.get_type() {
                     Type::Enum(enum_) => enum_,
                     _ => return Err(format!("Not an enum: {value_:?}")),
                 };
 
-                let constructor = variants
+                let constructor = enum_
+                    .variants
                     .get(variant)
-                    .ok_or_else(|| format!("Unknown variant: {name} {variant}"))?;
+                    .ok_or_else(|| format!("Unknown variant: {} {variant}", enum_.name))?;
                 if vars.len() != constructor.len() {
-                    return Err(format!("Wrong number of bindings: {name} {variant}"));
+                    return Err(format!(
+                        "Wrong number of bindings: {} {variant}",
+                        enum_.name
+                    ));
                 }
 
                 let mut match_env = env.clone();
@@ -206,7 +213,10 @@ impl Checker {
 
                             def_tenv.insert(
                                 def.tname.clone(),
-                                Type::Enum(Rc::new((def.tname.clone(), variants))),
+                                Type::Enum(Rc::new(EnumType {
+                                    name: def.tname.clone(),
+                                    variants,
+                                })),
                             );
                         }
                         Def::InferredFunc(_) => unreachable!(),
@@ -377,7 +387,7 @@ impl Checker {
                 .map(Type::Record),
 
             Type::Enum(enu) => enu
-                .1
+                .variants
                 .iter()
                 .map(|(v, args)| {
                     args.iter()
@@ -386,7 +396,10 @@ impl Checker {
                         .map(|r| (v.clone(), r))
                 })
                 .collect::<Result<HashMap<_, _>, _>>()
-                .map(|vars| (enu.0.to_string(), vars))
+                .map(|variants| EnumType {
+                    name: enu.name.to_string(),
+                    variants,
+                })
                 .map(Rc::new)
                 .map(Type::Enum),
         }

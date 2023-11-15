@@ -94,6 +94,36 @@ impl<V> Expr<V> {
     pub fn record(fields: impl Into<Ref<[Self]>>) -> Self {
         Self::Record(fields.into())
     }
+
+    pub fn con(rep: impl Into<ConRep>, val: impl Into<Ref<Self>>) -> Self {
+        Self::Con(rep.into(), val.into())
+    }
+
+    pub fn decon(rep: impl Into<ConRep>, val: impl Into<Self>) -> Self {
+        Self::DeCon(rep.into(), val.into().into())
+    }
+
+    pub fn switch<D: Into<Self>>(
+        val: impl Into<Self>,
+        conreps: impl Into<Ref<[ConRep]>>,
+        arms: impl Into<Vec<(Con, Self)>>,
+        default: Option<D>,
+    ) -> Self {
+        Self::Switch(
+            val.into().into(),
+            conreps.into(),
+            Ref::array(arms.into()),
+            default.map(D::into).map(Ref::new),
+        )
+    }
+
+    pub fn select(idx: isize, rec: impl Into<Self>) -> Self {
+        Self::Select(idx.into(), rec.into().into())
+    }
+
+    pub fn bind(name: impl Into<V>, value: impl Into<Self>, body: impl Into<Self>) -> Self {
+        Self::apply(Self::func(name, body.into()), value.into())
+    }
 }
 
 impl Expr<Ref<str>> {
@@ -368,6 +398,33 @@ impl<V> From<PrimOp> for Expr<V> {
 impl<V> From<PrimOp> for Ref<Expr<V>> {
     fn from(op: PrimOp) -> Self {
         Ref::new(Expr::Prim(op))
+    }
+}
+
+impl<V> From<i64> for Expr<V> {
+    fn from(c: i64) -> Self {
+        Expr::Int(c)
+    }
+}
+
+impl<V> From<i64> for Ref<Expr<V>> {
+    fn from(c: i64) -> Self {
+        Ref::new(Expr::Int(c))
+    }
+}
+
+impl<V> From<&'static str> for Expr<V>
+where
+    &'static str: Into<V>,
+{
+    fn from(v: &'static str) -> Self {
+        Expr::Var(v.into())
+    }
+}
+
+impl From<Ref<str>> for Expr<Ref<str>> {
+    fn from(v: Ref<str>) -> Self {
+        Expr::Var(v)
     }
 }
 
