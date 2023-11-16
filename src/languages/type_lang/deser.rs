@@ -263,7 +263,8 @@ impl TyExpr {
             TyExpr::Real => S::symbol("Real"),
             TyExpr::String => S::symbol("String"),
             TyExpr::Var(v) => S::Symbol(v.clone().into()),
-            _ => todo!("{self:?}"),
+            TyExpr::Fn(f) => S::list(vec![f.0.to_sexpr(), S::symbol("->"), f.1.to_sexpr()]),
+            TyExpr::Construct(txs) => S::list(txs.iter().map(Self::to_sexpr).collect()),
         }
     }
 
@@ -273,6 +274,15 @@ impl TyExpr {
             S::Symbol(Ref("Real")) => Ok(TyExpr::Real),
             S::Symbol(Ref("String")) => Ok(TyExpr::String),
             S::Symbol(Ref(v)) => Ok(TyExpr::Var(v.to_string())),
+            S::List(Ref([f, S::Symbol(Ref("->")), a])) => {
+                Ok(TyExpr::func(Self::from_sexpr(f)?, Self::from_sexpr(a)?))
+            }
+            S::List(Ref(txs)) => txs
+                .iter()
+                .map(Self::from_sexpr)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Rc::new)
+                .map(TyExpr::Construct),
             _ => Err(Error::Syntax(s.clone())),
         }
     }

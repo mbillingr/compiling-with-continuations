@@ -69,6 +69,7 @@ fn run_typelang(source_file: Option<&Path>) {
     let expr_in = TExpr::from_str(&src).unwrap();
     let checked = Checker::check_program(&expr_in).unwrap();
     let mini_la = type_lang_to_mini_lambda::Context::new().convert(&checked);
+    println!("{}", mini_la);
     unsafe { interpreter::exec(&mini_la, &mut stdout(), &mut stdin().lock()) }
 }
 
