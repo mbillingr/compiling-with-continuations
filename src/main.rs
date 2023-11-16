@@ -1,4 +1,7 @@
 use crate::core::reference::Ref;
+use crate::languages::mini_lambda::interpreter;
+use crate::languages::type_lang::type_checker::Checker;
+use crate::transformations::type_lang_to_mini_lambda;
 use clap::{Parser, Subcommand};
 use std::io::{stdin, stdout, Read, Write};
 
@@ -18,6 +21,9 @@ struct CliApp {
 
 #[derive(Debug, Clone, Subcommand)]
 enum CliCmd {
+    /// Run a Type-Lang program
+    RunTypeLang,
+
     /// Interpret CPS
     InterpretCps,
 
@@ -35,11 +41,27 @@ fn main() {
     let args = CliApp::parse();
 
     match args.command {
+        CliCmd::RunTypeLang => run_typelang(),
         CliCmd::InterpretCps => interpret_cps(),
         CliCmd::ToCps => to_cps(args.gensym_delimiter),
         CliCmd::ConvertLabels => convert_labels(),
         CliCmd::EtaReduceCps => eta_reduce(),
     }
+}
+
+fn run_typelang() {
+    use crate::languages::mini_lambda::interpreter;
+    use crate::languages::type_lang::type_checker::Checker;
+    use crate::transformations::type_lang_to_mini_lambda;
+    type TExpr = crate::languages::type_lang::ast::Expr;
+
+    let mut src = String::new();
+    stdin().read_to_string(&mut src).unwrap();
+
+    let expr_in = TExpr::from_str(&src).unwrap();
+    let checked = Checker::check_program(&expr_in).unwrap();
+    let mini_la = type_lang_to_mini_lambda::Context::new().convert(&checked);
+    unsafe { interpreter::exec(&mini_la, &mut stdout(), &mut stdin().lock()) }
 }
 
 fn interpret_cps() {
