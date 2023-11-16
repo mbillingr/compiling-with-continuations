@@ -128,6 +128,8 @@ impl Context {
                 (Type::Int, TExp::Read()) => LExp::apply(PrimOp::ReadInt, LExp::record(vec![])),
 
                 (_, ex @ TExp::Ref(_)) => self.convert(ex),
+                (_, ex @ TExp::Apply(_)) => self.convert(ex),
+                (_, ex @ TExp::Lambda(_)) => self.convert(ex),
                 _ => todo!("{expr:?}"),
             },
 
