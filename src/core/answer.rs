@@ -37,6 +37,9 @@ impl Answer {
     }
 
     pub fn tuple(fields: Vec<Answer>) -> Self {
+        if fields.is_empty() {
+            return Answer(0);
+        }
         let obj = Box::leak(fields.into_boxed_slice());
         let fst = &obj[0] as *const _;
         unsafe { Answer(std::mem::transmute(fst)) }
