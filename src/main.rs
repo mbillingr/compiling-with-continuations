@@ -3,7 +3,9 @@ use crate::languages::mini_lambda::interpreter;
 use crate::languages::type_lang::type_checker::Checker;
 use crate::transformations::type_lang_to_mini_lambda;
 use clap::{Parser, Subcommand};
+use std::fs::File;
 use std::io::{stdin, stdout, Read, Write};
+use std::path::Path;
 
 pub mod core;
 pub mod languages;
@@ -17,12 +19,15 @@ struct CliApp {
 
     #[arg(long, default_value = "__")]
     gensym_delimiter: String,
+
+    #[arg(default_value = None)]
+    input_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Subcommand)]
 enum CliCmd {
     /// Run a Type-Lang program
-    RunTypeLang,
+    RunTypeLang { source_file: Option<String> },
 
     /// Interpret CPS
     InterpretCps,
@@ -41,7 +46,7 @@ fn main() {
     let args = CliApp::parse();
 
     match args.command {
-        CliCmd::RunTypeLang => run_typelang(),
+        CliCmd::RunTypeLang { source_file } => run_typelang(source_file.as_ref().map(Path::new)),
         CliCmd::InterpretCps => interpret_cps(),
         CliCmd::ToCps => to_cps(args.gensym_delimiter),
         CliCmd::ConvertLabels => convert_labels(),
@@ -49,14 +54,17 @@ fn main() {
     }
 }
 
-fn run_typelang() {
+fn run_typelang(source_file: Option<&Path>) {
     use crate::languages::mini_lambda::interpreter;
     use crate::languages::type_lang::type_checker::Checker;
     use crate::transformations::type_lang_to_mini_lambda;
     type TExpr = crate::languages::type_lang::ast::Expr;
 
     let mut src = String::new();
-    stdin().read_to_string(&mut src).unwrap();
+    match source_file {
+        None => stdin().read_to_string(&mut src).unwrap(),
+        Some(path) => File::open(path).unwrap().read_to_string(&mut src).unwrap(),
+    };
 
     let expr_in = TExpr::from_str(&src).unwrap();
     let checked = Checker::check_program(&expr_in).unwrap();

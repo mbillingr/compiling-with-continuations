@@ -15,7 +15,8 @@ impl Checker {
     }
     pub fn check_program(expr: &Expr) -> Result<Expr, String> {
         let mut checker = Checker::new();
-        let expr_ = checker.check_expr(expr, &Type::Int, &HashMap::new(), &HashMap::new())?;
+        let expr_ = checker.infer(expr, &HashMap::new(), &HashMap::new())?;
+
         checker.resolve_expr(&expr_)
     }
 
