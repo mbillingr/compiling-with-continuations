@@ -564,14 +564,8 @@ mod tests {
     #[test]
     fn check_primitives() {
         assert_eq!(Checker::check_program(&Expr::int(42)), Ok(Expr::int(42)));
-        assert!(Checker::check_program(&Expr::real(4.2)).is_err());
         assert_eq!(
-            Checker::new().check_expr(
-                &Expr::real(4.2),
-                &Type::Real,
-                &HashMap::new(),
-                &HashMap::new()
-            ),
+            Checker::check_program(&Expr::real(4.2)),
             Ok(Expr::real(4.2))
         );
     }
@@ -613,10 +607,30 @@ mod tests {
     #[test]
     fn check_lambdas() {
         let x = Expr::apply(Expr::lambda("x", "x"), Expr::int(0));
-        assert!(Checker::check_program(&x).is_ok());
+        let y = Expr::annotate(
+            Type::Int,
+            Expr::apply(
+                Expr::annotate(
+                    Type::func(Type::Int, Type::Int),
+                    Expr::lambda("x", Expr::annotate(Type::Int, "x")),
+                ),
+                Expr::int(0),
+            ),
+        );
+        assert_eq!(Checker::check_program(&x), Ok(y));
 
         let x = Expr::apply(Expr::lambda("x", "x"), Expr::Real(0.0));
-        assert!(Checker::check_program(&x).is_err());
+        let y = Expr::annotate(
+            Type::Real,
+            Expr::apply(
+                Expr::annotate(
+                    Type::func(Type::Real, Type::Real),
+                    Expr::lambda("x", Expr::annotate(Type::Real, "x")),
+                ),
+                Expr::real(0.0),
+            ),
+        );
+        assert_eq!(Checker::check_program(&x), Ok(y));
     }
 
     #[test]
@@ -633,15 +647,6 @@ mod tests {
         let x = Expr::defs(
             [Def::func("fn", vec!["T"], "T", "T", "x", 0)],
             Expr::apply("fn", 0),
-        );
-        assert!(Checker::check_program(&x).is_err());
-    }
-
-    #[test]
-    fn fail_generic_use() {
-        let x = Expr::defs(
-            [Def::func("fn", vec!["T"], "T", "T", "x", "x")],
-            Expr::apply("fn", 1.2),
         );
         assert!(Checker::check_program(&x).is_err());
     }

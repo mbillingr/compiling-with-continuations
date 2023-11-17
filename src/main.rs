@@ -1,7 +1,4 @@
 use crate::core::reference::Ref;
-use crate::languages::mini_lambda::interpreter;
-use crate::languages::type_lang::type_checker::Checker;
-use crate::transformations::type_lang_to_mini_lambda;
 use clap::{Parser, Subcommand};
 use std::fs::File;
 use std::io::{stdin, stdout, Read, Write};

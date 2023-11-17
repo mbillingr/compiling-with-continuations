@@ -94,6 +94,8 @@ impl Context {
 
             TExp::Show(x) => match x.get_type() {
                 Type::Int => LExp::apply(PrimOp::ShowInt, self.convert(x)),
+                Type::Real => LExp::apply(PrimOp::ShowReal, self.convert(x)),
+                Type::String => LExp::apply(PrimOp::ShowStr, self.convert(x)),
                 _ => todo!("{expr:?}"),
             },
 

@@ -193,6 +193,7 @@ impl Expr {
         match self {
             Expr::Int(_) => &Type::Int,
             Expr::Real(_) => &Type::Real,
+            Expr::String(_) => &Type::String,
             Expr::Show(_) => &Type::Unit,
             Expr::Defs(defs) => defs.1.get_type(),
             Expr::Annotation(ann) => &ann.0,
