@@ -6,8 +6,31 @@ macro_rules! make_testsuite_for_type_lang {
             assert_eq!($run("(show 12.34)", ""), "12.34");
             assert_eq!($run("(show \"äöü\")", ""), "äöü");
         }
+
+        #[test]
+        fn enums() {
+            assert_eq!(
+                $run("(define ((enum (Foo) A B)) (show (. Foo A)))", ""),
+                "42"
+            );
+
+            assert_eq!(
+                $run(
+                    "(define ((enum (Foo) A (B Int) C)) (show ((. Foo B) 42)))",
+                    ""
+                ),
+                "42"
+            );
+        }
     };
 }
+
+// (Foo . A)
+// ((Foo . B) 42)
+// ((Option Int) . None)
+// (((Option Int) . Some) 42)
+// (Option . None)
+// ((Option Some) 42)
 
 fn exec(src: &str, input: &str) -> String {
     use crate::{
