@@ -223,6 +223,14 @@ impl Expr {
             _ => panic!("unannotated expression: {self:?}"),
         }
     }
+
+    pub fn sequence(exprs: Vec<Self>) -> Self {
+        exprs
+            .into_iter()
+            .rev()
+            .reduce(|acc, x| Self::apply(Self::lambda("_", acc), x))
+            .unwrap()
+    }
 }
 
 impl Def {

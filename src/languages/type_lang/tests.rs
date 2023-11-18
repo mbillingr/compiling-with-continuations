@@ -21,8 +21,9 @@ macro_rules! make_testsuite_for_type_lang {
                     "(define ((enum (Foo) A (B Int) C)) (show ((Foo . B) 42)))",
                     ""
                 ),
-                "(B ...)"
+                "(B 42)"
             );
+
             assert_eq!(
                 $run("(define ((enum (Foo T) A B)) (show ((Foo Int) . A)))", ""),
                 "A"
@@ -33,7 +34,23 @@ macro_rules! make_testsuite_for_type_lang {
                     "(define ((enum (Foo T) A (B T) C)) (show (((Foo Int) . B) 42)))",
                     ""
                 ),
-                "(B ...)"
+                "(B 42)"
+            );
+
+            assert_eq!(
+                $run(
+                    "(define ((enum (Foo T) A (B T) C)) (show ((Foo . B) 4.2)))",
+                    ""
+                ),
+                "(B 4.2)"
+            );
+
+            assert_eq!(
+                $run(
+                    "(define ((enum (Foo) (B Int))) (show ((Foo . B) 42)))",
+                    ""
+                ),
+                "(B 42)"
             );
         }
 
@@ -102,13 +119,6 @@ macro_rules! make_testsuite_for_type_lang {
         }
     };
 }
-
-// (Foo . A)
-// ((Foo . B) 42)
-// ((Option Int) . None)
-// (((Option Int) . Some) 42)
-// (Option . None)
-// ((Option Some) 42)
 
 fn exec(src: &str, input: &str) -> String {
     use crate::{

@@ -132,27 +132,27 @@ impl Context {
                 Type::Real => LExp::apply(PrimOp::ShowReal, self.convert(x)),
                 Type::String => LExp::apply(PrimOp::ShowStr, self.convert(x)),
                 Type::Enum(e) => {
-                    let mut conreps = vec![];
                     let mut arms = vec![];
-                    for (vname, rep) in self.enum_repr(e) {
-                        conreps.push(*rep);
-                        arms.push((
-                            Con::Data(*rep),
-                            match rep {
-                                ConRep::Constant(_) => {
-                                    LExp::apply(PrimOp::ShowStr, LExp::string(vname))
-                                }
-                                ConRep::Tagged(_) | ConRep::Transparent => LExp::sequence(vec![
-                                    LExp::apply(PrimOp::ShowStr, LExp::string("(")),
-                                    LExp::apply(PrimOp::ShowStr, LExp::string(vname)),
-                                    LExp::apply(PrimOp::ShowStr, LExp::string(" ")),
-                                    LExp::apply(PrimOp::ShowStr, LExp::string("...")),
-                                    LExp::apply(PrimOp::ShowStr, LExp::string(")")),
+                    for (vname, tys) in &e.variants {
+                        match tys.as_slice() {
+                            [] => arms.push((
+                                EnumVariantPattern::Constant(vname.clone()),
+                                TExp::show(TExp::string(vname)),
+                            )),
+                            [tx] => arms.push((
+                                EnumVariantPattern::Constructor(vname.clone(), "x".to_string()),
+                                TExp::sequence(vec![
+                                    TExp::show(TExp::string("(")),
+                                    TExp::show(TExp::string(vname)),
+                                    TExp::show(TExp::string(" ")),
+                                    TExp::show(TExp::annotate(tx.clone(), TExp::var("x"))),
+                                    TExp::show(TExp::string(")")),
                                 ]),
-                            },
-                        ));
+                            )),
+                            _ => panic!("enum variants with more than one value not supported"),
+                        }
                     }
-                    LExp::switch(self.convert(x), conreps, arms, None::<LExp>)
+                    self.convert(&TExp::match_enum((**x).clone(), arms))
                 }
                 _ => todo!("{expr:?}"),
             },
