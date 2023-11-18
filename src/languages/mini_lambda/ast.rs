@@ -126,6 +126,16 @@ impl<V> Expr<V> {
     }
 }
 
+impl<V: From<&'static str>> Expr<V> {
+    pub fn sequence(exprs: Vec<Self>) -> Self {
+        exprs
+            .into_iter()
+            .rev()
+            .reduce(|acc, x| Self::apply(Self::func("_", acc), x))
+            .unwrap()
+    }
+}
+
 impl Expr<Ref<str>> {
     pub fn from_str<'i>(s: &'i str) -> Result<Self, Error<'i>> {
         let sexpr = sexpr::SF.parse(s)?;

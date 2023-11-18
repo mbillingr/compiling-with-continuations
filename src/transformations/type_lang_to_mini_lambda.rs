@@ -10,16 +10,17 @@ use std::sync::Arc;
 pub type LExp = crate::languages::mini_lambda::ast::Expr<Ref<str>>;
 pub type TExp = crate::languages::type_lang::ast::Expr;
 
+#[derive(Default)]
 pub struct Context {
     enum_reprs: HashMap<*const EnumType, HashMap<String, ConRep>>,
     gs: Arc<GensymContext>,
 }
 
 impl Context {
-    pub fn new() -> Self {
+    pub fn new(gs: Arc<GensymContext>) -> Self {
         Context {
             enum_reprs: Default::default(),
-            gs: Arc::new(GensymContext::new("__")),
+            gs,
         }
     }
 }
@@ -64,7 +65,7 @@ impl Context {
                 };
                 let otherwise = self.convert(mismatch);
                 let conreps: Vec<_> = self.enum_all_reps(en).collect();
-                let target_rep = self.enum_repr(en, variant);
+                let target_rep = self.enum_variant_repr(en, variant);
                 match target_rep {
                     ConRep::Constant(_) => {
                         let arm = vec![(Con::Data(target_rep), self.convert(matches))];
@@ -96,19 +97,58 @@ impl Context {
                 Type::Int => LExp::apply(PrimOp::ShowInt, self.convert(x)),
                 Type::Real => LExp::apply(PrimOp::ShowReal, self.convert(x)),
                 Type::String => LExp::apply(PrimOp::ShowStr, self.convert(x)),
+                Type::Enum(e) => {
+                    let mut conreps = vec![];
+                    let mut arms = vec![];
+                    for (vname, rep) in self.enum_repr(e) {
+                        conreps.push(*rep);
+                        arms.push((
+                            Con::Data(*rep),
+                            match rep {
+                                ConRep::Constant(_) => {
+                                    LExp::apply(PrimOp::ShowStr, LExp::string(vname))
+                                }
+                                ConRep::Tagged(_) | ConRep::Transparent => LExp::sequence(vec![
+                                    LExp::apply(PrimOp::ShowStr, LExp::string("(")),
+                                    LExp::apply(PrimOp::ShowStr, LExp::string(vname)),
+                                    LExp::apply(PrimOp::ShowStr, LExp::string(" ")),
+                                    LExp::apply(PrimOp::ShowStr, LExp::string("...")),
+                                    LExp::apply(PrimOp::ShowStr, LExp::string(")")),
+                                ]),
+                            },
+                        ));
+                    }
+                    LExp::switch(self.convert(x), conreps, arms, None::<LExp>)
+                }
                 _ => todo!("{expr:?}"),
             },
 
             TExp::Annotation(ann) => match &**ann {
                 (Type::Enum(en), TExp::Cons(con)) => {
                     let (_, variant, args) = &**con;
-                    let conrep = self.enum_repr(en, variant);
+                    let conrep = self.enum_variant_repr(en, variant);
                     let val = match args.as_slice() {
                         [] => LExp::int(0),
                         [x] => self.convert(x),
                         xs => LExp::record(xs.iter().map(|x| self.convert(x)).collect::<Vec<_>>()),
                     };
                     LExp::con(conrep, val)
+                }
+
+                (Type::Enum(en), TExp::Cons2(con)) => {
+                    let variant = &con.1;
+                    let conrep = self.enum_variant_repr(en, variant);
+                    LExp::con(conrep, LExp::int(0))
+                }
+
+                (Type::Fn(tf), TExp::Cons2(con)) => {
+                    let en = match &tf.1 {
+                        Type::Enum(en) => en,
+                        _ => panic!("wrong type"),
+                    };
+                    let variant = &con.1;
+                    let conrep = self.enum_variant_repr(en, variant);
+                    LExp::func("x", LExp::con(conrep, LExp::var("x")))
                 }
 
                 (Type::Int, TExp::Add(add)) => LExp::apply(
@@ -139,9 +179,13 @@ impl Context {
         }
     }
 
-    pub fn enum_repr(&mut self, en: &Rc<EnumType>, variant: &str) -> ConRep {
+    pub fn enum_repr(&mut self, en: &Rc<EnumType>) -> &HashMap<String, ConRep> {
         self.enum_ensure_known(en);
-        self.enum_reprs[&Rc::as_ptr(en)][variant]
+        &self.enum_reprs[&Rc::as_ptr(en)]
+    }
+
+    pub fn enum_variant_repr(&mut self, en: &Rc<EnumType>, variant: &str) -> ConRep {
+        self.enum_repr(en)[variant]
     }
 
     pub fn enum_all_reps<'a>(&'a mut self, en: &Rc<EnumType>) -> impl Iterator<Item = ConRep> + 'a {
@@ -206,10 +250,13 @@ mod tests {
 
     #[test]
     fn convert_constants() {
-        assert_eq!(Context::new().convert(&TExp::int(42)), LExp::Int(42));
-        assert_eq!(Context::new().convert(&TExp::real(3.14)), LExp::Real(3.14));
+        assert_eq!(Context::default().convert(&TExp::int(42)), LExp::Int(42));
         assert_eq!(
-            Context::new().convert(&TExp::string("foo")),
+            Context::default().convert(&TExp::real(3.14)),
+            LExp::Real(3.14)
+        );
+        assert_eq!(
+            Context::default().convert(&TExp::string("foo")),
             LExp::from_str("\"foo\"").unwrap()
         );
     }
@@ -217,7 +264,7 @@ mod tests {
     #[test]
     fn convert_variable_reference() {
         assert_eq!(
-            Context::new().convert(&TExp::var("x")),
+            Context::default().convert(&TExp::var("x")),
             LExp::from_str("x").unwrap()
         );
     }
@@ -225,7 +272,7 @@ mod tests {
     #[test]
     fn convert_application() {
         assert_eq!(
-            Context::new().convert(&TExp::apply("f", "x")),
+            Context::default().convert(&TExp::apply("f", "x")),
             LExp::from_str("(f x)").unwrap()
         );
     }
@@ -233,7 +280,7 @@ mod tests {
     #[test]
     fn convert_lambda() {
         assert_eq!(
-            Context::new().convert(&TExp::lambda("x", "x")),
+            Context::default().convert(&TExp::lambda("x", "x")),
             LExp::from_str("(fn x x)").unwrap()
         );
     }
@@ -241,7 +288,7 @@ mod tests {
     #[test]
     fn convert_add() {
         assert_eq!(
-            Context::new().convert(&TExp::annotate(Type::Int, TExp::add(1, 2))),
+            Context::default().convert(&TExp::annotate(Type::Int, TExp::add(1, 2))),
             LExp::from_str("((primitive +) (record 1 2))").unwrap()
         );
 
@@ -252,7 +299,7 @@ mod tests {
 
         // no need to worry about this case, the type checker should prevent it!
         assert_eq!(
-            Context::new().convert(&TExp::annotate(Type::Int, TExp::add(1, 2.0))),
+            Context::default().convert(&TExp::annotate(Type::Int, TExp::add(1, 2.0))),
             LExp::from_str("((primitive +) (record 1 2.0))").unwrap()
         );
     }
@@ -260,7 +307,7 @@ mod tests {
     #[test]
     fn convert_read() {
         assert_eq!(
-            Context::new().convert(&TExp::annotate(Type::Int, TExp::Read())),
+            Context::default().convert(&TExp::annotate(Type::Int, TExp::Read())),
             LExp::from_str("((primitive read-int) (record))").unwrap()
         );
     }
@@ -268,12 +315,12 @@ mod tests {
     #[test]
     fn convert_show() {
         assert_eq!(
-            Context::new().convert(&TExp::show(TExp::int(42))),
+            Context::default().convert(&TExp::show(TExp::int(42))),
             LExp::from_str("((primitive show-int) 42)").unwrap()
         );
 
         assert_eq!(
-            Context::new().convert(&TExp::show(TExp::annotate(Type::Int, TExp::add(1, 2)))),
+            Context::default().convert(&TExp::show(TExp::annotate(Type::Int, TExp::add(1, 2)))),
             LExp::from_str("((primitive show-int) ((primitive +) (record 1 2)))").unwrap()
         );
     }
@@ -298,12 +345,12 @@ mod tests {
 
         let y = LExp::con(ConRep::Constant(1), 0);
 
-        assert_eq!(Context::new().convert(&x), y);
+        assert_eq!(Context::default().convert(&x), y);
     }
 
     #[test]
     fn convert_enum_with_variants() {
-        let mut ctx = Context::new();
+        let mut ctx = Context::default();
         let ety = Type::enum_(
             Rc::new(GenericType::GenericEnum(EnumDef {
                 tname: "ABC".to_string(),
@@ -349,12 +396,12 @@ mod tests {
 
         let y = LExp::con(ConRep::Transparent, 42);
 
-        assert_eq!(Context::new().convert(&x), y);
+        assert_eq!(Context::default().convert(&x), y);
     }
 
     #[test]
     fn convert_decons_only_constants() {
-        let mut ctx = Context::new();
+        let mut ctx = Context::default();
         let ety = Type::enum_(
             Rc::new(GenericType::GenericEnum(EnumDef {
                 tname: "ABC".to_string(),
@@ -386,7 +433,7 @@ mod tests {
 
     #[test]
     fn convert_decons_tagged() {
-        let mut ctx = Context::new();
+        let mut ctx = Context::default();
         let ety = Type::enum_(
             Rc::new(GenericType::GenericEnum(EnumDef {
                 tname: "ABC".to_string(),
@@ -443,7 +490,7 @@ mod tests {
 
     #[test]
     fn convert_decons_transparent() {
-        let mut ctx = Context::new();
+        let mut ctx = Context::default();
         let ety = Type::enum_(
             Rc::new(GenericType::GenericEnum(EnumDef {
                 tname: "Foo".to_string(),
@@ -473,7 +520,7 @@ mod tests {
     #[test]
     fn convert_fndefs() {
         assert_eq!(
-            Context::new().convert(&TExp::defs(
+            Context::default().convert(&TExp::defs(
                 [Def::inferred_func(
                     Type::func(Type::Int, Type::Int),
                     "fn",

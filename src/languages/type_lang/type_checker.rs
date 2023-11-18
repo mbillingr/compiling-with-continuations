@@ -95,6 +95,26 @@ impl Checker {
                 }
             }
 
+            Expr::Cons2(cons) => {
+                let enum_t = self.teval(&cons.0, tenv);
+                let variant = &cons.1;
+                match enum_t {
+                    Type::Enum(enum_) => {
+                        let var = enum_.variants.get(variant).ok_or_else(|| {
+                            format!("Unknown variant: {} {variant}", enum_.template.get_name())
+                        })?;
+
+                        let t = match var.as_slice() {
+                            [] => Type::Enum(enum_),
+                            [x] => Type::func(x.clone(), Type::Enum(enum_)),
+                            _ => panic!("Multiple enum variant values are not supported"),
+                        };
+                        Ok(Expr::annotate(t, Expr::cons2(cons.0.clone(), &cons.1)))
+                    }
+                    t => panic!("Not an enum - {:?} is a {t:?}", cons.0),
+                }
+            }
+
             Expr::Decons(de) => {
                 let (value, variant, vars, matches, mismatch) = &**de;
 
@@ -268,6 +288,8 @@ impl Checker {
                     .collect::<Result<Vec<_>, _>>()?,
             )),
 
+            Expr::Cons2(_) => Ok(expr.clone()),
+
             Expr::Decons(deco) => Ok(Expr::decons(
                 self.resolve_expr(&deco.0)?,
                 &deco.1,
@@ -425,11 +447,11 @@ impl Checker {
     }
 
     fn teval(&mut self, tx: &TyExpr, tenv: &HashMap<String, Type>) -> Type {
-        match tx {
+        let t = match tx {
             TyExpr::Int => Type::Int,
             TyExpr::Real => Type::Real,
             TyExpr::String => Type::String,
-            TyExpr::Var(v) => tenv
+            TyExpr::Named(v) => tenv
                 .get(v)
                 .cloned()
                 .unwrap_or_else(|| panic!("Unknown {v}")),
@@ -437,17 +459,20 @@ impl Checker {
                 self.teval(&sig.0, tenv),
                 self.teval(&sig.1, tenv),
             ))),
-            TyExpr::Construct(tys) => match tys.as_slice() {
-                [] => panic!("invalid type construction"),
-                [t0, ts @ ..] => {
-                    if let Type::Generic(tc) = self.teval(t0, tenv) {
-                        let args = ts.iter().map(|t| self.teval(t, tenv)).collect();
-                        tc.instantiate_with(args, self, tenv)
-                    } else {
-                        panic!("Not a typ constructor: {t0:?}")
-                    }
+            TyExpr::Construct(con) => match tenv.get(&con.0) {
+                None => panic!("Unknown {}", con.0),
+                Some(Type::Generic(tc)) => {
+                    let args = con.1.iter().map(|t| self.teval(t, tenv)).collect();
+                    tc.instantiate_with(args, self, tenv)
+                }
+                Some(t) => {
+                    panic!("Not a type constructor: {t:?}")
                 }
             },
+        };
+        match t {
+            Type::Generic(g) => g.instantiate_fresh(self, tenv),
+            _ => t,
         }
     }
 }
@@ -663,8 +688,8 @@ mod tests {
             [Def::inferred_func(
                 Type::Generic(Rc::new(GenericType::GenericFn {
                     tvars: vec!["T".into()],
-                    ptype: TyExpr::Var("T".into()),
-                    rtype: TyExpr::Var("T".into()),
+                    ptype: TyExpr::Named("T".into()),
+                    rtype: TyExpr::Named("T".into()),
                 })),
                 "id",
                 "x",

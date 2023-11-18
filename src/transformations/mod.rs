@@ -33,6 +33,12 @@ pub struct GensymContext {
     sym_delim: String,
 }
 
+impl Default for GensymContext {
+    fn default() -> Self {
+        Self::new("__")
+    }
+}
+
 impl GensymContext {
     pub fn new(sym_delim: impl ToString) -> Self {
         GensymContext {

@@ -42,6 +42,11 @@ impl Expr {
                 .collect::<Result<Vec<_>, _>>()
                 .map(|args| Expr::cons(enum_, variant, args)),
 
+            List(Ref([enum_, Symbol(Ref(".")), Symbol(Ref(variant))])) => {
+                let etx = TyExpr::from_sexpr(enum_)?;
+                Ok(Expr::cons2(etx, variant))
+            }
+
             List(Ref(
                 [Symbol(Ref("deconstruct")), val, List(Ref([List(Ref([Symbol(Ref(variant)), vars @ ..])), matches])), List(Ref([Symbol(Ref("else")), mismatch]))],
             )) => parse_symbol_list(vars).and_then(|vars| {
@@ -262,9 +267,13 @@ impl TyExpr {
             TyExpr::Int => S::symbol("Int"),
             TyExpr::Real => S::symbol("Real"),
             TyExpr::String => S::symbol("String"),
-            TyExpr::Var(v) => S::Symbol(v.clone().into()),
+            TyExpr::Named(v) => S::Symbol(v.clone().into()),
             TyExpr::Fn(f) => S::list(vec![f.0.to_sexpr(), S::symbol("->"), f.1.to_sexpr()]),
-            TyExpr::Construct(txs) => S::list(txs.iter().map(Self::to_sexpr).collect()),
+            TyExpr::Construct(txs) => S::list(
+                once(S::Symbol(txs.0.clone().into()))
+                    .chain(txs.1.iter().map(Self::to_sexpr))
+                    .collect(),
+            ),
         }
     }
 
@@ -273,14 +282,15 @@ impl TyExpr {
             S::Symbol(Ref("Int")) => Ok(TyExpr::Int),
             S::Symbol(Ref("Real")) => Ok(TyExpr::Real),
             S::Symbol(Ref("String")) => Ok(TyExpr::String),
-            S::Symbol(Ref(v)) => Ok(TyExpr::Var(v.to_string())),
+            S::Symbol(Ref(v)) => Ok(TyExpr::Named(v.to_string())),
             S::List(Ref([f, S::Symbol(Ref("->")), a])) => {
                 Ok(TyExpr::func(Self::from_sexpr(f)?, Self::from_sexpr(a)?))
             }
-            S::List(Ref(txs)) => txs
+            S::List(Ref([S::Symbol(Ref(t0)), txs @ ..])) => txs
                 .iter()
                 .map(Self::from_sexpr)
                 .collect::<Result<Vec<_>, _>>()
+                .map(|targs| (t0.to_string(), targs))
                 .map(Rc::new)
                 .map(TyExpr::Construct),
             _ => Err(Error::Syntax(s.clone())),

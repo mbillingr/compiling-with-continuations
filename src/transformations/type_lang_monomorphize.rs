@@ -2,16 +2,17 @@ use crate::languages::type_lang::ast::{Def, Expr, Type};
 use crate::transformations::GensymContext;
 use std::sync::Arc;
 
+#[derive(Default)]
 pub struct Context {
     function_realizations: Vec<(String, Option<Vec<(String, Type)>>)>,
     gs: Arc<GensymContext>,
 }
 
 impl Context {
-    pub fn new() -> Self {
+    pub fn new(gs: Arc<GensymContext>) -> Self {
         Context {
             function_realizations: Default::default(),
-            gs: Arc::new(GensymContext::new("__")),
+            gs,
         }
     }
 
@@ -38,6 +39,7 @@ impl Context {
                         .collect::<Vec<_>>(),
                 )
             }
+            Expr::Cons2(_) => expr.clone(),
             Expr::Decons(dec) => {
                 let (val, variant, vars, matches, mismatch) = &**dec;
                 Expr::decons(
@@ -193,7 +195,7 @@ mod tests {
             ),
         );
 
-        assert_eq!(Context::new().monomporphize(&x), y);
+        assert_eq!(Context::default().monomporphize(&x), y);
     }
 
     #[test]
@@ -210,7 +212,7 @@ mod tests {
 
         let y = Expr::defs([], 0);
 
-        assert_eq!(Context::new().monomporphize(&x), y);
+        assert_eq!(Context::default().monomporphize(&x), y);
     }
 
     #[test]
@@ -235,7 +237,7 @@ mod tests {
             Expr::annotate(Type::func(Type::Int, Type::Int), "fn__0"),
         );
 
-        assert_eq!(Context::new().monomporphize(&x), y);
+        assert_eq!(Context::default().monomporphize(&x), y);
     }
 
     #[test]
@@ -266,7 +268,7 @@ mod tests {
             ]),
         );
 
-        assert_eq!(Context::new().monomporphize(&x), y);
+        assert_eq!(Context::default().monomporphize(&x), y);
     }
 
     #[test]
@@ -286,7 +288,7 @@ mod tests {
             Expr::lambda("f", Expr::annotate(Type::func(Type::Int, Type::Int), "f")),
         );
 
-        assert_eq!(Context::new().monomporphize(&x), y);
+        assert_eq!(Context::default().monomporphize(&x), y);
     }
 
     #[test]
@@ -311,7 +313,7 @@ mod tests {
 
         let y = Expr::defs([], Expr::defs([], 0));
 
-        assert_eq!(Context::new().monomporphize(&x), y);
+        assert_eq!(Context::default().monomporphize(&x), y);
     }
 
     #[test]
@@ -347,7 +349,7 @@ mod tests {
             ),
         );
 
-        assert_eq!(Context::new().monomporphize(&x), y);
+        assert_eq!(Context::default().monomporphize(&x), y);
     }
 
     #[test]
@@ -388,6 +390,6 @@ mod tests {
             ),
         );
 
-        assert_eq!(Context::new().monomporphize(&x), y);
+        assert_eq!(Context::default().monomporphize(&x), y);
     }
 }

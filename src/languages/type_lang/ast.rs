@@ -28,6 +28,9 @@ pub enum Expr {
     /// Enum variant construction
     Cons(Rc<(String, String, Vec<Self>)>),
 
+    /// Enum variant construction
+    Cons2(Rc<(TyExpr, String)>),
+
     /// Enum deconstruction (will be replaced by pattern matching)
     Decons(Rc<(Self, String, Vec<String>, Self, Self)>),
 
@@ -53,9 +56,9 @@ pub enum TyExpr {
     Int,
     Real,
     String,
-    Var(String),
+    Named(String),
     Fn(Rc<(TyExpr, TyExpr)>),
-    Construct(Rc<Vec<TyExpr>>),
+    Construct(Rc<(String, Vec<TyExpr>)>),
 }
 
 /// The AST of an anonymous function
@@ -138,6 +141,10 @@ impl Expr {
             variant.to_string(),
             args.build(),
         )))
+    }
+
+    pub fn cons2(etx: impl Into<TyExpr>, variant: impl ToString) -> Self {
+        Expr::Cons2(Rc::new((etx.into(), variant.to_string())))
     }
 
     pub fn decons(
@@ -283,19 +290,19 @@ impl From<f64> for Expr {
 
 impl From<&str> for TyExpr {
     fn from(value: &str) -> Self {
-        TyExpr::Var(value.to_string())
+        TyExpr::Named(value.to_string())
     }
 }
 
-impl<A: Into<TyExpr>> From<(A,)> for TyExpr {
+impl<A: Into<String>> From<(A,)> for TyExpr {
     fn from((a,): (A,)) -> Self {
-        TyExpr::Construct(Rc::new(vec![a.into()]))
+        TyExpr::Construct(Rc::new((a.into(), vec![])))
     }
 }
 
-impl<A: Into<TyExpr>, B: Into<TyExpr>> From<(A, B)> for TyExpr {
+impl<A: Into<String>, B: Into<TyExpr>> From<(A, B)> for TyExpr {
     fn from((a, b): (A, B)) -> Self {
-        TyExpr::Construct(Rc::new(vec![a.into(), b.into()]))
+        TyExpr::Construct(Rc::new((a.into(), vec![b.into()])))
     }
 }
 

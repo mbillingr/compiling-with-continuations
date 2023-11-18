@@ -1,8 +1,10 @@
 use crate::core::reference::Ref;
+use crate::transformations::GensymContext;
 use clap::{Parser, Subcommand};
 use std::fs::File;
 use std::io::{stdin, stdout, Read, Write};
 use std::path::Path;
+use std::sync::Arc;
 
 pub mod core;
 pub mod languages;
@@ -54,7 +56,7 @@ fn main() {
 fn run_typelang(source_file: Option<&Path>) {
     use crate::languages::mini_lambda::interpreter;
     use crate::languages::type_lang::type_checker::Checker;
-    use crate::transformations::type_lang_to_mini_lambda;
+    use crate::transformations::{type_lang_monomorphize, type_lang_to_mini_lambda};
     type TExpr = crate::languages::type_lang::ast::Expr;
 
     let mut src = String::new();
@@ -63,9 +65,12 @@ fn run_typelang(source_file: Option<&Path>) {
         Some(path) => File::open(path).unwrap().read_to_string(&mut src).unwrap(),
     };
 
+    let gs = Arc::new(GensymContext::default());
+
     let expr_in = TExpr::from_str(&src).unwrap();
     let checked = Checker::check_program(&expr_in).unwrap();
-    let mini_la = type_lang_to_mini_lambda::Context::new().convert(&checked);
+    let mono = type_lang_monomorphize::Context::new(gs.clone()).monomporphize(&checked);
+    let mini_la = type_lang_to_mini_lambda::Context::new(gs.clone()).convert(&mono);
     println!("{}", mini_la);
     unsafe { interpreter::exec(&mini_la, &mut stdout(), &mut stdin().lock()) }
 }

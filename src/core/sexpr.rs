@@ -37,8 +37,8 @@ impl SexprFactory for SF {
         S::List(Ref::array(x))
     }
 
-    fn pair(&mut self, _: Self::Sexpr, _: Self::Sexpr) -> Self::Sexpr {
-        unimplemented!()
+    fn pair(&mut self, car: Self::Sexpr, cdr: Self::Sexpr) -> Self::Sexpr {
+        S::list(vec![car, S::symbol("."), cdr])
     }
 }
 
