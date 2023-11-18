@@ -1,7 +1,7 @@
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
-use crate::languages::type_lang::ast::{Def, EnumType, EnumVariantPattern, Type};
+use crate::languages::type_lang::ast::{Def, EnumMatchArm, EnumType, EnumVariantPattern, Type};
 use crate::transformations::GensymContext;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -57,42 +57,6 @@ impl Context {
 
             TExp::Cons(_) | TExp::Add(_) => panic!("Annotation required: {expr:?}"),
 
-            TExp::Decons(deco) => {
-                let (val, variant, vars, matches, mismatch) = &**deco;
-                let en = match val.get_type() {
-                    Type::Enum(en) => en,
-                    _ => panic!("Expected enum: {val:?}"),
-                };
-                let otherwise = self.convert(mismatch);
-                let conreps: Vec<_> = self.enum_all_reps(en).collect();
-                let target_rep = self.enum_variant_repr(en, variant);
-                match target_rep {
-                    ConRep::Constant(_) => {
-                        let arm = vec![(Con::Data(target_rep), self.convert(matches))];
-                        LExp::switch(self.convert(val), conreps, arm, Some(otherwise))
-                    }
-                    _ => {
-                        let switch_val: Ref<str> = self.gs.gensym("switch_val");
-                        let mut arm = self.convert(matches);
-                        let inner = LExp::decon(target_rep, switch_val);
-                        if vars.len() == 1 {
-                            arm = LExp::bind(&vars[0], inner.clone(), arm)
-                        } else {
-                            for (i, v) in vars.iter().enumerate() {
-                                arm = LExp::bind(v, LExp::select(i as isize, inner.clone()), arm)
-                            }
-                        }
-                        let the_switch = LExp::switch(
-                            switch_val,
-                            conreps,
-                            vec![(Con::Data(target_rep), arm)],
-                            Some(otherwise),
-                        );
-                        LExp::bind(switch_val, self.convert(val), the_switch)
-                    }
-                }
-            }
-
             TExp::MatchEnum(mat) => {
                 let (val, arms) = &**mat;
                 let en = match val.get_type() {
@@ -102,11 +66,11 @@ impl Context {
                 let switch_val: Ref<str> = self.gs.gensym("switch_val");
 
                 let mut arms_ = vec![];
-                for (pat, branch) in arms {
-                    match pat {
+                for arm in arms {
+                    match &arm.pattern {
                         EnumVariantPattern::Constant(name) => {
                             let variant_rep = self.enum_variant_repr(en, name);
-                            arms_.push((Con::Data(variant_rep), self.convert(branch)))
+                            arms_.push((Con::Data(variant_rep), self.convert(&arm.branch)))
                         }
                         EnumVariantPattern::Constructor(name, var) => {
                             let variant_rep = self.enum_variant_repr(en, name);
@@ -115,7 +79,7 @@ impl Context {
                                 LExp::bind(
                                     var,
                                     LExp::decon(variant_rep, switch_val),
-                                    self.convert(branch),
+                                    self.convert(&arm.branch),
                                 ),
                             ))
                         }
@@ -135,20 +99,23 @@ impl Context {
                     let mut arms = vec![];
                     for (vname, tys) in &e.variants {
                         match tys.as_slice() {
-                            [] => arms.push((
-                                EnumVariantPattern::Constant(vname.clone()),
-                                TExp::show(TExp::string(vname)),
-                            )),
-                            [tx] => arms.push((
-                                EnumVariantPattern::Constructor(vname.clone(), "x".to_string()),
-                                TExp::sequence(vec![
+                            [] => arms.push(EnumMatchArm {
+                                pattern: EnumVariantPattern::Constant(vname.clone()),
+                                branch: TExp::show(TExp::string(vname)),
+                            }),
+                            [tx] => arms.push(EnumMatchArm {
+                                pattern: EnumVariantPattern::Constructor(
+                                    vname.clone(),
+                                    "x".to_string(),
+                                ),
+                                branch: TExp::sequence(vec![
                                     TExp::show(TExp::string("(")),
                                     TExp::show(TExp::string(vname)),
                                     TExp::show(TExp::string(" ")),
                                     TExp::show(TExp::annotate(tx.clone(), TExp::var("x"))),
                                     TExp::show(TExp::string(")")),
                                 ]),
-                            )),
+                            }),
                             _ => panic!("enum variants with more than one value not supported"),
                         }
                     }
@@ -450,17 +417,28 @@ mod tests {
             ],
         );
 
-        let x = TExp::decons(TExp::annotate(ety.clone(), "x"), "A", [] as [&str; 0], 1, 0);
+        let x = TExp::match_enum(
+            TExp::annotate(ety.clone(), "x"),
+            [("A", 1), ("B", 10), ("C", 100)],
+        );
 
-        let y = LExp::switch(
+        let y = LExp::bind(
+            "switch_val__0",
             "x",
-            vec![
-                ConRep::Constant(0),
-                ConRep::Constant(1),
-                ConRep::Constant(2),
-            ],
-            vec![(Con::Data(ConRep::Constant(0)), LExp::Int(1))],
-            Some(0),
+            LExp::switch(
+                "switch_val__0",
+                vec![
+                    ConRep::Constant(0),
+                    ConRep::Constant(1),
+                    ConRep::Constant(2),
+                ],
+                vec![
+                    (Con::Data(ConRep::Constant(0)), LExp::Int(1)),
+                    (Con::Data(ConRep::Constant(1)), LExp::Int(10)),
+                    (Con::Data(ConRep::Constant(2)), LExp::Int(100)),
+                ],
+                None::<LExp>,
+            ),
         );
 
         assert_eq!(ctx.convert(&x), y);
@@ -471,53 +449,28 @@ mod tests {
         let mut ctx = Context::default();
         let ety = Type::enum_(
             Rc::new(GenericType::GenericEnum(EnumDef {
-                tname: "ABC".to_string(),
+                tname: "AB".to_string(),
                 tvars: vec![],
                 variants: vec![].into(),
             })),
             [
                 ("A".to_string(), vec![]),
                 ("B".to_string(), vec![Type::Int]),
-                ("C".to_string(), vec![Type::Int, Type::Int]),
             ],
         );
 
-        let x = TExp::decons(TExp::annotate(ety.clone(), "x"), "B", ["y"], "y", 0);
+        let x = TExp::match_enum(TExp::annotate(ety.clone(), "x"), [(("B", "y"), "y")]);
         let y = LExp::bind(
             "switch_val__0",
             "x",
             LExp::switch(
                 "switch_val__0",
-                vec![ConRep::Constant(0), ConRep::Tagged(0), ConRep::Tagged(1)],
+                vec![ConRep::Constant(0), ConRep::Tagged(0)],
                 vec![(
                     Con::Data(ConRep::Tagged(0)),
                     LExp::bind("y", LExp::decon(ConRep::Tagged(0), "switch_val__0"), "y"),
                 )],
-                Some(0),
-            ),
-        );
-        assert_eq!(ctx.convert(&x), y);
-
-        let x = TExp::decons(TExp::annotate(ety.clone(), "x"), "C", ["y", "z"], 1, 0);
-        let y = LExp::bind(
-            "switch_val__1",
-            "x",
-            LExp::switch(
-                "switch_val__1",
-                vec![ConRep::Constant(0), ConRep::Tagged(0), ConRep::Tagged(1)],
-                vec![(
-                    Con::Data(ConRep::Tagged(1)),
-                    LExp::bind(
-                        "z",
-                        LExp::select(1, LExp::decon(ConRep::Tagged(1), "switch_val__1")),
-                        LExp::bind(
-                            "y",
-                            LExp::select(0, LExp::decon(ConRep::Tagged(1), "switch_val__1")),
-                            1,
-                        ),
-                    ),
-                )],
-                Some(0),
+                None::<LExp>,
             ),
         );
         assert_eq!(ctx.convert(&x), y);
@@ -535,7 +488,7 @@ mod tests {
             [("X".to_string(), vec![Type::Int])],
         );
 
-        let x = TExp::decons(TExp::annotate(ety.clone(), "x"), "X", ["y"], "y", 0);
+        let x = TExp::match_enum(TExp::annotate(ety.clone(), "x"), [(("X", "y"), "y")]);
         let y = LExp::bind(
             "switch_val__0",
             "x",
@@ -546,7 +499,7 @@ mod tests {
                     Con::Data(ConRep::Transparent),
                     LExp::bind("y", LExp::decon(ConRep::Transparent, "switch_val__0"), "y"),
                 )],
-                Some(0),
+                None::<LExp>,
             ),
         );
         assert_eq!(ctx.convert(&x), y);

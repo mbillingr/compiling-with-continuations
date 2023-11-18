@@ -31,11 +31,8 @@ pub enum Expr {
     /// Enum variant construction
     Cons2(Rc<(TyExpr, String)>),
 
-    /// Enum deconstruction (will be replaced by pattern matching)
-    Decons(Rc<(Self, String, Vec<String>, Self, Self)>),
-
     /// Enum pattern matching (will be replaced by more general pattern matching)
-    MatchEnum(Rc<(Self, Vec<(EnumVariantPattern, Self)>)>),
+    MatchEnum(Rc<(Self, Vec<EnumMatchArm>)>),
 
     /// Anonymous function
     Lambda(Rc<Lambda<Self>>),
@@ -118,6 +115,12 @@ pub enum EnumVariant {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct EnumMatchArm {
+    pub pattern: EnumVariantPattern,
+    pub branch: Expr,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum EnumVariantPattern {
     Constant(String),
     Constructor(String, String),
@@ -156,26 +159,7 @@ impl Expr {
         Expr::Cons2(Rc::new((etx.into(), variant.to_string())))
     }
 
-    pub fn decons(
-        value: impl Into<Expr>,
-        variant: impl ToString,
-        vars: impl ListBuilder<String>,
-        matches: impl Into<Expr>,
-        mismatch: impl Into<Expr>,
-    ) -> Self {
-        Expr::Decons(Rc::new((
-            value.into(),
-            variant.to_string(),
-            vars.build(),
-            matches.into(),
-            mismatch.into(),
-        )))
-    }
-
-    pub fn match_enum(
-        value: impl Into<Expr>,
-        arms: impl ListBuilder<(EnumVariantPattern, Expr)>,
-    ) -> Self {
+    pub fn match_enum(value: impl Into<Expr>, arms: impl ListBuilder<EnumMatchArm>) -> Self {
         Expr::MatchEnum(Rc::new((value.into(), arms.build())))
     }
 
@@ -294,6 +278,16 @@ impl TyExpr {
     }
 }
 
+impl EnumVariantPattern {
+    pub fn constant(name: impl ToString) -> Self {
+        EnumVariantPattern::Constant(name.to_string())
+    }
+
+    pub fn constructor(name: impl ToString, var: impl ToString) -> Self {
+        EnumVariantPattern::Constructor(name.to_string(), var.to_string())
+    }
+}
+
 impl From<&str> for Expr {
     fn from(value: &str) -> Self {
         Expr::Ref(value.to_string())
@@ -339,6 +333,27 @@ impl From<&str> for EnumVariant {
 impl<T: Into<TyExpr>> From<(&str, T)> for EnumVariant {
     fn from((name, ty): (&str, T)) -> Self {
         EnumVariant::Constructor(name.into(), ty.into())
+    }
+}
+
+impl From<&str> for EnumVariantPattern {
+    fn from(name: &str) -> Self {
+        EnumVariantPattern::Constant(name.to_string())
+    }
+}
+
+impl<N: ToString, V: ToString> From<(N, V)> for EnumVariantPattern {
+    fn from((name, var): (N, V)) -> Self {
+        EnumVariantPattern::Constructor(name.to_string(), var.to_string())
+    }
+}
+
+impl<P: Into<EnumVariantPattern>, B: Into<Expr>> From<(P, B)> for EnumMatchArm {
+    fn from((pattern, branch): (P, B)) -> Self {
+        EnumMatchArm {
+            pattern: pattern.into(),
+            branch: branch.into(),
+        }
     }
 }
 

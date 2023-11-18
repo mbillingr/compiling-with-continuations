@@ -1,4 +1,4 @@
-use crate::languages::type_lang::ast::{Def, Expr, Type};
+use crate::languages::type_lang::ast::{Def, EnumMatchArm, Expr, Type};
 use crate::transformations::GensymContext;
 use std::sync::Arc;
 
@@ -40,21 +40,14 @@ impl Context {
                 )
             }
             Expr::Cons2(_) => expr.clone(),
-            Expr::Decons(dec) => {
-                let (val, variant, vars, matches, mismatch) = &**dec;
-                Expr::decons(
-                    self.monomporphize(val),
-                    variant,
-                    vars.clone(),
-                    self.monomporphize(matches),
-                    self.monomporphize(mismatch),
-                )
-            }
             Expr::MatchEnum(mat) => Expr::match_enum(
                 self.monomporphize(&mat.0),
                 mat.1
                     .iter()
-                    .map(|(pat, branch)| (pat.clone(), self.monomporphize(branch)))
+                    .map(|arm| EnumMatchArm {
+                        pattern: arm.pattern.clone(),
+                        branch: self.monomporphize(&arm.branch),
+                    })
                     .collect::<Vec<_>>(),
             ),
             Expr::Lambda(lam) => {

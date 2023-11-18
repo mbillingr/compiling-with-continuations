@@ -1,5 +1,5 @@
 use crate::languages::type_lang::ast::{
-    Def, EnumDef, EnumType, EnumVariant, EnumVariantPattern, Expr, TyExpr, Type,
+    Def, EnumDef, EnumMatchArm, EnumType, EnumVariant, EnumVariantPattern, Expr, TyExpr, Type,
 };
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -117,42 +117,6 @@ impl Checker {
                 }
             }
 
-            Expr::Decons(de) => {
-                let (value, variant, vars, matches, mismatch) = &**de;
-
-                let value_ = self.infer(value, env, tenv)?;
-                let enum_ = &**match value_.get_type() {
-                    Type::Enum(enum_) => enum_,
-                    _ => return Err(format!("Not an enum: {value_:?}")),
-                };
-
-                let constructor = enum_.variants.get(variant).ok_or_else(|| {
-                    format!("Unknown variant: {} {variant}", enum_.template.get_name())
-                })?;
-                if vars.len() != constructor.len() {
-                    return Err(format!(
-                        "Wrong number of bindings: {} {variant}",
-                        enum_.template.get_name()
-                    ));
-                }
-
-                let mut match_env = env.clone();
-                match_env.extend(vars.iter().cloned().zip(constructor.iter().cloned()));
-
-                let tma = self.infer(matches, &match_env, tenv)?;
-                let tmi = self.infer(mismatch, env, tenv)?;
-
-                // not sure if it's ok like this. maybe need to return a fresh typevar that's unified with both.
-                let (t1, t2) = (tma.get_type(), tmi.get_type());
-                self.unify(&t1, &t2)?;
-                let t = t1.clone();
-
-                Ok(Expr::annotate(
-                    t,
-                    Expr::decons(value_, variant, vars.to_vec(), tma, tmi),
-                ))
-            }
-
             Expr::MatchEnum(mat) => {
                 let (val, arms) = &**mat;
 
@@ -165,8 +129,8 @@ impl Checker {
                 let ty = self.fresh();
 
                 let mut arms_ = vec![];
-                for (pat, branch) in arms {
-                    match pat {
+                for arm in arms {
+                    match &arm.pattern {
                         EnumVariantPattern::Constant(name) => {
                             let constructor = enum_.variants.get(name).ok_or_else(|| {
                                 format!("Unknown variant: {} {name}", enum_.template.get_name())
@@ -179,9 +143,12 @@ impl Checker {
                                 ));
                             }
 
-                            let branch_ = self.infer(branch, env, tenv)?;
+                            let branch_ = self.infer(&arm.branch, env, tenv)?;
                             self.unify(&ty, branch_.get_type())?;
-                            arms_.push((pat.clone(), branch_));
+                            arms_.push(EnumMatchArm {
+                                pattern: arm.pattern.clone(),
+                                branch: branch_,
+                            });
                         }
 
                         EnumVariantPattern::Constructor(name, var) => {
@@ -199,9 +166,12 @@ impl Checker {
                             let mut branch_env = env.clone();
                             branch_env.insert(var.clone(), constructor[0].clone());
 
-                            let branch_ = self.infer(branch, &branch_env, tenv)?;
+                            let branch_ = self.infer(&arm.branch, &branch_env, tenv)?;
                             self.unify(&ty, branch_.get_type())?;
-                            arms_.push((pat.clone(), branch_));
+                            arms_.push(EnumMatchArm {
+                                pattern: arm.pattern.clone(),
+                                branch: branch_,
+                            });
                         }
                     }
                 }
@@ -348,19 +318,14 @@ impl Checker {
 
             Expr::Cons2(_) => Ok(expr.clone()),
 
-            Expr::Decons(deco) => Ok(Expr::decons(
-                self.resolve_expr(&deco.0)?,
-                &deco.1,
-                deco.2.to_vec(),
-                self.resolve_expr(&deco.3)?,
-                self.resolve_expr(&deco.4)?,
-            )),
-
             Expr::MatchEnum(mat) => Ok(Expr::match_enum(
                 self.resolve_expr(&mat.0)?,
                 mat.1
                     .iter()
-                    .map(|(pat, branch)| self.resolve_expr(branch).map(|br| (pat.clone(), br)))
+                    .map(|arm| {
+                        self.resolve_expr(&arm.branch)
+                            .map(|br| (arm.pattern.clone(), br).into())
+                    })
                     .collect::<Result<Vec<_>, _>>()?,
             )),
 
@@ -925,7 +890,13 @@ mod tests {
     fn check_enum_deconstruction() {
         let x = Expr::defs(
             [Def::enum_::<&str>("Foo", [], ("A", ("B", TyExpr::Int), ()))],
-            Expr::decons(Expr::cons("Foo", "B", [1]), "B", ["x"], "x", 0),
+            Expr::match_enum(
+                Expr::cons("Foo", "B", [1]),
+                [(
+                    EnumVariantPattern::Constructor("B".to_string(), "x".to_string()),
+                    Expr::var("x"),
+                )],
+            ),
         );
         assert!(Checker::check_program(&x).is_ok());
     }

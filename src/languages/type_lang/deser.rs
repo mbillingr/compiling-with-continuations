@@ -1,7 +1,7 @@
 use crate::core::reference::Ref;
 use crate::core::sexpr::{S, SF};
 use crate::languages::type_lang::ast::{
-    Def, EnumDef, EnumVariant, EnumVariantPattern, Expr, FnDef, TyExpr,
+    Def, EnumDef, EnumMatchArm, EnumVariant, EnumVariantPattern, Expr, FnDef, TyExpr,
 };
 use sexpr_parser::Parser;
 use std::iter::once;
@@ -49,18 +49,6 @@ impl Expr {
                 Ok(Expr::cons2(etx, variant))
             }
 
-            List(Ref(
-                [Symbol(Ref("deconstruct")), val, List(Ref([List(Ref([Symbol(Ref(variant)), vars @ ..])), matches])), List(Ref([Symbol(Ref("else")), mismatch]))],
-            )) => parse_symbol_list(vars).and_then(|vars| {
-                Ok(Expr::decons(
-                    Self::from_sexpr(val)?,
-                    variant,
-                    vars,
-                    Self::from_sexpr(matches)?,
-                    Self::from_sexpr(mismatch)?,
-                ))
-            }),
-
             List(Ref([Symbol(Ref("match-enum")), val, arms @ ..])) => arms
                 .iter()
                 .map(|arm| match arm {
@@ -74,6 +62,7 @@ impl Expr {
                     )),
                     _ => Err(Error::Syntax(arm.clone())),
                 })
+                .map(|arm| arm.map(|(pattern, branch)| EnumMatchArm { pattern, branch }))
                 .collect::<Result<Vec<_>, _>>()
                 .and_then(|arms| Ok(Self::match_enum(Self::from_sexpr(val)?, arms))),
 
@@ -128,19 +117,18 @@ impl Expr {
                 .collect(),
             ),
 
-            Expr::Decons(deco) => S::list(vec![
-                S::symbol("deconstruct"),
-                deco.0.to_sexpr(),
-                S::list(vec![
-                    S::list(
-                        once(S::Symbol(deco.1.clone().into()))
-                            .chain(deco.2.iter().map(|v| S::Symbol(v.clone().into())))
-                            .collect(),
-                    ),
-                    deco.3.to_sexpr(),
-                ]),
-                S::list(vec![S::symbol("else"), deco.4.to_sexpr()]),
-            ]),
+            Expr::MatchEnum(mat) => S::list(
+                vec![S::symbol("match-enum"), mat.0.to_sexpr()]
+                    .into_iter()
+                    .chain(mat.1.iter().map(|arm| {
+                        S::list(vec![
+                            arm.pattern.to_sexpr(),
+                            S::symbol("=>"),
+                            arm.branch.to_sexpr(),
+                        ])
+                    }))
+                    .collect(),
+            ),
 
             Expr::Lambda(lam) => S::list(vec![
                 S::symbol("lambda"),
@@ -316,6 +304,18 @@ impl TyExpr {
     }
 }
 
+impl EnumVariantPattern {
+    pub fn to_sexpr(&self) -> S {
+        match self {
+            EnumVariantPattern::Constant(name) => S::Symbol(name.clone().into()),
+            EnumVariantPattern::Constructor(name, var) => S::list(vec![
+                S::Symbol(name.clone().into()),
+                S::Symbol(var.clone().into()),
+            ]),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Error<'i> {
     ParseError(sexpr_parser::Error<'i>),
@@ -383,9 +383,18 @@ mod tests {
     }
 
     #[test]
-    fn test_decons() {
-        let repr = "(deconstruct foo ((Bar x) x) (else 42))";
-        let expr = Expr::decons("foo", "Bar", ["x"], "x", 42);
+    fn test_match_enum() {
+        let repr = "(match-enum foo ((Bar x) => x) (Baz => 42))";
+        let expr = Expr::match_enum(
+            "foo",
+            [
+                (
+                    EnumVariantPattern::Constructor("Bar".into(), "x".into()),
+                    Expr::var("x"),
+                ),
+                (EnumVariantPattern::Constant("Baz".into()), Expr::int(42)),
+            ],
+        );
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }
