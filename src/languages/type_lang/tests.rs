@@ -10,7 +10,7 @@ macro_rules! make_testsuite_for_type_lang {
         }
 
         #[test]
-        fn enums() {
+        fn enum_instantiation() {
             assert_eq!(
                 $run("(define ((enum (Foo) A B)) (show (Foo . A)))", ""),
                 "A"
@@ -34,6 +34,70 @@ macro_rules! make_testsuite_for_type_lang {
                     ""
                 ),
                 "(B ...)"
+            );
+        }
+
+        #[test]
+        fn enum_destructuring_const() {
+            assert_eq!(
+                $run("(define ((enum (Foo) A B))
+                        (show 
+                          (match-enum (Foo . A)
+                            (A => 42)
+                            (B => 123))))", ""),
+                "42"
+            );
+
+            assert_eq!(
+                $run("(define ((enum (Foo) A B))
+                        (show 
+                          (match-enum (Foo . B)
+                            (A => 42)
+                            (B => 123))))", ""),
+                "123"
+            );
+        }
+
+        #[test]
+        fn enum_destructuring_binding() {
+            assert_eq!(
+                $run("(define ((enum (Foo) A (B Int) C))
+                        (show 
+                          (match-enum ((Foo . B) 951)
+                            (A => 42)
+                            ((B x) => x)
+                            (C => 123))))", ""),
+                "951"
+            );
+
+            assert_eq!(
+                $run("(define ((enum (Foo T) A (B T) C))
+                        (show 
+                          (match-enum ((Foo . B) 951)
+                            (A => 42)
+                            ((B x) => x)
+                            (C => 123))))", ""),
+                "951"
+            );
+
+            assert_eq!(
+                $run("(define ((enum (Foo T) A (B T) C))
+                        (show 
+                          (match-enum ((Foo . B) 951)
+                            (A => 42)
+                            ((B x) => x)
+                            (C => 123))))", ""),
+                "951"
+            );
+
+            assert_eq!(
+                $run("(define ((enum (Foo T) A (B T) C))
+                        (show 
+                          (match-enum ((Foo . B) 3.4)
+                            (A => 1.2)
+                            ((B x) => x)
+                            (C => 5.6))))", ""),
+                "3.4"
             );
         }
     };

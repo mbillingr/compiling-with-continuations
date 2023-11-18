@@ -50,6 +50,13 @@ impl Context {
                     self.monomporphize(mismatch),
                 )
             }
+            Expr::MatchEnum(mat) => Expr::match_enum(
+                self.monomporphize(&mat.0),
+                mat.1
+                    .iter()
+                    .map(|(pat, branch)| (pat.clone(), self.monomporphize(branch)))
+                    .collect::<Vec<_>>(),
+            ),
             Expr::Lambda(lam) => {
                 self.push_nonfn_binding(lam.param.to_string());
                 let body_ = self.monomporphize(&lam.body);

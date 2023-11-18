@@ -34,6 +34,9 @@ pub enum Expr {
     /// Enum deconstruction (will be replaced by pattern matching)
     Decons(Rc<(Self, String, Vec<String>, Self, Self)>),
 
+    /// Enum pattern matching (will be replaced by more general pattern matching)
+    MatchEnum(Rc<(Self, Vec<(EnumVariantPattern, Self)>)>),
+
     /// Anonymous function
     Lambda(Rc<Lambda<Self>>),
 
@@ -114,6 +117,12 @@ pub enum EnumVariant {
     Constructor(String, TyExpr),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum EnumVariantPattern {
+    Constant(String),
+    Constructor(String, String),
+}
+
 impl Expr {
     pub fn int(x: impl Into<i64>) -> Self {
         Expr::Int(x.into())
@@ -161,6 +170,13 @@ impl Expr {
             matches.into(),
             mismatch.into(),
         )))
+    }
+
+    pub fn match_enum(
+        value: impl Into<Expr>,
+        arms: impl ListBuilder<(EnumVariantPattern, Expr)>,
+    ) -> Self {
+        Expr::MatchEnum(Rc::new((value.into(), arms.build())))
     }
 
     pub fn apply(f: impl Into<Expr>, a: impl Into<Expr>) -> Self {

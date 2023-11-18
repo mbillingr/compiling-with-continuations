@@ -1,7 +1,7 @@
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
-use crate::languages::type_lang::ast::{Def, EnumType, Type};
+use crate::languages::type_lang::ast::{Def, EnumType, EnumVariantPattern, Type};
 use crate::transformations::GensymContext;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -93,6 +93,40 @@ impl Context {
                 }
             }
 
+            TExp::MatchEnum(mat) => {
+                let (val, arms) = &**mat;
+                let en = match val.get_type() {
+                    Type::Enum(en) => en,
+                    _ => panic!("Expected enum: {val:?}"),
+                };
+                let switch_val: Ref<str> = self.gs.gensym("switch_val");
+
+                let mut arms_ = vec![];
+                for (pat, branch) in arms {
+                    match pat {
+                        EnumVariantPattern::Constant(name) => {
+                            let variant_rep = self.enum_variant_repr(en, name);
+                            arms_.push((Con::Data(variant_rep), self.convert(branch)))
+                        }
+                        EnumVariantPattern::Constructor(name, var) => {
+                            let variant_rep = self.enum_variant_repr(en, name);
+                            arms_.push((
+                                Con::Data(variant_rep),
+                                LExp::bind(
+                                    var,
+                                    LExp::decon(variant_rep, switch_val),
+                                    self.convert(branch),
+                                ),
+                            ))
+                        }
+                    }
+                }
+
+                let conreps: Vec<_> = self.enum_all_reps(en).collect();
+                let the_switch = LExp::switch(switch_val, conreps, arms_, None::<LExp>);
+                LExp::bind(switch_val, self.convert(val), the_switch)
+            }
+
             TExp::Show(x) => match x.get_type() {
                 Type::Int => LExp::apply(PrimOp::ShowInt, self.convert(x)),
                 Type::Real => LExp::apply(PrimOp::ShowReal, self.convert(x)),
@@ -172,6 +206,7 @@ impl Context {
                 (_, ex @ TExp::Ref(_)) => self.convert(ex),
                 (_, ex @ TExp::Apply(_)) => self.convert(ex),
                 (_, ex @ TExp::Lambda(_)) => self.convert(ex),
+                (_, ex @ TExp::MatchEnum(_)) => self.convert(ex),
                 _ => todo!("{expr:?}"),
             },
 

@@ -1,6 +1,8 @@
 use crate::core::reference::Ref;
 use crate::core::sexpr::{S, SF};
-use crate::languages::type_lang::ast::{Def, EnumDef, EnumVariant, Expr, FnDef, TyExpr};
+use crate::languages::type_lang::ast::{
+    Def, EnumDef, EnumVariant, EnumVariantPattern, Expr, FnDef, TyExpr,
+};
 use sexpr_parser::Parser;
 use std::iter::once;
 use std::rc::Rc;
@@ -58,6 +60,22 @@ impl Expr {
                     Self::from_sexpr(mismatch)?,
                 ))
             }),
+
+            List(Ref([Symbol(Ref("match-enum")), val, arms @ ..])) => arms
+                .iter()
+                .map(|arm| match arm {
+                    List(Ref([Symbol(v), Symbol(Ref("=>")), branch])) => Ok((
+                        EnumVariantPattern::Constant(v.to_string()),
+                        Self::from_sexpr(branch)?,
+                    )),
+                    List(Ref([List(Ref([Symbol(v), x])), Symbol(Ref("=>")), branch])) => Ok((
+                        EnumVariantPattern::Constructor(v.to_string(), x.to_string()),
+                        Self::from_sexpr(branch)?,
+                    )),
+                    _ => Err(Error::Syntax(arm.clone())),
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .and_then(|arms| Ok(Self::match_enum(Self::from_sexpr(val)?, arms))),
 
             List(Ref([Symbol(Ref("lambda")), Symbol(Ref(var)), body])) => {
                 Self::from_sexpr(body).map(|b| Expr::lambda(var, b))

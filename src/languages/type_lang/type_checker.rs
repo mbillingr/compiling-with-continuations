@@ -1,4 +1,6 @@
-use crate::languages::type_lang::ast::{Def, EnumDef, EnumType, EnumVariant, Expr, TyExpr, Type};
+use crate::languages::type_lang::ast::{
+    Def, EnumDef, EnumType, EnumVariant, EnumVariantPattern, Expr, TyExpr, Type,
+};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -151,6 +153,62 @@ impl Checker {
                 ))
             }
 
+            Expr::MatchEnum(mat) => {
+                let (val, arms) = &**mat;
+
+                let val_ = self.infer(val, env, tenv)?;
+                let enum_ = &*match self.resolve(val_.get_type()) {
+                    Type::Enum(enum_) => enum_,
+                    _ => return Err(format!("Not an enum: {val_:?}")),
+                };
+
+                let ty = self.fresh();
+
+                let mut arms_ = vec![];
+                for (pat, branch) in arms {
+                    match pat {
+                        EnumVariantPattern::Constant(name) => {
+                            let constructor = enum_.variants.get(name).ok_or_else(|| {
+                                format!("Unknown variant: {} {name}", enum_.template.get_name())
+                            })?;
+
+                            if constructor.len() > 0 {
+                                return Err(format!(
+                                    "Variant Pattern {} {name} must bind a value",
+                                    enum_.template.get_name()
+                                ));
+                            }
+
+                            let branch_ = self.infer(branch, env, tenv)?;
+                            self.unify(&ty, branch_.get_type())?;
+                            arms_.push((pat.clone(), branch_));
+                        }
+
+                        EnumVariantPattern::Constructor(name, var) => {
+                            let constructor = enum_.variants.get(name).ok_or_else(|| {
+                                format!("Unknown variant: {} {name}", enum_.template.get_name())
+                            })?;
+
+                            if constructor.len() != 1 {
+                                return Err(format!(
+                                    "Variant Pattern {} {name} cannot bind a value",
+                                    enum_.template.get_name()
+                                ));
+                            }
+
+                            let mut branch_env = env.clone();
+                            branch_env.insert(var.clone(), constructor[0].clone());
+
+                            let branch_ = self.infer(branch, &branch_env, tenv)?;
+                            self.unify(&ty, branch_.get_type())?;
+                            arms_.push((pat.clone(), branch_));
+                        }
+                    }
+                }
+
+                Ok(Expr::annotate(ty, Expr::match_enum(val_, arms_)))
+            }
+
             Expr::Apply(app) => {
                 let r_ = self.fresh();
                 let f_ = self.infer(&app.0, env, tenv)?;
@@ -296,6 +354,14 @@ impl Checker {
                 deco.2.to_vec(),
                 self.resolve_expr(&deco.3)?,
                 self.resolve_expr(&deco.4)?,
+            )),
+
+            Expr::MatchEnum(mat) => Ok(Expr::match_enum(
+                self.resolve_expr(&mat.0)?,
+                mat.1
+                    .iter()
+                    .map(|(pat, branch)| self.resolve_expr(branch).map(|br| (pat.clone(), br)))
+                    .collect::<Result<Vec<_>, _>>()?,
             )),
 
             Expr::Lambda(lam) => Ok(Expr::lambda(&lam.param, self.resolve_expr(&lam.body)?)),
