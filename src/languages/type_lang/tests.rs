@@ -142,13 +142,31 @@ macro_rules! make_testsuite_for_type_lang {
         #[test]
         fn recursion() {
             assert_eq!(
-                $run("(define (
-                               (func () (foo x : Int -> Int) (baz x))
+                $run("(define ((func () (foo x : Int -> Int) (baz x))
                                (func () (bar y : Int -> Int) y)
                                (func () (baz x : Int -> Int) (bar x)))
                         (show (foo 123)))", ""),
                 "123"
             );
+
+            assert_eq!(
+                $run("(define ((enum (Recur) Yes No)
+                               (func () (foo x : Recur -> Int)
+                                 (match-enum x
+                                   (No => 1)
+                                   (Yes => (foo (Recur . No))))))
+                        (show (foo (Recur . Yes))))", ""),
+                "1"
+            );
+
+            // recursive data type
+            /*assert_eq!(
+                $run("(define ((enum (Peano) Z (S (Peano)))
+                               (func () (peano->int n : (Peano) -> Int)
+                                 0))
+                        0)", ""),
+                "Nil"
+            );*/
         }
     };
 }

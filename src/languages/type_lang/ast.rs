@@ -1,4 +1,5 @@
 use crate::languages::type_lang::type_checker::GenericType;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
@@ -197,15 +198,23 @@ impl Expr {
         Expr::Annotation(Rc::new((t.into(), x.into())))
     }
 
-    pub fn get_type(&self) -> &Type {
-        match self {
-            Expr::Int(_) => &Type::Int,
-            Expr::Real(_) => &Type::Real,
-            Expr::String(_) => &Type::String,
-            Expr::Show(_) => &Type::Unit,
+    pub fn get_type(&self) -> Type {
+        let t = match self {
+            Expr::Int(_) => Type::Int,
+            Expr::Real(_) => Type::Real,
+            Expr::String(_) => Type::String,
+            Expr::Show(_) => Type::Unit,
             Expr::Defs(defs) => defs.1.get_type(),
-            Expr::Annotation(ann) => &ann.0,
+            Expr::Annotation(ann) => ann.0.clone(),
             _ => panic!("unannotated expression: {self:?}"),
+        };
+        match t {
+            Type::LazyType(lt) => lt
+                .borrow()
+                .as_ref()
+                .expect("encountered placeholder type during resolve")
+                .clone(),
+            _ => t,
         }
     }
 
@@ -371,6 +380,9 @@ pub enum Type {
     Generic(Rc<GenericType>),
     Record(Rc<Vec<Type>>),
     Enum(Rc<EnumType>),
+
+    /// used internally by the type checker to resolve recursive types
+    LazyType(Rc<RefCell<Option<Type>>>),
 }
 
 #[derive(PartialEq)]
@@ -405,6 +417,7 @@ impl Hash for Type {
             Type::Generic(rc) => Rc::as_ptr(rc).hash(state),
             Type::Record(rc) => Rc::as_ptr(rc).hash(state),
             Type::Enum(rc) => Rc::as_ptr(rc).hash(state),
+            Type::LazyType(rc) => rc.borrow().hash(state),
         }
     }
 }
@@ -429,6 +442,11 @@ impl Debug for Type {
                     .join(" ")
             ),
             Type::Enum(e) => write!(f, "{:?}", e),
+
+            Type::LazyType(l) => match &*l.borrow() {
+                None => write!(f, "<placeholder>"),
+                Some(t) => write!(f, "<lazy {t:?}>"),
+            },
         }
     }
 }

@@ -69,11 +69,11 @@ impl Context {
                 for arm in arms {
                     match &arm.pattern {
                         EnumVariantPattern::Constant(name) => {
-                            let variant_rep = self.enum_variant_repr(en, name);
+                            let variant_rep = self.enum_variant_repr(&en, name);
                             arms_.push((Con::Data(variant_rep), self.convert(&arm.branch)))
                         }
                         EnumVariantPattern::Constructor(name, var) => {
-                            let variant_rep = self.enum_variant_repr(en, name);
+                            let variant_rep = self.enum_variant_repr(&en, name);
                             arms_.push((
                                 Con::Data(variant_rep),
                                 LExp::bind(
@@ -86,7 +86,7 @@ impl Context {
                     }
                 }
 
-                let conreps: Vec<_> = self.enum_all_reps(en).collect();
+                let conreps: Vec<_> = self.enum_all_reps(&en).collect();
                 let the_switch = LExp::switch(switch_val, conreps, arms_, None::<LExp>);
                 LExp::bind(switch_val, self.convert(val), the_switch)
             }

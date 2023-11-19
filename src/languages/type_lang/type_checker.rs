@@ -1,6 +1,7 @@
 use crate::languages::type_lang::ast::{
     Def, EnumDef, EnumMatchArm, EnumType, EnumVariant, EnumVariantPattern, Expr, TyExpr, Type,
 };
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -32,7 +33,7 @@ impl Checker {
         match expr {
             _ => {
                 let typed = self.infer(expr, env, tenv)?;
-                self.unify(typed.get_type(), ty)?;
+                self.unify(&typed.get_type(), ty)?;
                 Ok(typed)
             }
         }
@@ -44,6 +45,7 @@ impl Checker {
         env: &HashMap<String, Type>,
         tenv: &HashMap<String, Type>,
     ) -> Result<Expr, String> {
+        println!("infer {expr:?}");
         match expr {
             Expr::Int(x) => Ok(Expr::Int(*x)),
             Expr::Real(x) => Ok(Expr::Real(*x)),
@@ -62,7 +64,7 @@ impl Checker {
                     .iter()
                     .map(|f| self.infer(f, env, tenv))
                     .collect::<Result<_, _>>()?;
-                let field_types: Vec<_> = fields_.iter().map(Expr::get_type).cloned().collect();
+                let field_types: Vec<_> = fields_.iter().map(Expr::get_type).collect();
                 Ok(Expr::annotate(
                     Type::Record(field_types.into()),
                     Expr::record(fields_),
@@ -98,7 +100,8 @@ impl Checker {
             }
 
             Expr::Cons2(cons) => {
-                let enum_t = self.teval(&cons.0, tenv);
+                let tx = &cons.0;
+                let enum_t = self.teval(tx, tenv);
                 let variant = &cons.1;
                 match enum_t {
                     Type::Enum(enum_) => {
@@ -121,7 +124,7 @@ impl Checker {
                 let (val, arms) = &**mat;
 
                 let val_ = self.infer(val, env, tenv)?;
-                let enum_ = &*match self.resolve(val_.get_type()) {
+                let enum_ = &*match self.resolve(&val_.get_type()) {
                     Type::Enum(enum_) => enum_,
                     _ => return Err(format!("Not an enum: {val_:?}")),
                 };
@@ -144,7 +147,7 @@ impl Checker {
                             }
 
                             let branch_ = self.infer(&arm.branch, env, tenv)?;
-                            self.unify(&ty, branch_.get_type())?;
+                            self.unify(&ty, &branch_.get_type())?;
                             arms_.push(EnumMatchArm {
                                 pattern: arm.pattern.clone(),
                                 branch: branch_,
@@ -167,7 +170,7 @@ impl Checker {
                             branch_env.insert(var.clone(), constructor[0].clone());
 
                             let branch_ = self.infer(&arm.branch, &branch_env, tenv)?;
-                            self.unify(&ty, branch_.get_type())?;
+                            self.unify(&ty, &branch_.get_type())?;
                             arms_.push(EnumMatchArm {
                                 pattern: arm.pattern.clone(),
                                 branch: branch_,
@@ -184,7 +187,7 @@ impl Checker {
                 let f_ = self.infer(&app.0, env, tenv)?;
                 let a_ = self.infer(&app.1, env, tenv)?;
                 let ty = Type::Fn(Rc::new((a_.get_type().clone(), r_.clone())));
-                self.unify(f_.get_type(), &ty)?;
+                self.unify(&f_.get_type(), &ty)?;
                 Ok(Expr::annotate(r_, Expr::apply(f_, a_)))
             }
 
@@ -239,8 +242,10 @@ impl Checker {
                                     .map(|tv| (tv.to_string(), Type::Opaque(tv.to_string()))),
                             );
 
-                            let rt = self.teval(&def.rtype, &tenv_);
-                            let pt = self.teval(&def.ptype, &tenv_);
+                            let tx = &def.rtype;
+                            let rt = self.teval(tx, &tenv_);
+                            let tx = &def.ptype;
+                            let pt = self.teval(tx, &tenv_);
                             let ft = Type::Fn(Rc::new((pt.clone(), rt.clone())));
 
                             let mut env_ = def_env.clone();
@@ -272,7 +277,7 @@ impl Checker {
                 let (a, b) = &**ops;
                 let a_ = self.infer(a, env, tenv)?;
                 let b_ = self.infer(b, env, tenv)?;
-                self.unify(a_.get_type(), b_.get_type())?;
+                self.unify(&a_.get_type(), &b_.get_type())?;
                 Ok(Expr::annotate(a_.get_type().clone(), Expr::add(a_, b_)))
             }
 
@@ -386,6 +391,7 @@ impl Checker {
                 self.unify(ra, rb)
             }
 
+            (Enum(a), Enum(b)) if Rc::ptr_eq(&a, &b) => panic!(),
             (Enum(a), Enum(b)) => {
                 if Rc::ptr_eq(&a.template, &b.template) {
                     for (va, ats) in &a.variants {
@@ -418,24 +424,33 @@ impl Checker {
     }
 
     fn resolve_fully<'a>(&'a self, t: &'a Type) -> Result<Type, String> {
+        let mut resolved_lazies = HashMap::new();
+        self.resolve_fully_(t, &mut resolved_lazies)
+    }
+
+    fn resolve_fully_<'a>(
+        &'a self,
+        t: &'a Type,
+        resolved_lazies: &mut HashMap<*const RefCell<Option<Type>>, Rc<RefCell<Option<Type>>>>,
+    ) -> Result<Type, String> {
         match t {
             Type::Unit | Type::Int | Type::Real | Type::String | Type::Opaque(_) => Ok(t.clone()),
 
             Type::Var(_) => match self.resolve(t) {
                 t_ @ Type::Var(_) => Err(format!("{t:?} resolves to {t_:?}")),
-                t_ => self.resolve_fully(&t_),
+                t_ => self.resolve_fully_(&t_, resolved_lazies),
             },
 
             Type::Fn(fun) => Ok(Type::func(
-                self.resolve_fully(&fun.0)?,
-                self.resolve_fully(&fun.1)?,
+                self.resolve_fully_(&fun.0, resolved_lazies)?,
+                self.resolve_fully_(&fun.1, resolved_lazies)?,
             )),
 
             Type::Generic(_) => Ok(t.clone()),
 
             Type::Record(fields) => fields
                 .iter()
-                .map(|f| self.resolve_fully(f))
+                .map(|f| self.resolve_fully_(f, resolved_lazies))
                 .collect::<Result<Vec<_>, _>>()
                 .map(Rc::new)
                 .map(Type::Record),
@@ -445,7 +460,7 @@ impl Checker {
                 .iter()
                 .map(|(v, args)| {
                     args.iter()
-                        .map(|a| self.resolve_fully(a))
+                        .map(|a| self.resolve_fully_(a, resolved_lazies))
                         .collect::<Result<Vec<_>, _>>()
                         .map(|r| (v.clone(), r))
                 })
@@ -456,6 +471,24 @@ impl Checker {
                 })
                 .map(Rc::new)
                 .map(Type::Enum),
+
+            Type::LazyType(lt) => {
+                let ptr = Rc::as_ptr(lt);
+                if let Some(t) = resolved_lazies.get(&ptr) {
+                    Ok(Type::LazyType(t.clone()))
+                } else {
+                    let placeholder = Rc::new(RefCell::new(None));
+                    resolved_lazies.insert(ptr, placeholder.clone());
+                    let ty = self.resolve_fully_(
+                        lt.borrow()
+                            .as_ref()
+                            .expect("encountered placeholder type during resolve"),
+                        resolved_lazies,
+                    )?;
+                    *placeholder.borrow_mut() = Some(ty.clone());
+                    Ok(ty)
+                }
+            }
         }
     }
 
@@ -478,15 +511,29 @@ impl Checker {
     }
 
     fn teval(&mut self, tx: &TyExpr, tenv: &HashMap<String, Type>) -> Type {
-        let t = match tx {
+        println!("teval {tx:?}");
+        match tx {
             TyExpr::Unit => Type::Unit,
             TyExpr::Int => Type::Int,
             TyExpr::Real => Type::Real,
             TyExpr::String => Type::String,
-            TyExpr::Named(v) => tenv
-                .get(v)
-                .cloned()
-                .unwrap_or_else(|| panic!("Unknown {v}")),
+            TyExpr::Named(v) => {
+                let t = tenv
+                    .get(v)
+                    .cloned()
+                    .unwrap_or_else(|| panic!("Unknown {v}"));
+                match t {
+                    Type::Generic(g) => {
+                        let mut tenv_ = tenv.clone();
+                        let placeholder = Rc::new(RefCell::new(None));
+                        tenv_.insert(v.clone(), Type::LazyType(placeholder.clone()));
+                        let actual_type = g.instantiate_fresh(self, &tenv_);
+                        *placeholder.borrow_mut() = Some(actual_type.clone());
+                        actual_type
+                    }
+                    _ => t,
+                }
+            }
             TyExpr::Fn(sig) => Type::Fn(Rc::new((
                 self.teval(&sig.0, tenv),
                 self.teval(&sig.1, tenv),
@@ -494,6 +541,7 @@ impl Checker {
             TyExpr::Construct(con) => match tenv.get(&con.0) {
                 None => panic!("Unknown {}", con.0),
                 Some(Type::Generic(tc)) => {
+                    println!("{con:?}");
                     let args = con.1.iter().map(|t| self.teval(t, tenv)).collect();
                     tc.instantiate_with(args, self, tenv)
                 }
@@ -501,10 +549,6 @@ impl Checker {
                     panic!("Not a type constructor: {t:?}")
                 }
             },
-        };
-        match t {
-            Type::Generic(g) => g.instantiate_fresh(self, tenv),
-            _ => t,
         }
     }
 }
@@ -547,6 +591,7 @@ impl GenericType {
         ctx: &mut Checker,
         tenv: &HashMap<String, Type>,
     ) -> Type {
+        println!("instantiate {self:?} {args:?}");
         match &**self {
             GenericType::GenericFn {
                 tvars,
@@ -946,5 +991,42 @@ mod tests {
             Checker::check_program(&x),
             Err("'1 resolves to '2".to_string())
         );
+    }
+
+    #[test]
+    fn infer_recursive_enum() {
+        let x = Expr::from_str(
+            "(define ((enum (Nat) Z (S Nat)))
+                    (Nat . Z))",
+        )
+        .unwrap();
+
+        Checker::new()
+            .infer(&x, &Default::default(), &Default::default())
+            .unwrap();
+    }
+
+    #[test]
+    fn check_recursive_enum() {
+        let x = Expr::from_str(
+            "(define ((enum (Nat) Z (S Nat)))
+                    (Nat . Z))",
+        )
+        .unwrap();
+
+        Checker::check_program(&x).unwrap();
+    }
+
+    #[test]
+    fn check_recursive_enum_usage() {
+        let x = Expr::from_str(
+            "(define ((enum (Peano) Z (S Peano))
+                               (func () (peano->int n : Peano -> Int)
+                                 0))
+                    (peano->int (Peano . Z)))",
+        )
+        .unwrap();
+
+        Checker::check_program(&x).unwrap();
     }
 }
