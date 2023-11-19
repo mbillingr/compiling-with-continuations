@@ -117,6 +117,27 @@ macro_rules! make_testsuite_for_type_lang {
                 "3.4"
             );
         }
+
+        #[test]
+        fn function_definitions() {
+            assert_eq!(
+                $run("(define ((func () (foo x : Int -> Int) x))
+                        (show (foo 5)))", ""),
+                "5"
+            );
+
+            assert_eq!(
+                $run("(define ((func () (foo x : Int -> ()) (show x)))
+                        (show (foo 5)))", ""),
+                "5()"
+            );
+
+            assert_eq!(
+                $run("(define ((func (T) (foo x : T -> T) x))
+                        (show (foo \"abc\")))", ""),
+                "abc"
+            );
+        }
     };
 }
 
@@ -133,6 +154,7 @@ fn exec(src: &str, input: &str) -> String {
     let checked = Checker::check_program(&expr_in).unwrap();
     let mono = type_lang_monomorphize::Context::new(gs.clone()).monomporphize(&checked);
     let mini_la = type_lang_to_mini_lambda::Context::new(gs.clone()).convert(&mono);
+    println!("{:?}", mini_la);
 
     let mut o = std::io::Cursor::new(Vec::<u8>::new());
     let mut i = std::io::Cursor::new(input);

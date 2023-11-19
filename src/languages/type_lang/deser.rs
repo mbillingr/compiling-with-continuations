@@ -270,6 +270,7 @@ fn parse_symbol_list(xs: &[S]) -> Result<Vec<String>, Error> {
 impl TyExpr {
     fn to_sexpr(&self) -> S {
         match self {
+            TyExpr::Unit => S::list(vec![]),
             TyExpr::Int => S::symbol("Int"),
             TyExpr::Real => S::symbol("Real"),
             TyExpr::String => S::symbol("String"),
@@ -285,6 +286,7 @@ impl TyExpr {
 
     fn from_sexpr(s: &S) -> Result<Self, Error> {
         match s {
+            S::List(Ref([])) => Ok(TyExpr::Unit),
             S::Symbol(Ref("Int")) => Ok(TyExpr::Int),
             S::Symbol(Ref("Real")) => Ok(TyExpr::Real),
             S::Symbol(Ref("String")) => Ok(TyExpr::String),

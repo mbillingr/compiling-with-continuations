@@ -479,6 +479,7 @@ impl Checker {
 
     fn teval(&mut self, tx: &TyExpr, tenv: &HashMap<String, Type>) -> Type {
         let t = match tx {
+            TyExpr::Unit => Type::Unit,
             TyExpr::Int => Type::Int,
             TyExpr::Real => Type::Real,
             TyExpr::String => Type::String,

@@ -53,6 +53,7 @@ pub enum Expr {
 /// Syntax for representing types
 #[derive(Clone, Debug, PartialEq)]
 pub enum TyExpr {
+    Unit,
     Int,
     Real,
     String,
