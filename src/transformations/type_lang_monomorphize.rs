@@ -1,5 +1,6 @@
 use crate::languages::type_lang::ast::{Def, EnumMatchArm, Expr, Type};
 use crate::transformations::GensymContext;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -60,11 +61,13 @@ impl Context {
             Expr::Defs(dfs) => {
                 let (defs, body) = &**dfs;
 
+                let mut fn_defs = vec![];
                 for def in defs {
                     match def {
                         Def::Enum(_) => {} //ignore
                         Def::Func(_) => panic!("uninferred function"),
                         Def::InferredFunc(fun) => {
+                            fn_defs.push(fun);
                             self.push_fndef(fun.fname.to_string());
                         }
                     }
@@ -72,38 +75,32 @@ impl Context {
 
                 let body_ = self.monomporphize(body);
 
-                let mut defs_out = vec![];
-                for def in defs {
-                    match def {
-                        Def::Enum(_) => {} //ignore
-                        Def::Func(_) => panic!("uninferred function"),
-                        Def::InferredFunc(fun) => {
-                            self.push_nonfn_binding(fun.param.clone());
-                            let fn_body = self.monomporphize(&fun.body);
-                            self.pop_binding();
+                let mut new_bodies = HashMap::new();
+                for fun in &fn_defs {
+                    self.push_nonfn_binding(fun.param.clone());
+                    let fn_body = self.monomporphize(&fun.body);
+                    self.pop_binding();
 
-                            for (new_name, realized_signature) in
-                                self.lookup(&fun.fname).map(Vec::as_slice).unwrap_or(&[])
-                            {
-                                defs_out.push(Def::inferred_func(
-                                    realized_signature.clone(),
-                                    new_name,
-                                    &fun.param,
-                                    fn_body.clone(),
-                                ))
-                            }
-                        }
+                    new_bodies.insert(&fun.fname, fn_body);
+                }
+
+                let mut defs_out = vec![];
+                for fun in &fn_defs {
+                    for (new_name, realized_signature) in
+                        self.lookup(&fun.fname).map(Vec::as_slice).unwrap_or(&[])
+                    {
+                        let fn_body = &new_bodies[&&fun.fname];
+                        defs_out.push(Def::inferred_func(
+                            realized_signature.clone(),
+                            new_name,
+                            &fun.param,
+                            fn_body.clone(),
+                        ))
                     }
                 }
 
-                for def in defs {
-                    match def {
-                        Def::Enum(_) => {} //ignore
-                        Def::Func(_) => panic!("uninferred function"),
-                        Def::InferredFunc(_) => {
-                            self.pop_binding();
-                        }
-                    }
+                for _ in fn_defs {
+                    self.pop_binding();
                 }
 
                 Expr::defs(defs_out, body_)

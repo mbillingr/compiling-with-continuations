@@ -243,7 +243,7 @@ impl Checker {
                             let pt = self.teval(&def.ptype, &tenv_);
                             let ft = Type::Fn(Rc::new((pt.clone(), rt.clone())));
 
-                            let mut env_ = env.clone();
+                            let mut env_ = def_env.clone();
                             env_.insert(def.fname.clone(), ft);
                             env_.insert(def.param.clone(), pt);
 
