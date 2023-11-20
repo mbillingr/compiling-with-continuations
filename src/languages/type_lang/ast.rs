@@ -199,7 +199,7 @@ impl Expr {
     }
 
     pub fn get_type(&self) -> Type {
-        let t = match self {
+        match self {
             Expr::Int(_) => Type::Int,
             Expr::Real(_) => Type::Real,
             Expr::String(_) => Type::String,
@@ -207,15 +207,6 @@ impl Expr {
             Expr::Defs(defs) => defs.1.get_type(),
             Expr::Annotation(ann) => ann.0.clone(),
             _ => panic!("unannotated expression: {self:?}"),
-        };
-        match t {
-            Type::LazyType(lt) => lt
-                .borrow()
-                .as_ref()
-                .expect("encountered placeholder type during resolve")
-                .clone(),
-
-            _ => t,
         }
     }
 
@@ -382,8 +373,7 @@ pub enum Type {
     Record(Rc<Vec<Type>>),
     Enum(Rc<EnumType>),
 
-    /// used internally by the type checker to resolve recursive types
-    LazyType(Rc<RefCell<Option<Type>>>),
+    /// a generic type applied to type arguments
     GenericInstance(Rc<GenericInstance>),
 }
 
@@ -431,7 +421,6 @@ impl Hash for Type {
             Type::Generic(rc) => Rc::as_ptr(rc).hash(state),
             Type::Record(rc) => Rc::as_ptr(rc).hash(state),
             Type::Enum(rc) => Rc::as_ptr(rc).hash(state),
-            Type::LazyType(rc) => rc.borrow().hash(state),
             Type::GenericInstance(gi) => {
                 Rc::as_ptr(&gi.generic).hash(state);
                 for t in gi.targs.iter() {
@@ -462,11 +451,6 @@ impl Debug for Type {
                     .join(" ")
             ),
             Type::Enum(e) => write!(f, "{:?}", e),
-
-            Type::LazyType(l) => match &*l.borrow() {
-                None => write!(f, "<placeholder>"),
-                Some(t) => write!(f, "<lazy {t:?}>"),
-            },
 
             Type::GenericInstance(gi) => {
                 write!(f, "({}", gi.generic.get_name())?;

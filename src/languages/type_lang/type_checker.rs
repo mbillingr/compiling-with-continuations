@@ -486,24 +486,6 @@ impl Checker {
                 .map(Rc::new)
                 .map(Type::Enum),
 
-            Type::LazyType(lt) => {
-                let ptr = Rc::as_ptr(lt);
-                if let Some(t) = resolved_lazies.get(&ptr) {
-                    Ok(Type::LazyType(t.clone()))
-                } else {
-                    let placeholder = Rc::new(RefCell::new(None));
-                    resolved_lazies.insert(ptr, placeholder.clone());
-                    let ty = self.resolve_fully_(
-                        lt.borrow()
-                            .as_ref()
-                            .expect("encountered placeholder type during resolve"),
-                        resolved_lazies,
-                    )?;
-                    *placeholder.borrow_mut() = Some(ty.clone());
-                    Ok(ty)
-                }
-            }
-
             Type::GenericInstance(gi) => Ok(Type::GenericInstance(Rc::new(GenericInstance {
                 generic: gi.generic.clone(),
                 targs: gi

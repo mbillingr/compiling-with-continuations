@@ -166,14 +166,13 @@ impl Context {
                     ]),
                 ),
 
-                (Type::Real, TExp::Add(add)) => LExp::apply(
+                /*(Type::Real, TExp::Add(add)) => LExp::apply(
                     todo!() as PrimOp,
                     LExp::record(vec![
                         self.convert(&add.0).into(),
                         self.convert(&add.1).into(),
                     ]),
-                ),
-
+                ),*/
                 (Type::Int, TExp::Read()) => LExp::apply(PrimOp::ReadInt, LExp::record(vec![])),
 
                 (_, ex @ TExp::Ref(_)) => self.convert(ex),
