@@ -159,14 +159,20 @@ macro_rules! make_testsuite_for_type_lang {
                 "1"
             );
 
-            // recursive data type
-            /*assert_eq!(
-                $run("(define ((enum (Peano) Z (S (Peano)))
-                               (func () (peano->int n : (Peano) -> Int)
-                                 0))
-                        0)", ""),
-                "Nil"
-            );*/
+            // recursive function on recursive data type
+            assert_eq!(
+                $run("(define ((enum (Peano) Z (S Peano))
+                               (func (T) (z _ : T -> Peano) (Peano . Z))
+                               (func (T) (s n : Peano -> Peano) ((Peano . S) n))
+                               (func () (peano->int n : Peano -> Int)
+                                 (match-enum n
+                                   (Z => 0)
+                                   ((S k) => (+ 1 (peano->int k))))))
+                        (show 
+                          (peano->int 
+                            (s (s (s (z 0)))))))", ""),
+                "3"
+            );
         }
     };
 }
