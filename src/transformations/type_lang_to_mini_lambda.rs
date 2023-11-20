@@ -55,7 +55,7 @@ impl Context {
                 LExp::fix(names, fns, self.convert(body))
             }
 
-            TExp::Cons2(_) | TExp::Add(_) => panic!("Annotation required: {expr:?}"),
+            TExp::Cons(_) | TExp::Add(_) => panic!("Annotation required: {expr:?}"),
 
             TExp::MatchEnum(mat) => {
                 let (val, arms) = &**mat;
@@ -132,14 +132,14 @@ impl Context {
             },
 
             TExp::Annotation(ann) => match &**ann {
-                (Type::Fn(tf), TExp::Cons2(con)) => {
+                (Type::Fn(tf), TExp::Cons(con)) => {
                     let en = tf.1.expect_enum().unwrap();
                     let variant = &con.1;
                     let conrep = self.enum_variant_repr(&en, variant);
                     LExp::func("x", LExp::con(conrep, LExp::var("x")))
                 }
 
-                (t, TExp::Cons2(con)) => {
+                (t, TExp::Cons(con)) => {
                     println!("{t:?}");
                     let en = t.expect_enum().unwrap();
                     let variant = &con.1;
@@ -339,7 +339,7 @@ mod tests {
                     ("C".to_string(), vec![]),
                 ],
             ),
-            TExp::cons2("ABC", "B"),
+            TExp::cons("ABC", "B"),
         );
 
         let y = LExp::con(ConRep::Constant(1), 0);
@@ -365,14 +365,14 @@ mod tests {
             ],
         );
 
-        let x = TExp::annotate(ety.clone(), TExp::cons2("ABC", "A"));
+        let x = TExp::annotate(ety.clone(), TExp::cons("ABC", "A"));
         let y = LExp::con(ConRep::Constant(0), 0);
         assert_eq!(ctx.convert(&x), y);
 
         let x = TExp::annotate(
             ety.clone(),
             TExp::apply(
-                TExp::annotate(Type::func(Type::Int, ety.clone()), TExp::cons2("ABC", "B")),
+                TExp::annotate(Type::func(Type::Int, ety.clone()), TExp::cons("ABC", "B")),
                 1,
             ),
         );
@@ -398,7 +398,7 @@ mod tests {
             TExp::apply(
                 TExp::annotate(
                     Type::func(Type::Int, enum_t.clone()),
-                    TExp::cons2("Foo", "X"),
+                    TExp::cons("Foo", "X"),
                 ),
                 42,
             ),

@@ -72,7 +72,7 @@ impl Checker {
                 ))
             }
 
-            Expr::Cons2(cons) => {
+            Expr::Cons(cons) => {
                 let tx = &cons.0;
                 let enum_t = self.teval(tx, tenv);
                 let variant = &cons.1;
@@ -93,7 +93,7 @@ impl Checker {
                                 ))
                             }
                         };
-                        Ok(Expr::annotate(t, Expr::cons2(cons.0.clone(), &cons.1)))
+                        Ok(Expr::annotate(t, Expr::cons(cons.0.clone(), &cons.1)))
                     }
                 }
             }
@@ -289,7 +289,7 @@ impl Checker {
                 .collect::<Result<Vec<_>, _>>()
                 .map(Expr::record),
 
-            Expr::Cons2(_) => Ok(expr.clone()),
+            Expr::Cons(_) => Ok(expr.clone()),
 
             Expr::MatchEnum(mat) => Ok(Expr::match_enum(
                 self.resolve_expr(&mat.0)?,
@@ -918,7 +918,7 @@ mod tests {
                     "x",
                     Expr::Int(0),
                 )],
-                Expr::apply("f", Expr::apply(Expr::cons2("Foo", "B"), 1)),
+                Expr::apply("f", Expr::apply(Expr::cons("Foo", "B"), 1)),
             ),
         );
         Checker::check_program(&x).unwrap();
@@ -938,7 +938,7 @@ mod tests {
                     Expr::Int(0),
                 ),
             ],
-            Expr::apply("f", Expr::apply(Expr::cons2("Foo", "B"), 1)),
+            Expr::apply("f", Expr::apply(Expr::cons("Foo", "B"), 1)),
         );
 
         let foo = Rc::new(GenericType::GenericEnum(
@@ -980,7 +980,7 @@ mod tests {
                         Expr::apply(
                             Expr::annotate(
                                 Type::func(Type::Int, foo_int.clone()),
-                                Expr::cons2("Foo", "B"),
+                                Expr::cons("Foo", "B"),
                             ),
                             1,
                         ),
@@ -997,7 +997,7 @@ mod tests {
         let x = Expr::defs(
             [Def::enum_::<&str>("Foo", [], ("A", ("B", TyExpr::Int), ()))],
             Expr::match_enum(
-                Expr::apply(Expr::cons2("Foo", "B"), 1),
+                Expr::apply(Expr::cons("Foo", "B"), 1),
                 [(
                     EnumVariantPattern::Constructor("B".to_string(), "x".to_string()),
                     Expr::var("x"),

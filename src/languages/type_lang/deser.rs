@@ -38,7 +38,7 @@ impl Expr {
 
             List(Ref([enum_, Symbol(Ref(".")), Symbol(Ref(variant))])) => {
                 let etx = TyExpr::from_sexpr(enum_)?;
-                Ok(Expr::cons2(etx, variant))
+                Ok(Expr::cons(etx, variant))
             }
 
             List(Ref([Symbol(Ref("match-enum")), val, arms @ ..])) => arms
