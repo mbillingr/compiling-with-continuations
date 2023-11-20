@@ -3,7 +3,7 @@ use crate::languages::type_lang::ast::{
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 pub struct Checker {
@@ -116,7 +116,34 @@ impl Checker {
                         };
                         Ok(Expr::annotate(t, Expr::cons2(cons.0.clone(), &cons.1)))
                     }
-                    t => panic!("Not an enum - {:?} is a {t:?}", cons.0),
+
+                    Type::GenericInstance(ref g, ref targs) => match &**g {
+                        GenericType::GenericEnum(_, _) => {
+                            match g.instantiate_with(targs.to_vec(), self) {
+                                Type::Enum(enum_) => {
+                                    let var = enum_.variants.get(variant).ok_or_else(|| {
+                                        format!(
+                                            "Unknown variant: {} {variant}",
+                                            enum_.template.get_name()
+                                        )
+                                    })?;
+
+                                    let t = match var.as_slice() {
+                                        [] => enum_t,
+                                        [x] => Type::func(x.clone(), enum_t),
+                                        _ => {
+                                            panic!("Multiple enum variant values are not supported")
+                                        }
+                                    };
+                                    Ok(Expr::annotate(t, Expr::cons2(cons.0.clone(), &cons.1)))
+                                }
+                                _ => panic!("Not an enum - {:?} is a {enum_t:?}", cons.0),
+                            }
+                        }
+                        _ => panic!("Not an enum - {:?} is a {enum_t:?}", cons.0),
+                    },
+
+                    _ => panic!("Not an enum - {:?} is a {enum_t:?}", cons.0),
                 }
             }
 
@@ -208,7 +235,7 @@ impl Checker {
             Expr::Defs(defs) => {
                 let (defs, body) = &**defs;
                 let mut def_env = env.clone();
-                let mut def_tenv = tenv.clone();
+                let mut def_tenv = Rc::new(RefCell::new(tenv.clone()));
 
                 for def in defs {
                     match def {
@@ -217,14 +244,18 @@ impl Checker {
                                 tvars: def.tvars.clone(),
                                 ptype: def.ptype.clone(),
                                 rtype: def.rtype.clone(),
+                                tenv: def_tenv.clone(),
                             }));
                             def_env.insert(def.fname.clone(), signature);
                         }
                         Def::Enum(def) => {
-                            let type_constructor =
-                                Type::Generic(Rc::new(GenericType::GenericEnum(def.clone())));
+                            let type_constructor = Type::Generic(Rc::new(
+                                GenericType::GenericEnum(def.clone(), def_tenv.clone()),
+                            ));
 
-                            def_tenv.insert(def.tname.clone(), type_constructor);
+                            def_tenv
+                                .borrow_mut()
+                                .insert(def.tname.clone(), type_constructor);
                         }
                         Def::InferredFunc(_) => unreachable!(),
                     }
@@ -235,7 +266,7 @@ impl Checker {
                 for def in defs {
                     match def {
                         Def::Func(def) => {
-                            let mut tenv_ = def_tenv.clone();
+                            let mut tenv_ = def_tenv.borrow().clone();
                             tenv_.extend(
                                 def.tvars
                                     .iter()
@@ -259,17 +290,12 @@ impl Checker {
                             defs_
                                 .push(Def::inferred_func(signature, &def.fname, &def.param, body_));
                         }
-                        Def::Enum(def) => {
-                            let type_constructor =
-                                Type::Generic(Rc::new(GenericType::GenericEnum(def.clone())));
-
-                            def_tenv.insert(def.tname.clone(), type_constructor);
-                        }
+                        Def::Enum(def) => {}
                         Def::InferredFunc(_) => unreachable!(),
                     }
                 }
 
-                let body_ = self.infer(body, &def_env, &def_tenv)?;
+                let body_ = self.infer(body, &def_env, &*def_tenv.borrow())?;
                 Ok(Expr::defs(defs_, body_))
             }
 
@@ -406,6 +432,14 @@ impl Checker {
                 }
             }
 
+            (GenericInstance(a, atargs), GenericInstance(b, btargs)) if Rc::ptr_eq(&a, &b) => {
+                assert_eq!(atargs.len(), btargs.len());
+                for (ta, tb) in atargs.iter().zip(btargs.iter()) {
+                    self.unify(ta, tb)?
+                }
+                Ok(())
+            }
+
             (Opaque(a), Opaque(b)) if a == b => Ok(()),
             (Unit, Unit) | (Int, Int) | (Real, Real) => Ok(()),
 
@@ -489,6 +523,16 @@ impl Checker {
                     Ok(ty)
                 }
             }
+
+            Type::GenericInstance(g, targs) => Ok(Type::GenericInstance(
+                g.clone(),
+                Rc::new(
+                    targs
+                        .iter()
+                        .map(|t| self.resolve_fully_(t, resolved_lazies))
+                        .collect::<Result<_, _>>()?,
+                ),
+            )),
         }
     }
 
@@ -524,12 +568,14 @@ impl Checker {
                     .unwrap_or_else(|| panic!("Unknown {v}"));
                 match t {
                     Type::Generic(g) => {
-                        let mut tenv_ = tenv.clone();
+                        let targs = Rc::new((0..g.n_type_args()).map(|_| self.fresh()).collect());
+                        Type::GenericInstance(g, targs)
+                        /*let mut tenv_ = tenv.clone();
                         let placeholder = Rc::new(RefCell::new(None));
                         tenv_.insert(v.clone(), Type::LazyType(placeholder.clone()));
                         let actual_type = g.instantiate_fresh(self, &tenv_);
                         *placeholder.borrow_mut() = Some(actual_type.clone());
-                        actual_type
+                        actual_type*/
                     }
                     _ => t,
                 }
@@ -541,9 +587,9 @@ impl Checker {
             TyExpr::Construct(con) => match tenv.get(&con.0) {
                 None => panic!("Unknown {}", con.0),
                 Some(Type::Generic(tc)) => {
-                    println!("{con:?}");
-                    let args = con.1.iter().map(|t| self.teval(t, tenv)).collect();
-                    tc.instantiate_with(args, self, tenv)
+                    assert_eq!(con.1.len(), tc.n_type_args());
+                    let targs = Rc::new(con.1.iter().map(|t| self.teval(t, tenv)).collect());
+                    Type::GenericInstance(tc.clone(), targs)
                 }
                 Some(t) => {
                     panic!("Not a type constructor: {t:?}")
@@ -553,22 +599,67 @@ impl Checker {
     }
 }
 
-#[derive(Debug, PartialEq)]
 pub enum GenericType {
     GenericFn {
         tvars: Vec<String>,
         ptype: TyExpr,
         rtype: TyExpr,
+        tenv: Rc<RefCell<HashMap<String, Type>>>,
     },
 
-    GenericEnum(EnumDef),
+    GenericEnum(EnumDef, Rc<RefCell<HashMap<String, Type>>>),
+}
+
+impl Debug for GenericType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GenericType::GenericFn {
+                tvars,
+                ptype,
+                rtype,
+                ..
+            } => write!(f, "<generic fn>"),
+            GenericType::GenericEnum(_, _) => write!(f, "<generic enum>"),
+        }
+    }
+}
+
+impl PartialEq for GenericType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                GenericType::GenericFn {
+                    tvars: atv,
+                    ptype: atp,
+                    rtype: atr,
+                    ..
+                },
+                GenericType::GenericFn {
+                    tvars: btv,
+                    ptype: btp,
+                    rtype: btr,
+                    ..
+                },
+            ) => atv == btv && atp == btp && atr == btr,
+
+            (GenericType::GenericEnum(a, _), GenericType::GenericEnum(b, _)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 impl GenericType {
     pub fn get_name(&self) -> &str {
         match self {
             GenericType::GenericFn { .. } => todo!(),
-            GenericType::GenericEnum(ed) => &ed.tname,
+            GenericType::GenericEnum(ed, _) => &ed.tname,
+        }
+    }
+
+    pub fn n_type_args(&self) -> usize {
+        match self {
+            GenericType::GenericFn { tvars, .. } => tvars.len(),
+            GenericType::GenericEnum(EnumDef { tvars, .. }, _) => tvars.len(),
         }
     }
 
@@ -576,39 +667,35 @@ impl GenericType {
         match &**self {
             GenericType::GenericFn { tvars, .. } => {
                 let args = tvars.iter().map(|_| ctx.fresh()).collect();
-                self.instantiate_with(args, ctx, tenv)
+                self.instantiate_with(args, ctx)
             }
-            GenericType::GenericEnum(ed) => {
+            GenericType::GenericEnum(ed, _) => {
                 let args = ed.tvars.iter().map(|_| ctx.fresh()).collect();
-                self.instantiate_with(args, ctx, tenv)
+                self.instantiate_with(args, ctx)
             }
         }
     }
 
-    fn instantiate_with(
-        self: &Rc<Self>,
-        args: Vec<Type>,
-        ctx: &mut Checker,
-        tenv: &HashMap<String, Type>,
-    ) -> Type {
+    fn instantiate_with(self: &Rc<Self>, args: Vec<Type>, ctx: &mut Checker) -> Type {
         println!("instantiate {self:?} {args:?}");
         match &**self {
             GenericType::GenericFn {
                 tvars,
                 ptype,
                 rtype,
+                tenv,
             } => {
                 assert_eq!(tvars.len(), args.len());
-                let mut tenv = tenv.clone();
+                let mut tenv = tenv.borrow().clone();
                 tenv.extend(tvars.iter().zip(args).map(|(tv, t)| (tv.to_string(), t)));
 
                 let rt = ctx.teval(rtype, &tenv);
                 let pt = ctx.teval(ptype, &tenv);
                 Type::Fn(Rc::new((pt.clone(), rt.clone())))
             }
-            GenericType::GenericEnum(ed) => {
+            GenericType::GenericEnum(ed, tenv) => {
                 assert_eq!(ed.tvars.len(), args.len());
-                let mut tenv = tenv.clone();
+                let mut tenv = tenv.borrow().clone();
                 tenv.extend(ed.tvars.iter().zip(args).map(|(tv, t)| (tv.to_string(), t)));
 
                 let mut variants = HashMap::new();
@@ -692,6 +779,7 @@ mod tests {
                     tvars: vec![],
                     ptype: TyExpr::Int,
                     rtype: TyExpr::Int,
+                    tenv: Default::default(),
                 })),
                 "fn",
                 "x",
@@ -767,6 +855,7 @@ mod tests {
                     tvars: vec!["T".into()],
                     ptype: TyExpr::Named("T".into()),
                     rtype: TyExpr::Named("T".into()),
+                    tenv: Default::default(),
                 })),
                 "id",
                 "x",
@@ -869,7 +958,7 @@ mod tests {
                     "x",
                     Expr::Int(0),
                 )],
-                Expr::apply("f", Expr::cons("Foo", "B", [1])),
+                Expr::apply("f", Expr::apply(Expr::cons2("Foo", "B"), 1)),
             ),
         );
         Checker::check_program(&x).unwrap();
@@ -889,25 +978,22 @@ mod tests {
                     Expr::Int(0),
                 ),
             ],
-            Expr::apply("f", Expr::cons("Foo", "B", [1])),
+            Expr::apply("f", Expr::apply(Expr::cons2("Foo", "B"), 1)),
         );
 
-        let foo = Rc::new(GenericType::GenericEnum(EnumDef {
-            tname: "Foo".to_string(),
-            tvars: vec!["T".into()],
-            variants: Rc::new(vec![
-                EnumVariant::Constant("A".into()),
-                EnumVariant::Constructor("B".into(), "T".into()),
-            ]),
-        }));
+        let foo = Rc::new(GenericType::GenericEnum(
+            EnumDef {
+                tname: "Foo".to_string(),
+                tvars: vec!["T".into()],
+                variants: Rc::new(vec![
+                    EnumVariant::Constant("A".into()),
+                    EnumVariant::Constructor("B".into(), "T".into()),
+                ]),
+            },
+            Default::default(),
+        ));
 
-        let foo_int = Type::enum_(
-            foo,
-            [
-                ("A".to_string(), vec![]),
-                ("B".to_string(), vec![Type::Int]),
-            ],
-        );
+        let foo_int = Type::GenericInstance(foo, Rc::new(vec![Type::Int]));
 
         let y = Expr::defs(
             [Def::inferred_func(
@@ -915,6 +1001,7 @@ mod tests {
                     tvars: vec!["T".into()],
                     ptype: ("Foo", "T").into(),
                     rtype: TyExpr::Int,
+                    tenv: Default::default(),
                 })),
                 "f",
                 "x",
@@ -924,7 +1011,16 @@ mod tests {
                 Type::Int,
                 Expr::apply(
                     Expr::annotate(Type::func(foo_int.clone(), Type::Int), "f"),
-                    Expr::annotate(foo_int, Expr::cons("Foo", "B", [1])),
+                    Expr::annotate(
+                        foo_int.clone(),
+                        Expr::apply(
+                            Expr::annotate(
+                                Type::func(Type::Int, foo_int.clone()),
+                                Expr::cons2("Foo", "B"),
+                            ),
+                            1,
+                        ),
+                    ),
                 ),
             ),
         );

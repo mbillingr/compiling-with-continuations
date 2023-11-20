@@ -383,6 +383,7 @@ pub enum Type {
 
     /// used internally by the type checker to resolve recursive types
     LazyType(Rc<RefCell<Option<Type>>>),
+    GenericInstance(Rc<GenericType>, Rc<Vec<Type>>),
 }
 
 #[derive(PartialEq)]
@@ -418,6 +419,12 @@ impl Hash for Type {
             Type::Record(rc) => Rc::as_ptr(rc).hash(state),
             Type::Enum(rc) => Rc::as_ptr(rc).hash(state),
             Type::LazyType(rc) => rc.borrow().hash(state),
+            Type::GenericInstance(g, args) => {
+                Rc::as_ptr(g).hash(state);
+                for t in args.iter() {
+                    t.hash(state);
+                }
+            }
         }
     }
 }
@@ -447,6 +454,14 @@ impl Debug for Type {
                 None => write!(f, "<placeholder>"),
                 Some(t) => write!(f, "<lazy {t:?}>"),
             },
+
+            Type::GenericInstance(g, args) => {
+                write!(f, "({}", g.get_name())?;
+                for t in args.iter() {
+                    write!(f, ", {t:?}")?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
