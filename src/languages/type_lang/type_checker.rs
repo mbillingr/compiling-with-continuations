@@ -103,8 +103,10 @@ impl Checker {
                 let tx = &cons.0;
                 let enum_t = self.teval(tx, tenv);
                 let variant = &cons.1;
-                match enum_t {
-                    Type::Enum(enum_) => {
+
+                match enum_t.check_enum(self) {
+                    None => Err(panic!("Not an enum - {:?} is a {enum_t:?}", cons.0)),
+                    Some(enum_) => {
                         let var = enum_.variants.get(variant).ok_or_else(|| {
                             format!("Unknown variant: {} {variant}", enum_.template.get_name())
                         })?;
@@ -116,34 +118,6 @@ impl Checker {
                         };
                         Ok(Expr::annotate(t, Expr::cons2(cons.0.clone(), &cons.1)))
                     }
-
-                    Type::GenericInstance(ref g, ref targs) => match &**g {
-                        GenericType::GenericEnum(_, _) => {
-                            match g.instantiate_with(targs.to_vec(), self) {
-                                Type::Enum(enum_) => {
-                                    let var = enum_.variants.get(variant).ok_or_else(|| {
-                                        format!(
-                                            "Unknown variant: {} {variant}",
-                                            enum_.template.get_name()
-                                        )
-                                    })?;
-
-                                    let t = match var.as_slice() {
-                                        [] => enum_t,
-                                        [x] => Type::func(x.clone(), enum_t),
-                                        _ => {
-                                            panic!("Multiple enum variant values are not supported")
-                                        }
-                                    };
-                                    Ok(Expr::annotate(t, Expr::cons2(cons.0.clone(), &cons.1)))
-                                }
-                                _ => panic!("Not an enum - {:?} is a {enum_t:?}", cons.0),
-                            }
-                        }
-                        _ => panic!("Not an enum - {:?} is a {enum_t:?}", cons.0),
-                    },
-
-                    _ => panic!("Not an enum - {:?} is a {enum_t:?}", cons.0),
                 }
             }
 
@@ -151,9 +125,9 @@ impl Checker {
                 let (val, arms) = &**mat;
 
                 let val_ = self.infer(val, env, tenv)?;
-                let enum_ = &*match self.resolve(&val_.get_type()) {
-                    Type::Enum(enum_) => enum_,
-                    _ => return Err(format!("Not an enum: {val_:?}")),
+                let enum_ = &*match self.resolve(&val_.get_type()).check_enum(self) {
+                    None => return Err(panic!("Not an enum - {val_:?}")),
+                    Some(enum_) => enum_,
                 };
 
                 let ty = self.fresh();
@@ -432,7 +406,9 @@ impl Checker {
                 }
             }
 
-            (GenericInstance(a, atargs), GenericInstance(b, btargs)) if Rc::ptr_eq(&a, &b) => {
+            (GenericInstance(a, atargs, _), GenericInstance(b, btargs, _))
+                if Rc::ptr_eq(&a, &b) =>
+            {
                 assert_eq!(atargs.len(), btargs.len());
                 for (ta, tb) in atargs.iter().zip(btargs.iter()) {
                     self.unify(ta, tb)?
@@ -524,7 +500,7 @@ impl Checker {
                 }
             }
 
-            Type::GenericInstance(g, targs) => Ok(Type::GenericInstance(
+            Type::GenericInstance(g, targs, actual_t) => Ok(Type::GenericInstance(
                 g.clone(),
                 Rc::new(
                     targs
@@ -532,6 +508,19 @@ impl Checker {
                         .map(|t| self.resolve_fully_(t, resolved_lazies))
                         .collect::<Result<_, _>>()?,
                 ),
+                actual_t
+                    .borrow()
+                    .as_ref()
+                    .map(|t| {
+                        self.resolve_fully_(&Type::Enum(t.clone()), resolved_lazies)
+                            .map(|ty| match ty {
+                                Type::Enum(e) => e,
+                                _ => unreachable!(),
+                            })
+                    })
+                    .transpose()
+                    .map(RefCell::new)
+                    .map(Rc::new)?,
             )),
         }
     }
@@ -569,7 +558,7 @@ impl Checker {
                 match t {
                     Type::Generic(g) => {
                         let targs = Rc::new((0..g.n_type_args()).map(|_| self.fresh()).collect());
-                        Type::GenericInstance(g, targs)
+                        Type::GenericInstance(g, targs, Rc::new(RefCell::new(None)))
                         /*let mut tenv_ = tenv.clone();
                         let placeholder = Rc::new(RefCell::new(None));
                         tenv_.insert(v.clone(), Type::LazyType(placeholder.clone()));
@@ -589,7 +578,7 @@ impl Checker {
                 Some(Type::Generic(tc)) => {
                     assert_eq!(con.1.len(), tc.n_type_args());
                     let targs = Rc::new(con.1.iter().map(|t| self.teval(t, tenv)).collect());
-                    Type::GenericInstance(tc.clone(), targs)
+                    Type::GenericInstance(tc.clone(), targs, Rc::new(RefCell::new(None)))
                 }
                 Some(t) => {
                     panic!("Not a type constructor: {t:?}")
@@ -715,6 +704,46 @@ impl GenericType {
                     variants,
                 }))
             }
+        }
+    }
+
+    pub fn to_enum(self: &Rc<Self>, targs: Vec<Type>, ctx: &mut Checker) -> Option<Rc<EnumType>> {
+        match &**self {
+            GenericType::GenericEnum(_, _) => match self.instantiate_with(targs, ctx) {
+                Type::Enum(enum_) => Some(enum_),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
+impl Type {
+    pub fn check_enum(&self, ctx: &mut Checker) -> Option<Rc<EnumType>> {
+        match self {
+            Type::Enum(et) => Some(et.clone()),
+            Type::GenericInstance(ref g, ref targs, actual_t) => {
+                let mut act = actual_t.borrow_mut();
+                match act.as_mut() {
+                    Some(t) => Some(t.clone()),
+                    None => {
+                        let t = g.to_enum(targs.to_vec(), ctx)?;
+                        *act = Some(t.clone());
+                        Some(t)
+                    }
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn expect_enum(&self) -> Option<Rc<EnumType>> {
+        match self {
+            Type::Enum(et) => Some(et.clone()),
+            Type::GenericInstance(ref g, ref targs, actual_t) => {
+                actual_t.borrow().as_ref().cloned()
+            }
+            _ => None,
         }
     }
 }
@@ -993,7 +1022,7 @@ mod tests {
             Default::default(),
         ));
 
-        let foo_int = Type::GenericInstance(foo, Rc::new(vec![Type::Int]));
+        let foo_int = Type::GenericInstance(foo, Rc::new(vec![Type::Int]), Default::default());
 
         let y = Expr::defs(
             [Def::inferred_func(

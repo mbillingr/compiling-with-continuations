@@ -59,9 +59,9 @@ impl Context {
 
             TExp::MatchEnum(mat) => {
                 let (val, arms) = &**mat;
-                let en = match val.get_type() {
-                    Type::Enum(en) => en,
-                    _ => panic!("Expected enum: {val:?}"),
+                let en = match val.get_type().expect_enum() {
+                    Some(en) => en,
+                    None => panic!("Expected enum: {val:?}"),
                 };
                 let switch_val: Ref<str> = self.gs.gensym("switch_val");
 

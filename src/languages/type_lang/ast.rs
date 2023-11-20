@@ -214,6 +214,7 @@ impl Expr {
                 .as_ref()
                 .expect("encountered placeholder type during resolve")
                 .clone(),
+
             _ => t,
         }
     }
@@ -383,7 +384,11 @@ pub enum Type {
 
     /// used internally by the type checker to resolve recursive types
     LazyType(Rc<RefCell<Option<Type>>>),
-    GenericInstance(Rc<GenericType>, Rc<Vec<Type>>),
+    GenericInstance(
+        Rc<GenericType>,
+        Rc<Vec<Type>>,
+        Rc<RefCell<Option<Rc<EnumType>>>>,
+    ),
 }
 
 #[derive(PartialEq)]
@@ -419,7 +424,7 @@ impl Hash for Type {
             Type::Record(rc) => Rc::as_ptr(rc).hash(state),
             Type::Enum(rc) => Rc::as_ptr(rc).hash(state),
             Type::LazyType(rc) => rc.borrow().hash(state),
-            Type::GenericInstance(g, args) => {
+            Type::GenericInstance(g, args, _) => {
                 Rc::as_ptr(g).hash(state);
                 for t in args.iter() {
                     t.hash(state);
@@ -455,7 +460,7 @@ impl Debug for Type {
                 Some(t) => write!(f, "<lazy {t:?}>"),
             },
 
-            Type::GenericInstance(g, args) => {
+            Type::GenericInstance(g, args, _) => {
                 write!(f, "({}", g.get_name())?;
                 for t in args.iter() {
                     write!(f, ", {t:?}")?;
