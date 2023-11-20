@@ -33,6 +33,9 @@ impl Context {
             TExp::String(x) => LExp::string(x),
             TExp::Ref(x) => LExp::var(x),
             TExp::Apply(app) => LExp::apply(self.convert(&app.0), self.convert(&app.1)),
+            TExp::Record(fields) => {
+                LExp::record(fields.iter().map(|f| self.convert(f)).collect::<Vec<_>>())
+            }
 
             TExp::Lambda(lam) => LExp::func(&lam.param, self.convert(&lam.body)),
 
@@ -91,45 +94,10 @@ impl Context {
                 LExp::bind(switch_val, self.convert(val), the_switch)
             }
 
-            TExp::Show(x) => match x.get_type() {
-                Type::Unit => LExp::apply(
-                    PrimOp::ShowStr,
-                    LExp::bind("_", self.convert(x), LExp::string("()")),
-                ),
-                Type::Int => LExp::apply(PrimOp::ShowInt, self.convert(x)),
-                Type::Real => LExp::apply(PrimOp::ShowReal, self.convert(x)),
-                Type::String => LExp::apply(PrimOp::ShowStr, self.convert(x)),
-                t => {
-                    if let Some(et) = t.expect_enum() {
-                        let mut arms = vec![];
-                        for (vname, tys) in &et.variants {
-                            match tys.as_slice() {
-                                [] => arms.push(EnumMatchArm {
-                                    pattern: EnumVariantPattern::Constant(vname.clone()),
-                                    branch: TExp::show(TExp::string(vname)),
-                                }),
-                                [tx] => arms.push(EnumMatchArm {
-                                    pattern: EnumVariantPattern::Constructor(
-                                        vname.clone(),
-                                        "x".to_string(),
-                                    ),
-                                    branch: TExp::sequence(vec![
-                                        TExp::show(TExp::string("(")),
-                                        TExp::show(TExp::string(vname)),
-                                        TExp::show(TExp::string(" ")),
-                                        TExp::show(TExp::annotate(tx.clone(), TExp::var("x"))),
-                                        TExp::show(TExp::string(")")),
-                                    ]),
-                                }),
-                                _ => panic!("enum variants with more than one value not supported"),
-                            }
-                        }
-                        self.convert(&TExp::match_enum((**x).clone(), arms))
-                    } else {
-                        todo!("{expr:?}")
-                    }
-                }
-            },
+            TExp::Show(x) => {
+                let ty = x.get_type();
+                self.convert_show(&ty, x)
+            }
 
             TExp::Annotation(ann) => match &**ann {
                 (Type::Fn(tf), TExp::Cons(con)) => {
@@ -168,10 +136,72 @@ impl Context {
                 (_, ex @ TExp::Apply(_)) => self.convert(ex),
                 (_, ex @ TExp::Lambda(_)) => self.convert(ex),
                 (_, ex @ TExp::MatchEnum(_)) => self.convert(ex),
+                (_, ex @ TExp::Record(_)) => self.convert(ex),
                 _ => todo!("{expr:?}"),
             },
 
             _ => todo!("{expr:?}"),
+        }
+    }
+
+    fn convert_show(&mut self, ty: &Type, x: &TExp) -> LExp {
+        if let Some(et) = ty.expect_enum() {
+            let mut arms = vec![];
+            for (vname, tys) in &et.variants {
+                match tys.as_slice() {
+                    [] => arms.push(EnumMatchArm {
+                        pattern: EnumVariantPattern::Constant(vname.clone()),
+                        branch: TExp::show(TExp::string(vname)),
+                    }),
+                    [tx] => arms.push(EnumMatchArm {
+                        pattern: EnumVariantPattern::Constructor(vname.clone(), "x".to_string()),
+                        branch: TExp::sequence(vec![
+                            TExp::show(TExp::string("(")),
+                            TExp::show(TExp::string(vname)),
+                            TExp::show(TExp::string(" ")),
+                            TExp::show(TExp::annotate(tx.clone(), TExp::var("x"))),
+                            TExp::show(TExp::string(")")),
+                        ]),
+                    }),
+                    _ => panic!("enum variants with more than one value not supported"),
+                }
+            }
+            self.convert(&TExp::match_enum(x.clone(), arms))
+        } else {
+            let x_ = self.convert(x);
+            self.make_show(ty, x_)
+        }
+    }
+
+    fn make_show(&self, ty: &Type, x: LExp) -> LExp {
+        match ty {
+            Type::Unit => LExp::apply(PrimOp::ShowStr, LExp::bind("_", x, LExp::string("()"))),
+            Type::Int => LExp::apply(PrimOp::ShowInt, x),
+            Type::Real => LExp::apply(PrimOp::ShowReal, x),
+            Type::String => LExp::apply(PrimOp::ShowStr, x),
+            Type::Record(field_types) => LExp::bind(
+                "r",
+                x,
+                LExp::sequence(vec![
+                    self.make_show(&Type::String, LExp::string("[")),
+                    LExp::sequence(
+                        field_types
+                            .iter()
+                            .enumerate()
+                            .map(|(i, t)| {
+                                let mut items = vec![];
+                                if i > 0 {
+                                    items.push(self.make_show(&Type::String, LExp::string(" ")));
+                                }
+                                items.push(self.make_show(t, LExp::select(i as isize, "r")));
+                                LExp::sequence(items)
+                            })
+                            .collect(),
+                    ),
+                    self.make_show(&Type::String, LExp::string("]")),
+                ]),
+            ),
+            _ => todo!("show {ty:?} {x:?}"),
         }
     }
 

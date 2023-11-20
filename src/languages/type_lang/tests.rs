@@ -140,6 +140,13 @@ macro_rules! make_testsuite_for_type_lang {
         }
 
         #[test]
+        fn records() {
+            assert_eq!(
+                $run("(show (record 1 2 3))", ""),
+                "[1 2 3]");
+        }
+
+        #[test]
         fn recursion() {
             assert_eq!(
                 $run("(define ((func () (foo x : Int -> Int) (baz x))
