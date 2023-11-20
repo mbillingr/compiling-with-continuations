@@ -144,6 +144,18 @@ macro_rules! make_testsuite_for_type_lang {
             assert_eq!(
                 $run("(show (record 1 2 3))", ""),
                 "[1 2 3]");
+
+            assert_eq!(
+                $run("(show (select 1 (record 1 2 3)))", ""),
+                "2");
+
+            assert_eq!(
+                $run("(define ((func (A B) (swap r : (Record A B) -> (Record B A))
+                                 (record (select 1 r) (select 0 r))
+                               )
+                              )
+                        (show (swap (record 1 \"x\"))))", ""),
+                "[x 1]");
         }
 
         #[test]

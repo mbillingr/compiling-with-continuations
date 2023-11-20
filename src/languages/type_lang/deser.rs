@@ -36,6 +36,10 @@ impl Expr {
                 .collect::<Result<Vec<_>, _>>()
                 .map(Expr::record),
 
+            List(Ref([Symbol(Ref("select")), Int(idx), rec])) => {
+                Self::from_sexpr(rec).map(|r| Self::select(*idx as usize, r))
+            }
+
             List(Ref([enum_, Symbol(Ref(".")), Symbol(Ref(variant))])) => {
                 let etx = TyExpr::from_sexpr(enum_)?;
                 Ok(Expr::cons(etx, variant))
@@ -97,6 +101,12 @@ impl Expr {
                     .chain(rec.iter().map(Self::to_sexpr))
                     .collect(),
             ),
+
+            Expr::Select(sel) => S::list(vec![
+                S::symbol("select"),
+                S::Int(sel.0 as i64),
+                sel.1.to_sexpr(),
+            ]),
 
             Expr::MatchEnum(mat) => S::list(
                 vec![S::symbol("match-enum"), mat.0.to_sexpr()]
@@ -257,6 +267,7 @@ impl TyExpr {
             TyExpr::String => S::symbol("String"),
             TyExpr::Named(v) => S::Symbol(v.clone().into()),
             TyExpr::Fn(f) => S::list(vec![f.0.to_sexpr(), S::symbol("->"), f.1.to_sexpr()]),
+            TyExpr::Record(fts) => S::list(fts.iter().map(|t| t.to_sexpr()).collect()),
             TyExpr::Construct(txs) => S::list(
                 once(S::Symbol(txs.0.clone().into()))
                     .chain(txs.1.iter().map(Self::to_sexpr))
@@ -275,6 +286,13 @@ impl TyExpr {
             S::List(Ref([f, S::Symbol(Ref("->")), a])) => {
                 Ok(TyExpr::func(Self::from_sexpr(f)?, Self::from_sexpr(a)?))
             }
+            S::List(Ref([S::Symbol(Ref("Record")), fts @ ..])) => fts
+                .iter()
+                .map(|s| Self::from_sexpr(s))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Rc::new)
+                .map(Self::Record),
+
             S::List(Ref([S::Symbol(Ref(t0)), txs @ ..])) => txs
                 .iter()
                 .map(Self::from_sexpr)
@@ -353,6 +371,14 @@ mod tests {
     fn test_record() {
         let repr = "(record 1 x 2)";
         let expr = Expr::record((1, "x", 2, ()));
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn test_select() {
+        let repr = "(select 1 r)";
+        let expr = Expr::select(1, "r");
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }

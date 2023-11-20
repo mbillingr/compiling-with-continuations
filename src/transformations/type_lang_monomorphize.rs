@@ -30,6 +30,7 @@ impl Context {
                     .map(|f| self.monomporphize(f))
                     .collect::<Vec<_>>(),
             ),
+            Expr::Select(sel) => Expr::select(sel.0, self.monomporphize(&sel.1)),
             Expr::Cons(_) => expr.clone(),
             Expr::MatchEnum(mat) => Expr::match_enum(
                 self.monomporphize(&mat.0),

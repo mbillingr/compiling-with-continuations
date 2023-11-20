@@ -72,6 +72,17 @@ impl Checker {
                 ))
             }
 
+            Expr::Select(sel) => {
+                let r = self.infer(&sel.1, env, tenv)?;
+                match r.get_type() {
+                    Type::Record(field_types) => Ok(Expr::annotate(
+                        field_types[sel.0].clone(),
+                        Expr::select(sel.0, r),
+                    )),
+                    _ => Err(format!("expected record: {:?}", sel.1)),
+                }
+            }
+
             Expr::Cons(cons) => {
                 let tx = &cons.0;
                 let enum_t = self.teval(tx, tenv);
@@ -289,6 +300,8 @@ impl Checker {
                 .collect::<Result<Vec<_>, _>>()
                 .map(Expr::record),
 
+            Expr::Select(sel) => Ok(Expr::select(sel.0, self.resolve_expr(&sel.1)?)),
+
             Expr::Cons(_) => Ok(expr.clone()),
 
             Expr::MatchEnum(mat) => Ok(Expr::match_enum(
@@ -358,6 +371,13 @@ impl Checker {
                 let (pb, rb) = &*b;
                 self.unify(pa, pb)?;
                 self.unify(ra, rb)
+            }
+
+            (Record(a), Record(b)) if a.len() == b.len() => {
+                for (a_, b_) in a.iter().zip(b.iter()) {
+                    self.unify(a_, b_)?;
+                }
+                Ok(())
             }
 
             (Enum(a), Enum(b)) if Rc::ptr_eq(&a, &b) => panic!(),
@@ -507,6 +527,9 @@ impl Checker {
                 self.teval(&sig.0, tenv),
                 self.teval(&sig.1, tenv),
             ))),
+            TyExpr::Record(fts) => {
+                Type::Record(Rc::new(fts.iter().map(|tx| self.teval(tx, tenv)).collect()))
+            }
             TyExpr::Construct(con) => match tenv.get(&con.0) {
                 None => panic!("Unknown {}", con.0),
                 Some(Type::Generic(tc)) => {

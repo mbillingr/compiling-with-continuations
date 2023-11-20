@@ -26,6 +26,9 @@ pub enum Expr {
     /// Tuple construction
     Record(Rc<Vec<Self>>),
 
+    /// Tuple access
+    Select(Rc<(usize, Self)>),
+
     /// Enum variant construction
     Cons(Rc<(TyExpr, String)>),
 
@@ -57,6 +60,7 @@ pub enum TyExpr {
     String,
     Named(String),
     Fn(Rc<(TyExpr, TyExpr)>),
+    Record(Rc<Vec<TyExpr>>),
     Construct(Rc<(String, Vec<TyExpr>)>),
 }
 
@@ -144,6 +148,10 @@ impl Expr {
 
     pub fn record(fields: impl ListBuilder<Expr>) -> Self {
         Expr::Record(Rc::new(fields.build()))
+    }
+
+    pub fn select(index: usize, rec: impl Into<Expr>) -> Self {
+        Expr::Select(Rc::new((index, rec.into())))
     }
 
     pub fn cons(etx: impl Into<TyExpr>, variant: impl ToString) -> Self {

@@ -36,6 +36,7 @@ impl Context {
             TExp::Record(fields) => {
                 LExp::record(fields.iter().map(|f| self.convert(f)).collect::<Vec<_>>())
             }
+            TExp::Select(sel) => LExp::select(sel.0 as isize, self.convert(&sel.1)),
 
             TExp::Lambda(lam) => LExp::func(&lam.param, self.convert(&lam.body)),
 
@@ -137,6 +138,7 @@ impl Context {
                 (_, ex @ TExp::Lambda(_)) => self.convert(ex),
                 (_, ex @ TExp::MatchEnum(_)) => self.convert(ex),
                 (_, ex @ TExp::Record(_)) => self.convert(ex),
+                (_, ex @ TExp::Select(_)) => self.convert(ex),
                 _ => todo!("{expr:?}"),
             },
 
