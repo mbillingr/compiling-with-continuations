@@ -55,7 +55,7 @@ impl Context {
                 LExp::fix(names, fns, self.convert(body))
             }
 
-            TExp::Cons(_) | TExp::Add(_) => panic!("Annotation required: {expr:?}"),
+            TExp::Cons2(_) | TExp::Add(_) => panic!("Annotation required: {expr:?}"),
 
             TExp::MatchEnum(mat) => {
                 let (val, arms) = &**mat;
@@ -132,17 +132,6 @@ impl Context {
             },
 
             TExp::Annotation(ann) => match &**ann {
-                (Type::Enum(en), TExp::Cons(con)) => {
-                    let (_, variant, args) = &**con;
-                    let conrep = self.enum_variant_repr(en, variant);
-                    let val = match args.as_slice() {
-                        [] => LExp::int(0),
-                        [x] => self.convert(x),
-                        xs => LExp::record(xs.iter().map(|x| self.convert(x)).collect::<Vec<_>>()),
-                    };
-                    LExp::con(conrep, val)
-                }
-
                 (Type::Fn(tf), TExp::Cons2(con)) => {
                     let en = tf.1.expect_enum().unwrap();
                     let variant = &con.1;
@@ -350,7 +339,7 @@ mod tests {
                     ("C".to_string(), vec![]),
                 ],
             ),
-            TExp::cons("ABC", "B", [] as [i64; 0]),
+            TExp::cons2("ABC", "B"),
         );
 
         let y = LExp::con(ConRep::Constant(1), 0);
@@ -373,44 +362,49 @@ mod tests {
             [
                 ("A".to_string(), vec![]),
                 ("B".to_string(), vec![Type::Int]),
-                ("C".to_string(), vec![Type::Int, Type::Int]),
             ],
         );
 
-        let x = TExp::annotate(ety.clone(), TExp::cons("ABC", "A", [] as [i64; 0]));
+        let x = TExp::annotate(ety.clone(), TExp::cons2("ABC", "A"));
         let y = LExp::con(ConRep::Constant(0), 0);
         assert_eq!(ctx.convert(&x), y);
 
-        let x = TExp::annotate(ety.clone(), TExp::cons("ABC", "B", [1]));
-        let y = LExp::con(ConRep::Tagged(0), 1);
-        assert_eq!(ctx.convert(&x), y);
-
-        let x = TExp::annotate(ety.clone(), TExp::cons("ABC", "B", [2, 3]));
-        let y = LExp::con(
-            ConRep::Tagged(0),
-            LExp::record(vec![LExp::int(2), LExp::int(3)]),
+        let x = TExp::annotate(
+            ety.clone(),
+            TExp::apply(
+                TExp::annotate(Type::func(Type::Int, ety.clone()), TExp::cons2("ABC", "B")),
+                1,
+            ),
         );
+        let y = LExp::apply(LExp::func("x", LExp::con(ConRep::Tagged(0), "x")), 1);
         assert_eq!(ctx.convert(&x), y);
     }
 
     #[test]
     fn convert_transparent_enum() {
+        let enum_t = Type::enum_(
+            Rc::new(GenericType::GenericEnum(
+                EnumDef {
+                    tname: "Foo".to_string(),
+                    tvars: vec![],
+                    variants: vec![].into(),
+                },
+                Default::default(),
+            )),
+            [("X".to_string(), vec![Type::Int])],
+        );
         let x = TExp::annotate(
-            Type::enum_(
-                Rc::new(GenericType::GenericEnum(
-                    EnumDef {
-                        tname: "Foo".to_string(),
-                        tvars: vec![],
-                        variants: vec![].into(),
-                    },
-                    Default::default(),
-                )),
-                [("X".to_string(), vec![Type::Int])],
+            enum_t.clone(),
+            TExp::apply(
+                TExp::annotate(
+                    Type::func(Type::Int, enum_t.clone()),
+                    TExp::cons2("Foo", "X"),
+                ),
+                42,
             ),
-            TExp::cons("Foo", "X", [42]),
         );
 
-        let y = LExp::con(ConRep::Transparent, 42);
+        let y = LExp::apply(LExp::func("x", LExp::con(ConRep::Transparent, "x")), 42);
 
         assert_eq!(Context::default().convert(&x), y);
     }

@@ -432,6 +432,15 @@ where
     }
 }
 
+impl<V> From<&'static str> for Ref<Expr<V>>
+where
+    &'static str: Into<V>,
+{
+    fn from(v: &'static str) -> Self {
+        Ref::new(Expr::Var(v.into()))
+    }
+}
+
 impl From<Ref<str>> for Expr<Ref<str>> {
     fn from(v: Ref<str>) -> Self {
         Expr::Var(v)

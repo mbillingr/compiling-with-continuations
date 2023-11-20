@@ -27,9 +27,6 @@ pub enum Expr {
     Record(Rc<Vec<Self>>),
 
     /// Enum variant construction
-    Cons(Rc<(String, String, Vec<Self>)>),
-
-    /// Enum variant construction
     Cons2(Rc<(TyExpr, String)>),
 
     /// Enum pattern matching (will be replaced by more general pattern matching)
@@ -147,14 +144,6 @@ impl Expr {
 
     pub fn record(fields: impl ListBuilder<Expr>) -> Self {
         Expr::Record(Rc::new(fields.build()))
-    }
-
-    pub fn cons(ety: impl ToString, variant: impl ToString, args: impl ListBuilder<Expr>) -> Self {
-        Expr::Cons(Rc::new((
-            ety.to_string(),
-            variant.to_string(),
-            args.build(),
-        )))
     }
 
     pub fn cons2(etx: impl Into<TyExpr>, variant: impl ToString) -> Self {

@@ -36,14 +36,6 @@ impl Expr {
                 .collect::<Result<Vec<_>, _>>()
                 .map(Expr::record),
 
-            List(Ref(
-                [Symbol(Ref("construct")), Symbol(Ref(enum_)), Symbol(Ref(variant)), args @ ..],
-            )) => args
-                .iter()
-                .map(|a| Self::from_sexpr(a))
-                .collect::<Result<Vec<_>, _>>()
-                .map(|args| Expr::cons(enum_, variant, args)),
-
             List(Ref([enum_, Symbol(Ref(".")), Symbol(Ref(variant))])) => {
                 let etx = TyExpr::from_sexpr(enum_)?;
                 Ok(Expr::cons2(etx, variant))
@@ -104,17 +96,6 @@ impl Expr {
                 once(S::symbol("record"))
                     .chain(rec.iter().map(Self::to_sexpr))
                     .collect(),
-            ),
-
-            Expr::Cons(cons) => S::list(
-                vec![
-                    S::symbol("construct"),
-                    S::Symbol(cons.0.clone().into()),
-                    S::Symbol(cons.1.clone().into()),
-                ]
-                .into_iter()
-                .chain(cons.2.iter().map(|x| x.to_sexpr()))
-                .collect(),
             ),
 
             Expr::MatchEnum(mat) => S::list(
@@ -372,14 +353,6 @@ mod tests {
     fn test_record() {
         let repr = "(record 1 x 2)";
         let expr = Expr::record((1, "x", 2, ()));
-        assert_eq!(expr.to_string(), repr);
-        assert_eq!(Expr::from_str(repr), Ok(expr));
-    }
-
-    #[test]
-    fn test_cons() {
-        let repr = "(construct Foo Bar 1)";
-        let expr = Expr::cons("Foo", "Bar", [1]);
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }

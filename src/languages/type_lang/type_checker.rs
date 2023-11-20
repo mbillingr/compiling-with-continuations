@@ -72,34 +72,6 @@ impl Checker {
                 ))
             }
 
-            Expr::Cons(cons) => {
-                let (ety, variant, args) = &**cons;
-                let t = self.lookup_concrete_type(ety, tenv)?;
-                match &t {
-                    Type::Enum(enum_) => {
-                        let var = enum_.variants.get(variant).ok_or_else(|| {
-                            format!("Unknown variant: {} {variant}", enum_.template.get_name())
-                        })?;
-                        if args.len() != var.len() {
-                            return Err(format!(
-                                "Wrong number of arguments: {} {variant}",
-                                enum_.template.get_name()
-                            ));
-                        }
-                        for (v, a) in var.iter().zip(args) {
-                            self.check_expr(a, v, env, tenv)?;
-                        }
-                        let targs: Result<Vec<_>, _> = args
-                            .iter()
-                            .zip(var)
-                            .map(|(a, v)| self.check_expr(a, v, env, tenv))
-                            .collect();
-                        Ok(Expr::annotate(t, Expr::cons(ety, variant, targs?)))
-                    }
-                    _ => Err(format!("Not an enum - {ety} is a {t:?}")),
-                }
-            }
-
             Expr::Cons2(cons) => {
                 let tx = &cons.0;
                 let enum_t = self.teval(tx, tenv);
@@ -317,15 +289,6 @@ impl Checker {
                 .collect::<Result<Vec<_>, _>>()
                 .map(Expr::record),
 
-            Expr::Cons(cons) => Ok(Expr::cons(
-                &cons.0,
-                &cons.1,
-                cons.2
-                    .iter()
-                    .map(|x| self.resolve_expr(x))
-                    .collect::<Result<Vec<_>, _>>()?,
-            )),
-
             Expr::Cons2(_) => Ok(expr.clone()),
 
             Expr::MatchEnum(mat) => Ok(Expr::match_enum(
@@ -514,18 +477,6 @@ impl Checker {
         let nr = self.substitutions.len();
         self.substitutions.push(None);
         Type::Var(nr)
-    }
-
-    fn lookup_concrete_type(
-        &mut self,
-        name: &str,
-        tenv: &HashMap<String, Type>,
-    ) -> Result<Type, String> {
-        match tenv.get(name) {
-            None => Err(format!("Unknown type: {name}")),
-            Some(Type::Generic(tc)) => Ok(tc.instantiate_fresh(self)),
-            Some(t) => Ok(t.clone()),
-        }
     }
 
     fn teval(&mut self, tx: &TyExpr, tenv: &HashMap<String, Type>) -> Type {
@@ -1046,7 +997,7 @@ mod tests {
         let x = Expr::defs(
             [Def::enum_::<&str>("Foo", [], ("A", ("B", TyExpr::Int), ()))],
             Expr::match_enum(
-                Expr::cons("Foo", "B", [1]),
+                Expr::apply(Expr::cons2("Foo", "B"), 1),
                 [(
                     EnumVariantPattern::Constructor("B".to_string(), "x".to_string()),
                     Expr::var("x"),

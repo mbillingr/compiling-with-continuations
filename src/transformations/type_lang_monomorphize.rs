@@ -30,16 +30,6 @@ impl Context {
                     .map(|f| self.monomporphize(f))
                     .collect::<Vec<_>>(),
             ),
-            Expr::Cons(cons) => {
-                let (ty, va, args) = &**cons;
-                Expr::cons(
-                    ty,
-                    va,
-                    args.iter()
-                        .map(|a| self.monomporphize(a))
-                        .collect::<Vec<_>>(),
-                )
-            }
             Expr::Cons2(_) => expr.clone(),
             Expr::MatchEnum(mat) => Expr::match_enum(
                 self.monomporphize(&mat.0),
