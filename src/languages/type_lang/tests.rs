@@ -193,6 +193,24 @@ macro_rules! make_testsuite_for_type_lang {
                 "3"
             );
         }
+
+        #[test]
+        fn a_list_implementation() {
+            assert_eq!(
+                $run("(define ((enum (List T) Nil (Cons (Record T (List T))))
+                               (func (T) (nil _ : T -> (List T)) (List . Nil))
+                               (func (T) (cons x : (Record T (List T)) -> (List T)) ((List . Cons) x))
+                               (func (T) (car xs : (List T) -> T)
+                                 (match-enum xs
+                                   ((Cons r) => (select 0 r))))
+                               (func (T) (cdr xs : (List T) -> (List T))
+                                 (match-enum xs
+                                   ((Cons r) => (select 1 r))))
+                              )
+                        (show (car (cons (record 42 (nil 0))))))", ""),
+                "42"
+            );
+        }
     };
 }
 
