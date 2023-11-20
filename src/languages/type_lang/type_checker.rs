@@ -1,5 +1,6 @@
 use crate::languages::type_lang::ast::{
-    Def, EnumDef, EnumMatchArm, EnumType, EnumVariant, EnumVariantPattern, Expr, TyExpr, Type,
+    Def, EnumDef, EnumMatchArm, EnumType, EnumVariant, EnumVariantPattern, Expr, GenericInstance,
+    TyExpr, Type,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -112,8 +113,8 @@ impl Checker {
                         })?;
 
                         let t = match var.as_slice() {
-                            [] => Type::Enum(enum_),
-                            [x] => Type::func(x.clone(), Type::Enum(enum_)),
+                            [] => enum_t,
+                            [x] => Type::func(x.clone(), enum_t),
                             _ => panic!("Multiple enum variant values are not supported"),
                         };
                         Ok(Expr::annotate(t, Expr::cons2(cons.0.clone(), &cons.1)))
@@ -375,6 +376,7 @@ impl Checker {
         use crate::languages::type_lang::ast::Type::*;
         let t1_ = self.resolve(t1);
         let t2_ = self.resolve(t2);
+        println!("unify {t1:?} = {t2:?} : {t1_:?} = {t2_:?}");
         match (t1_, t2_) {
             (Generic(g), _) | (_, Generic(g)) => Err(format!("Uninstantiated generic: {g:?}")),
 
@@ -406,11 +408,9 @@ impl Checker {
                 }
             }
 
-            (GenericInstance(a, atargs, _), GenericInstance(b, btargs, _))
-                if Rc::ptr_eq(&a, &b) =>
-            {
-                assert_eq!(atargs.len(), btargs.len());
-                for (ta, tb) in atargs.iter().zip(btargs.iter()) {
+            (GenericInstance(a), GenericInstance(b)) if Rc::ptr_eq(&a.generic, &b.generic) => {
+                assert_eq!(a.targs.len(), b.targs.len());
+                for (ta, tb) in a.targs.iter().zip(b.targs.iter()) {
                     self.unify(ta, tb)?
                 }
                 Ok(())
@@ -500,15 +500,15 @@ impl Checker {
                 }
             }
 
-            Type::GenericInstance(g, targs, actual_t) => Ok(Type::GenericInstance(
-                g.clone(),
-                Rc::new(
-                    targs
-                        .iter()
-                        .map(|t| self.resolve_fully_(t, resolved_lazies))
-                        .collect::<Result<_, _>>()?,
-                ),
-                actual_t
+            Type::GenericInstance(gi) => Ok(Type::GenericInstance(Rc::new(GenericInstance {
+                generic: gi.generic.clone(),
+                targs: gi
+                    .targs
+                    .iter()
+                    .map(|t| self.resolve_fully_(t, resolved_lazies))
+                    .collect::<Result<_, _>>()?,
+                actual_t: gi
+                    .actual_t
                     .borrow()
                     .as_ref()
                     .map(|t| {
@@ -519,9 +519,8 @@ impl Checker {
                             })
                     })
                     .transpose()
-                    .map(RefCell::new)
-                    .map(Rc::new)?,
-            )),
+                    .map(RefCell::new)?,
+            }))),
         }
     }
 
@@ -556,15 +555,13 @@ impl Checker {
                     .cloned()
                     .unwrap_or_else(|| panic!("Unknown {v}"));
                 match t {
-                    Type::Generic(g) => {
-                        let targs = Rc::new((0..g.n_type_args()).map(|_| self.fresh()).collect());
-                        Type::GenericInstance(g, targs, Rc::new(RefCell::new(None)))
-                        /*let mut tenv_ = tenv.clone();
-                        let placeholder = Rc::new(RefCell::new(None));
-                        tenv_.insert(v.clone(), Type::LazyType(placeholder.clone()));
-                        let actual_type = g.instantiate_fresh(self, &tenv_);
-                        *placeholder.borrow_mut() = Some(actual_type.clone());
-                        actual_type*/
+                    Type::Generic(generic) => {
+                        let targs = (0..generic.n_type_args()).map(|_| self.fresh()).collect();
+                        Type::GenericInstance(Rc::new(GenericInstance {
+                            generic,
+                            targs,
+                            actual_t: RefCell::new(None),
+                        }))
                     }
                     _ => t,
                 }
@@ -577,8 +574,12 @@ impl Checker {
                 None => panic!("Unknown {}", con.0),
                 Some(Type::Generic(tc)) => {
                     assert_eq!(con.1.len(), tc.n_type_args());
-                    let targs = Rc::new(con.1.iter().map(|t| self.teval(t, tenv)).collect());
-                    Type::GenericInstance(tc.clone(), targs, Rc::new(RefCell::new(None)))
+                    let targs = con.1.iter().map(|t| self.teval(t, tenv)).collect();
+                    Type::GenericInstance(Rc::new(GenericInstance {
+                        generic: tc.clone(),
+                        targs,
+                        actual_t: RefCell::new(None),
+                    }))
                 }
                 Some(t) => {
                     panic!("Not a type constructor: {t:?}")
@@ -722,12 +723,12 @@ impl Type {
     pub fn check_enum(&self, ctx: &mut Checker) -> Option<Rc<EnumType>> {
         match self {
             Type::Enum(et) => Some(et.clone()),
-            Type::GenericInstance(ref g, ref targs, actual_t) => {
-                let mut act = actual_t.borrow_mut();
+            Type::GenericInstance(gi) => {
+                let mut act = gi.actual_t.borrow_mut();
                 match act.as_mut() {
                     Some(t) => Some(t.clone()),
                     None => {
-                        let t = g.to_enum(targs.to_vec(), ctx)?;
+                        let t = gi.generic.to_enum(gi.targs.to_vec(), ctx)?;
                         *act = Some(t.clone());
                         Some(t)
                     }
@@ -740,9 +741,7 @@ impl Type {
     pub fn expect_enum(&self) -> Option<Rc<EnumType>> {
         match self {
             Type::Enum(et) => Some(et.clone()),
-            Type::GenericInstance(ref g, ref targs, actual_t) => {
-                actual_t.borrow().as_ref().cloned()
-            }
+            Type::GenericInstance(gi) => gi.actual_t.borrow().as_ref().cloned(),
             _ => None,
         }
     }
@@ -1022,7 +1021,11 @@ mod tests {
             Default::default(),
         ));
 
-        let foo_int = Type::GenericInstance(foo, Rc::new(vec![Type::Int]), Default::default());
+        let foo_int = Type::GenericInstance(Rc::new(GenericInstance {
+            generic: foo,
+            targs: vec![Type::Int],
+            actual_t: Default::default(),
+        }));
 
         let y = Expr::defs(
             [Def::inferred_func(

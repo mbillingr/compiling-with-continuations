@@ -99,7 +99,38 @@ impl Context {
                 Type::Int => LExp::apply(PrimOp::ShowInt, self.convert(x)),
                 Type::Real => LExp::apply(PrimOp::ShowReal, self.convert(x)),
                 Type::String => LExp::apply(PrimOp::ShowStr, self.convert(x)),
+                t => {
+                    if let Some(et) = t.expect_enum() {
+                        let mut arms = vec![];
+                        for (vname, tys) in &et.variants {
+                            match tys.as_slice() {
+                                [] => arms.push(EnumMatchArm {
+                                    pattern: EnumVariantPattern::Constant(vname.clone()),
+                                    branch: TExp::show(TExp::string(vname)),
+                                }),
+                                [tx] => arms.push(EnumMatchArm {
+                                    pattern: EnumVariantPattern::Constructor(
+                                        vname.clone(),
+                                        "x".to_string(),
+                                    ),
+                                    branch: TExp::sequence(vec![
+                                        TExp::show(TExp::string("(")),
+                                        TExp::show(TExp::string(vname)),
+                                        TExp::show(TExp::string(" ")),
+                                        TExp::show(TExp::annotate(tx.clone(), TExp::var("x"))),
+                                        TExp::show(TExp::string(")")),
+                                    ]),
+                                }),
+                                _ => panic!("enum variants with more than one value not supported"),
+                            }
+                        }
+                        self.convert(&TExp::match_enum((**x).clone(), arms))
+                    } else {
+                        todo!("{expr:?}")
+                    }
+                }
                 Type::Enum(e) => {
+                    unreachable!();
                     let mut arms = vec![];
                     for (vname, tys) in &e.variants {
                         match tys.as_slice() {
@@ -140,20 +171,19 @@ impl Context {
                     LExp::con(conrep, val)
                 }
 
-                (Type::Enum(en), TExp::Cons2(con)) => {
+                (Type::Fn(tf), TExp::Cons2(con)) => {
+                    let en = tf.1.expect_enum().unwrap();
                     let variant = &con.1;
-                    let conrep = self.enum_variant_repr(en, variant);
-                    LExp::con(conrep, LExp::int(0))
+                    let conrep = self.enum_variant_repr(&en, variant);
+                    LExp::func("x", LExp::con(conrep, LExp::var("x")))
                 }
 
-                (Type::Fn(tf), TExp::Cons2(con)) => {
-                    let en = match &tf.1 {
-                        Type::Enum(en) => en,
-                        _ => panic!("wrong type"),
-                    };
+                (t, TExp::Cons2(con)) => {
+                    println!("{t:?}");
+                    let en = t.expect_enum().unwrap();
                     let variant = &con.1;
-                    let conrep = self.enum_variant_repr(en, variant);
-                    LExp::func("x", LExp::con(conrep, LExp::var("x")))
+                    let conrep = self.enum_variant_repr(&en, variant);
+                    LExp::con(conrep, LExp::int(0))
                 }
 
                 (Type::Int, TExp::Add(add)) => LExp::apply(

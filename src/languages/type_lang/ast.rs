@@ -384,11 +384,7 @@ pub enum Type {
 
     /// used internally by the type checker to resolve recursive types
     LazyType(Rc<RefCell<Option<Type>>>),
-    GenericInstance(
-        Rc<GenericType>,
-        Rc<Vec<Type>>,
-        Rc<RefCell<Option<Rc<EnumType>>>>,
-    ),
+    GenericInstance(Rc<GenericInstance>),
 }
 
 #[derive(PartialEq)]
@@ -408,6 +404,18 @@ impl Debug for EnumType {
     }
 }
 
+pub struct GenericInstance {
+    pub generic: Rc<GenericType>,
+    pub targs: Vec<Type>,
+    pub actual_t: RefCell<Option<Rc<EnumType>>>,
+}
+
+impl PartialEq for GenericInstance {
+    fn eq(&self, other: &Self) -> bool {
+        self.generic == other.generic && self.targs == other.targs
+    }
+}
+
 impl Eq for Type {}
 
 impl Hash for Type {
@@ -424,9 +432,9 @@ impl Hash for Type {
             Type::Record(rc) => Rc::as_ptr(rc).hash(state),
             Type::Enum(rc) => Rc::as_ptr(rc).hash(state),
             Type::LazyType(rc) => rc.borrow().hash(state),
-            Type::GenericInstance(g, args, _) => {
-                Rc::as_ptr(g).hash(state);
-                for t in args.iter() {
+            Type::GenericInstance(gi) => {
+                Rc::as_ptr(&gi.generic).hash(state);
+                for t in gi.targs.iter() {
                     t.hash(state);
                 }
             }
@@ -460,9 +468,9 @@ impl Debug for Type {
                 Some(t) => write!(f, "<lazy {t:?}>"),
             },
 
-            Type::GenericInstance(g, args, _) => {
-                write!(f, "({}", g.get_name())?;
-                for t in args.iter() {
+            Type::GenericInstance(gi) => {
+                write!(f, "({}", gi.generic.get_name())?;
+                for t in gi.targs.iter() {
                     write!(f, ", {t:?}")?;
                 }
                 write!(f, ")")
