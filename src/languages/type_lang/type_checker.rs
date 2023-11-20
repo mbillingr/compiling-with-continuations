@@ -519,7 +519,7 @@ impl Checker {
                     }))
                 }
                 Some(t) => {
-                    panic!("Not a type constructor: {t:?}")
+                    panic!("Not a type constructor: {:?}", t)
                 }
             },
         }
@@ -585,6 +585,16 @@ impl GenericType {
         }
     }
 
+    pub fn to_enum(self: &Rc<Self>, targs: Vec<Type>, ctx: &mut Checker) -> Option<Rc<EnumType>> {
+        match &**self {
+            GenericType::GenericEnum(_, _) => match self.instantiate_with(targs, ctx) {
+                Type::Enum(enum_) => Some(enum_),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     fn instantiate_fresh(self: &Rc<Self>, ctx: &mut Checker) -> Type {
         match &**self {
             GenericType::GenericFn { tvars, .. } => {
@@ -637,16 +647,6 @@ impl GenericType {
                     variants,
                 }))
             }
-        }
-    }
-
-    pub fn to_enum(self: &Rc<Self>, targs: Vec<Type>, ctx: &mut Checker) -> Option<Rc<EnumType>> {
-        match &**self {
-            GenericType::GenericEnum(_, _) => match self.instantiate_with(targs, ctx) {
-                Type::Enum(enum_) => Some(enum_),
-                _ => None,
-            },
-            _ => None,
         }
     }
 }
