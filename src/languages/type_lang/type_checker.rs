@@ -54,7 +54,7 @@ impl Checker {
 
             Expr::Ref(var) => match env.get(var) {
                 None => Err(format!("unbound {var}")),
-                Some(Type::Generic(g)) => Ok((g.instantiate_fresh(self, tenv), Expr::var(var))),
+                Some(Type::Generic(g)) => Ok((g.instantiate_fresh(self), Expr::var(var))),
                 Some(t) => Ok((t.clone(), Expr::var(var))),
             }
             .map(|(t, x)| Rc::new((t, x)))
@@ -106,7 +106,7 @@ impl Checker {
                 let variant = &cons.1;
 
                 match enum_t.check_enum(self) {
-                    None => Err(panic!("Not an enum - {:?} is a {enum_t:?}", cons.0)),
+                    None => Err(format!("Not an enum - {:?} is a {enum_t:?}", cons.0)),
                     Some(enum_) => {
                         let var = enum_.variants.get(variant).ok_or_else(|| {
                             format!("Unknown variant: {} {variant}", enum_.template.get_name())
@@ -115,7 +115,11 @@ impl Checker {
                         let t = match var.as_slice() {
                             [] => enum_t,
                             [x] => Type::func(x.clone(), enum_t),
-                            _ => panic!("Multiple enum variant values are not supported"),
+                            _ => {
+                                return Err(format!(
+                                    "Multiple enum variant values are not supported"
+                                ))
+                            }
                         };
                         Ok(Expr::annotate(t, Expr::cons2(cons.0.clone(), &cons.1)))
                     }
@@ -127,7 +131,7 @@ impl Checker {
 
                 let val_ = self.infer(val, env, tenv)?;
                 let enum_ = &*match self.resolve(&val_.get_type()).check_enum(self) {
-                    None => return Err(panic!("Not an enum - {val_:?}")),
+                    None => return Err(format!("Not an enum - {val_:?}")),
                     Some(enum_) => enum_,
                 };
 
@@ -210,7 +214,7 @@ impl Checker {
             Expr::Defs(defs) => {
                 let (defs, body) = &**defs;
                 let mut def_env = env.clone();
-                let mut def_tenv = Rc::new(RefCell::new(tenv.clone()));
+                let def_tenv = Rc::new(RefCell::new(tenv.clone()));
 
                 for def in defs {
                     match def {
@@ -265,7 +269,7 @@ impl Checker {
                             defs_
                                 .push(Def::inferred_func(signature, &def.fname, &def.param, body_));
                         }
-                        Def::Enum(def) => {}
+                        Def::Enum(_) => {}
                         Def::InferredFunc(_) => unreachable!(),
                     }
                 }
@@ -537,7 +541,7 @@ impl Checker {
     ) -> Result<Type, String> {
         match tenv.get(name) {
             None => Err(format!("Unknown type: {name}")),
-            Some(Type::Generic(tc)) => Ok(tc.instantiate_fresh(self, tenv)),
+            Some(Type::Generic(tc)) => Ok(tc.instantiate_fresh(self)),
             Some(t) => Ok(t.clone()),
         }
     }
@@ -603,12 +607,7 @@ pub enum GenericType {
 impl Debug for GenericType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            GenericType::GenericFn {
-                tvars,
-                ptype,
-                rtype,
-                ..
-            } => write!(f, "<generic fn>"),
+            GenericType::GenericFn { .. } => write!(f, "<generic fn>"),
             GenericType::GenericEnum(_, _) => write!(f, "<generic enum>"),
         }
     }
@@ -653,7 +652,7 @@ impl GenericType {
         }
     }
 
-    fn instantiate_fresh(self: &Rc<Self>, ctx: &mut Checker, tenv: &HashMap<String, Type>) -> Type {
+    fn instantiate_fresh(self: &Rc<Self>, ctx: &mut Checker) -> Type {
         match &**self {
             GenericType::GenericFn { tvars, .. } => {
                 let args = tvars.iter().map(|_| ctx.fresh()).collect();

@@ -129,34 +129,6 @@ impl Context {
                         todo!("{expr:?}")
                     }
                 }
-                Type::Enum(e) => {
-                    unreachable!();
-                    let mut arms = vec![];
-                    for (vname, tys) in &e.variants {
-                        match tys.as_slice() {
-                            [] => arms.push(EnumMatchArm {
-                                pattern: EnumVariantPattern::Constant(vname.clone()),
-                                branch: TExp::show(TExp::string(vname)),
-                            }),
-                            [tx] => arms.push(EnumMatchArm {
-                                pattern: EnumVariantPattern::Constructor(
-                                    vname.clone(),
-                                    "x".to_string(),
-                                ),
-                                branch: TExp::sequence(vec![
-                                    TExp::show(TExp::string("(")),
-                                    TExp::show(TExp::string(vname)),
-                                    TExp::show(TExp::string(" ")),
-                                    TExp::show(TExp::annotate(tx.clone(), TExp::var("x"))),
-                                    TExp::show(TExp::string(")")),
-                                ]),
-                            }),
-                            _ => panic!("enum variants with more than one value not supported"),
-                        }
-                    }
-                    self.convert(&TExp::match_enum((**x).clone(), arms))
-                }
-                _ => todo!("{expr:?}"),
             },
 
             TExp::Annotation(ann) => match &**ann {
