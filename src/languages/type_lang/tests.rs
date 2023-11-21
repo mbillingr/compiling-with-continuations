@@ -211,6 +211,14 @@ macro_rules! make_testsuite_for_type_lang {
                 "42"
             );
         }
+
+        #[test]
+        fn escaping_type() {
+            assert_eq!(
+                $run("(show (define ((enum (Foo) A B)) (Foo . A)))", ""),
+                "A"
+            );
+        }
     };
 }
 
