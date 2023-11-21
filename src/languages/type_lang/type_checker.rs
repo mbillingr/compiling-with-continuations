@@ -480,13 +480,7 @@ impl Checker {
                     .actual_t
                     .borrow()
                     .as_ref()
-                    .map(|t| {
-                        self.resolve_fully_(&Type::Enum(t.clone()), resolved_lazies)
-                            .map(|ty| match ty {
-                                Type::Enum(e) => e,
-                                _ => unreachable!(),
-                            })
-                    })
+                    .map(|t| self.resolve_fully_(&t, resolved_lazies))
                     .transpose()
                     .map(RefCell::new)?,
             }))),
@@ -681,12 +675,13 @@ impl Type {
             Type::GenericInstance(gi) => {
                 let mut act = gi.actual_t.borrow_mut();
                 match act.as_mut() {
-                    Some(t) => Some(t.clone()),
                     None => {
                         let t = gi.generic.to_enum(gi.targs.to_vec(), ctx)?;
-                        *act = Some(t.clone());
+                        *act = Some(Type::Enum(t.clone()));
                         Some(t)
                     }
+                    Some(Type::Enum(e)) => Some(e.clone()),
+                    _ => panic!("invalid instance type"),
                 }
             }
             _ => None,
@@ -696,7 +691,11 @@ impl Type {
     pub fn expect_enum(&self) -> Option<Rc<EnumType>> {
         match self {
             Type::Enum(et) => Some(et.clone()),
-            Type::GenericInstance(gi) => gi.actual_t.borrow().as_ref().cloned(),
+            Type::GenericInstance(gi) => match &*gi.actual_t.borrow() {
+                None => None,
+                Some(Type::Enum(e)) => Some(e.clone()),
+                Some(_) => panic!("invalid instance type"),
+            },
             _ => None,
         }
     }

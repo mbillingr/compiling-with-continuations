@@ -394,7 +394,7 @@ impl Debug for EnumType {
 pub struct GenericInstance {
     pub generic: Rc<GenericType>,
     pub targs: Vec<Type>,
-    pub actual_t: RefCell<Option<Rc<EnumType>>>,
+    pub actual_t: RefCell<Option<Type>>,
 }
 
 impl PartialEq for GenericInstance {
