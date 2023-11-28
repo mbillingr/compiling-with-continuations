@@ -76,7 +76,7 @@ pub enum TyExpr {
 /// The AST of an anonymous function
 #[derive(Debug, PartialEq)]
 pub struct Lambda<E> {
-    pub param: String,
+    pub params: Vec<String>,
     pub body: E,
 }
 
@@ -183,12 +183,12 @@ impl Expr {
         Expr::Apply(Rc::new((f.into(), a.into())))
     }
 
-    pub fn lambda<T>(p: impl ToString, body: T) -> Self
+    pub fn lambda<T>(p: impl ListBuilder<String>, body: T) -> Self
     where
         Expr: From<T>,
     {
         Expr::Lambda(Rc::new(Lambda {
-            param: p.to_string(),
+            params: p.build(),
             body: body.into(),
         }))
     }

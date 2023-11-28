@@ -44,10 +44,14 @@ impl Context {
                     .collect::<Vec<_>>(),
             ),
             Expr::Lambda(lam) => {
-                self.push_nonfn_binding(lam.param.to_string());
+                for p in &lam.params {
+                    self.push_nonfn_binding(p.to_string());
+                }
                 let body_ = self.monomporphize(&lam.body);
-                self.pop_binding();
-                Expr::lambda(&lam.param, body_)
+                for _ in &lam.params {
+                    self.pop_binding();
+                }
+                Expr::lambda(lam.params.clone(), body_)
             }
 
             Expr::Defs(dfs) => {
@@ -275,12 +279,12 @@ mod tests {
                 "x",
                 "x",
             )],
-            Expr::lambda("f", Expr::annotate(Type::func(Type::Int, Type::Int), "f")),
+            Expr::lambda(["f"], Expr::annotate(Type::func(Type::Int, Type::Int), "f")),
         );
 
         let y = Expr::defs(
             [],
-            Expr::lambda("f", Expr::annotate(Type::func(Type::Int, Type::Int), "f")),
+            Expr::lambda(["f"], Expr::annotate(Type::func(Type::Int, Type::Int), "f")),
         );
 
         assert_eq!(Context::default().monomporphize(&x), y);

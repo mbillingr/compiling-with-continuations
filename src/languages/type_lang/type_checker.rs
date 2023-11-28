@@ -185,12 +185,14 @@ impl Checker {
                 let rt = self.fresh();
 
                 let mut env_ = env.clone();
-                env_.insert(lam.param.clone(), at.clone());
+                for p in &lam.params {
+                    env_.insert(p.clone(), at.clone());
+                }
                 let body_ = self.check_expr(&lam.body, &rt, &env_, &tenv)?;
 
                 Ok(Expr::annotate(
                     Type::Fn(Rc::new((at, rt))),
-                    Expr::lambda(&lam.param, body_),
+                    Expr::lambda(lam.params.clone(), body_),
                 ))
             }
 
@@ -325,7 +327,10 @@ impl Checker {
                     .collect::<Result<Vec<_>, _>>()?,
             )),
 
-            Expr::Lambda(lam) => Ok(Expr::lambda(&lam.param, self.resolve_expr(&lam.body)?)),
+            Expr::Lambda(lam) => Ok(Expr::lambda(
+                lam.params.clone(),
+                self.resolve_expr(&lam.body)?,
+            )),
 
             Expr::Defs(defs) => {
                 let mut defs_ = vec![];
@@ -795,26 +800,26 @@ mod tests {
 
     #[test]
     fn check_lambdas() {
-        let x = Expr::apply(Expr::lambda("x", "x"), Expr::int(0));
+        let x = Expr::apply(Expr::lambda(["x"], "x"), Expr::int(0));
         let y = Expr::annotate(
             Type::Int,
             Expr::apply(
                 Expr::annotate(
                     Type::func(Type::Int, Type::Int),
-                    Expr::lambda("x", Expr::annotate(Type::Int, "x")),
+                    Expr::lambda(["x"], Expr::annotate(Type::Int, "x")),
                 ),
                 Expr::int(0),
             ),
         );
         assert_eq!(Checker::check_program(&x), Ok(y));
 
-        let x = Expr::apply(Expr::lambda("x", "x"), Expr::Real(0.0));
+        let x = Expr::apply(Expr::lambda(["x"], "x"), Expr::Real(0.0));
         let y = Expr::annotate(
             Type::Real,
             Expr::apply(
                 Expr::annotate(
                     Type::func(Type::Real, Type::Real),
-                    Expr::lambda("x", Expr::annotate(Type::Real, "x")),
+                    Expr::lambda(["x"], Expr::annotate(Type::Real, "x")),
                 ),
                 Expr::real(0.0),
             ),
@@ -906,7 +911,7 @@ mod tests {
                 "T",
                 TyExpr::func("S", "T"),
                 "x",
-                Expr::lambda("y", "x"),
+                Expr::lambda(["y"], "x"),
             )],
             Expr::apply(Expr::apply("f", 42), 1.2),
         );

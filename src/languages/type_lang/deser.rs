@@ -62,9 +62,8 @@ impl Expr {
                 .collect::<Result<Vec<_>, _>>()
                 .and_then(|arms| Ok(Self::match_enum(Self::from_sexpr(val)?, arms))),
 
-            List(Ref([Symbol(Ref("lambda")), Symbol(Ref(var)), body])) => {
-                Self::from_sexpr(body).map(|b| Expr::lambda(var, b))
-            }
+            List(Ref([Symbol(Ref("lambda")), List(Ref(vars)), body])) => parse_symbol_list(vars)
+                .and_then(|vs| Self::from_sexpr(body).map(|b| Expr::lambda(vs, b))),
 
             List(Ref([Symbol(Ref("define")), List(defs), body])) => defs
                 .iter()
@@ -139,7 +138,12 @@ impl Expr {
 
             Expr::Lambda(lam) => S::list(vec![
                 S::symbol("lambda"),
-                S::Symbol(lam.param.clone().into()),
+                S::list(
+                    lam.params
+                        .iter()
+                        .map(|p| S::Symbol(p.clone().into()))
+                        .collect(),
+                ),
                 lam.body.to_sexpr(),
             ]),
 
@@ -459,8 +463,13 @@ mod tests {
 
     #[test]
     fn test_lambda() {
-        let repr = "(lambda x 42)";
-        let expr = Expr::lambda("x", 42);
+        let repr = "(lambda (x) 42)";
+        let expr = Expr::lambda(["x"], 42);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+
+        let repr = "(lambda (x y z) 42)";
+        let expr = Expr::lambda(["x", "y", "z"], 42);
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }

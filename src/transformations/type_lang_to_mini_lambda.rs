@@ -39,7 +39,23 @@ impl Context {
             }
             TExp::Select(sel) => LExp::select(sel.0 as isize, self.convert(&sel.1)),
 
-            TExp::Lambda(lam) => LExp::func(&lam.param, self.convert(&lam.body)),
+            TExp::Lambda(lam) if lam.params.len() == 1 => {
+                LExp::func(&lam.params[0], self.convert(&lam.body))
+            }
+
+            TExp::Lambda(lam) if lam.params.len() == 0 => {
+                let args: String = self.gs.gensym("_");
+                LExp::func(args, self.convert(&lam.body))
+            }
+
+            TExp::Lambda(lam) => {
+                let args: String = self.gs.gensym("args");
+                let mut body = self.convert(&lam.body);
+                for (i, p) in lam.params.iter().enumerate().rev() {
+                    body = LExp::bind(p, LExp::select(i as isize, LExp::var(&args)), body)
+                }
+                LExp::func(args, body)
+            }
 
             TExp::Defs(dfs) => {
                 let (defs, body) = &**dfs;
@@ -311,8 +327,27 @@ mod tests {
     #[test]
     fn convert_lambda() {
         assert_eq!(
-            Context::default().convert(&TExp::lambda("x", "x")),
+            Context::default().convert(&TExp::lambda(["x"], "x")),
             LExp::from_str("(fn x x)").unwrap()
+        );
+
+        // todo:
+        //   the idea is to have a let in the mini lambda language, that depending on the value expression,
+        //   translates to specialized CPS. I.e. in the default case it binds the name in a function, but
+        //   if the expression itself binds a variable in the CPS (e.g. select), it should transparently
+        //   compile to that expression...
+
+        assert_eq!(
+            Context::default().convert(&TExp::lambda(["x", "y", "z"], "y")),
+            LExp::from_str(
+                "
+            (fn args_ 
+                (let (x (select 0 args_)) 
+                    (let (y (select 1 args_)) 
+                        (let (z (select 2 args_)) 
+                            y))))"
+            )
+            .unwrap()
         );
     }
 
