@@ -98,6 +98,8 @@ impl Context {
                 Expr::defs(defs_out, body_)
             }
 
+            Expr::Impl(_) => todo!(),
+
             Expr::Sequence(xs) => {
                 Expr::sequence([self.monomporphize(&xs.0), self.monomporphize(&xs.1)])
             }

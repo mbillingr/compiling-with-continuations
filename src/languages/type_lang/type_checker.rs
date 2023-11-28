@@ -261,6 +261,8 @@ impl Checker {
                 Ok(Expr::defs(defs_, body_))
             }
 
+            Expr::Impl(_) => todo!(),
+
             Expr::Sequence(xs) => {
                 let (first, next) = &**xs;
                 let first_ = self.check_expr(first, &Type::Unit, env, tenv)?;
@@ -343,6 +345,8 @@ impl Checker {
 
                 Ok(Expr::defs(defs_, self.resolve_expr(&defs.1)?))
             }
+
+            Expr::Impl(_) => todo!(),
 
             Expr::Sequence(xs) => Ok(Expr::sequence([
                 self.resolve_expr(&xs.0)?,

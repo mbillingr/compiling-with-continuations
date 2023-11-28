@@ -44,6 +44,9 @@ pub enum Expr {
     /// Definition scope
     Defs(Rc<(Vec<Def>, Self)>),
 
+    /// Implement functions on types
+    Impl(Rc<Impl>),
+
     /// Sequence of statements
     Sequence(Rc<(Self, Self)>),
 
@@ -135,6 +138,14 @@ pub enum EnumVariantPattern {
     Constructor(String, String),
 }
 
+/// Implementation block
+#[derive(Debug, PartialEq)]
+pub struct Impl {
+    pub tvars: Vec<String>,
+    pub impl_type: TyExpr,
+    pub defs: Vec<FnDef>,
+}
+
 impl Expr {
     pub fn int(x: impl Into<i64>) -> Self {
         Expr::Int(x.into())
@@ -223,6 +234,18 @@ impl Expr {
         }
         expr
     }
+
+    pub fn impl_block<V: ToString>(
+        tvars: impl IntoIterator<Item = V>,
+        tyx: impl Into<TyExpr>,
+        defs: impl ListBuilder<FnDef>,
+    ) -> Self {
+        Expr::Impl(Rc::new(Impl {
+            tvars: tvars.into_iter().map(|v| v.to_string()).collect(),
+            impl_type: tyx.into(),
+            defs: defs.build(),
+        }))
+    }
 }
 
 impl Def {
@@ -240,14 +263,7 @@ impl Def {
         TyExpr: From<R>,
         Expr: From<B>,
     {
-        Def::Func(FnDef {
-            fname: fname.to_string(),
-            tvars: tvars.into_iter().map(|v| v.to_string()).collect(),
-            param: param.to_string(),
-            ptype: ptype.into(),
-            rtype: rtype.into(),
-            body: body.into(),
-        })
+        Def::Func(FnDef::new(fname, tvars, ptype, rtype, param, body))
     }
 
     pub fn enum_<V: ToString>(
@@ -273,6 +289,32 @@ impl Def {
             param: param.to_string(),
             body: body.into(),
         })
+    }
+}
+
+impl FnDef {
+    pub fn new<V, P, R, B>(
+        fname: impl ToString,
+        tvars: impl IntoIterator<Item = V>,
+        ptype: P,
+        rtype: R,
+        param: impl ToString,
+        body: B,
+    ) -> Self
+    where
+        V: ToString,
+        TyExpr: From<P>,
+        TyExpr: From<R>,
+        Expr: From<B>,
+    {
+        FnDef {
+            fname: fname.to_string(),
+            tvars: tvars.into_iter().map(|v| v.to_string()).collect(),
+            param: param.to_string(),
+            ptype: ptype.into(),
+            rtype: rtype.into(),
+            body: body.into(),
+        }
     }
 }
 
