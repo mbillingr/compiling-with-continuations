@@ -1125,4 +1125,10 @@ mod tests {
 
         Checker::check_program(&x).unwrap();
     }
+
+    #[ignore]
+    #[test]
+    fn check_impl_blocks() {
+        todo!()
+    }
 }
