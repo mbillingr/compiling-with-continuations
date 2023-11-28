@@ -19,6 +19,7 @@ impl Context {
 
     pub fn monomporphize(&mut self, expr: &Expr) -> Expr {
         match expr {
+            Expr::Unit => Expr::Unit,
             Expr::Int(x) => Expr::Int(*x),
             Expr::Real(x) => Expr::Real(*x),
             Expr::String(x) => Expr::String(x.clone()),

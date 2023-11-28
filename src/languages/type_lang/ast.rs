@@ -8,6 +8,9 @@ use std::rc::Rc;
 /// Nodes of the abstract syntax tree
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
+    /// The value of the unit type
+    Unit,
+
     /// Integer constant
     Int(i64),
 
@@ -200,6 +203,7 @@ impl Expr {
 
     pub fn get_type(&self) -> Type {
         match self {
+            Expr::Unit => Type::Unit,
             Expr::Int(_) => Type::Int,
             Expr::Real(_) => Type::Real,
             Expr::String(_) => Type::String,
@@ -436,7 +440,7 @@ impl Hash for Type {
 impl Debug for Type {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Unit => write!(f, "<unit>"),
+            Type::Unit => write!(f, "Unit"),
             Type::Int => write!(f, "Int"),
             Type::Real => write!(f, "Real"),
             Type::String => write!(f, "String"),

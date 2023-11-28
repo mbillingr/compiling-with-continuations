@@ -48,6 +48,7 @@ impl Checker {
     ) -> Result<Expr, String> {
         println!("infer {expr:?}");
         match expr {
+            Expr::Unit => Ok(Expr::Unit),
             Expr::Int(x) => Ok(Expr::Int(*x)),
             Expr::Real(x) => Ok(Expr::Real(*x)),
             Expr::String(x) => Ok(Expr::String(x.clone())),
@@ -60,17 +61,16 @@ impl Checker {
             .map(|(t, x)| Rc::new((t, x)))
             .map(Expr::Annotation),
 
-            Expr::Record(fields) => {
+            Expr::Record(fields) => Ok(if fields.is_empty() {
+                Expr::Unit
+            } else {
                 let fields_: Vec<_> = fields
                     .iter()
                     .map(|f| self.infer(f, env, tenv))
                     .collect::<Result<_, _>>()?;
                 let field_types: Vec<_> = fields_.iter().map(Expr::get_type).collect();
-                Ok(Expr::annotate(
-                    Type::Record(field_types.into()),
-                    Expr::record(fields_),
-                ))
-            }
+                Expr::annotate(Type::Record(field_types.into()), Expr::record(fields_))
+            }),
 
             Expr::Select(sel) => {
                 let r = self.infer(&sel.1, env, tenv)?;
@@ -263,7 +263,7 @@ impl Checker {
 
             Expr::Sequence(xs) => {
                 let (first, next) = &**xs;
-                let first_ = self.infer(first, env, tenv)?;
+                let first_ = self.check_expr(first, &Type::Unit, env, tenv)?;
                 let next_ = self.infer(next, env, tenv)?;
                 Ok(Expr::sequence([first_, next_]))
             }
@@ -291,6 +291,7 @@ impl Checker {
     /// resolve remaining type variables in the annotations
     fn resolve_expr(&self, expr: &Expr) -> Result<Expr, String> {
         match expr {
+            Expr::Unit => Ok(Expr::Unit),
             Expr::Int(x) => Ok(Expr::Int(*x)),
             Expr::Real(x) => Ok(Expr::Real(*x)),
             Expr::String(x) => Ok(Expr::String(x.clone())),
@@ -916,10 +917,7 @@ mod tests {
                 &Default::default(),
                 &Default::default()
             ),
-            Ok(Expr::annotate(
-                Type::Record(Rc::new(vec![])),
-                Expr::record([] as [&str; 0])
-            ))
+            Ok(Expr::Unit)
         );
 
         assert_eq!(

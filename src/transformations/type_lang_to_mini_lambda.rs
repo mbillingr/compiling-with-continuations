@@ -28,6 +28,7 @@ impl Context {
 impl Context {
     pub fn convert(&mut self, expr: &TExp) -> LExp {
         match expr {
+            TExp::Unit => LExp::int(0),
             TExp::Int(x) => LExp::int(*x),
             TExp::Real(x) => LExp::real(*x),
             TExp::String(x) => LExp::string(x),
