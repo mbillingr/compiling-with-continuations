@@ -95,6 +95,8 @@ impl Context {
                 LExp::bind(switch_val, self.convert(val), the_switch)
             }
 
+            TExp::Sequence(xs) => LExp::sequence(vec![self.convert(&xs.0), self.convert(&xs.1)]),
+
             TExp::Show(x) => {
                 let ty = x.get_type();
                 self.convert_show(&ty, x)

@@ -72,6 +72,12 @@ impl Expr {
                 .collect::<Result<Vec<_>, _>>()
                 .and_then(|defs| Ok(Expr::defs(defs, Self::from_sexpr(body)?))),
 
+            List(Ref([Symbol(Ref("begin")), seq @ ..])) => seq
+                .iter()
+                .map(Self::from_sexpr)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Self::sequence),
+
             List(Ref([Symbol(Ref("+")), a, b])) => {
                 Ok(Self::add(Self::from_sexpr(a)?, Self::from_sexpr(b)?))
             }
@@ -133,6 +139,17 @@ impl Expr {
                 defs.1.to_sexpr(),
             ]),
 
+            Expr::Sequence(_) => {
+                let mut tail = self;
+                let mut seq = vec![S::symbol("begin")];
+                while let Expr::Sequence(xs) = tail {
+                    seq.push(xs.0.to_sexpr());
+                    tail = &xs.1;
+                }
+                seq.push(tail.to_sexpr());
+                S::list(seq)
+            }
+
             Expr::Add(rands) => {
                 S::list(vec![S::symbol("+"), rands.0.to_sexpr(), rands.1.to_sexpr()])
             }
@@ -142,6 +159,7 @@ impl Expr {
             Expr::Show(rand) => S::list(vec![S::symbol("show"), rand.to_sexpr()]),
 
             Expr::Apply(app) => S::list(vec![app.0.to_sexpr(), app.1.to_sexpr()]),
+
             _ => todo!("{:?}", self),
         }
     }
@@ -436,6 +454,14 @@ mod tests {
 
         let repr = "(show this)";
         let expr = Expr::show("this");
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
+    }
+
+    #[test]
+    fn sequence() {
+        let repr = "(begin 1 2 3)";
+        let expr = Expr::sequence(vec![1.into(), 2.into(), 3.into()]);
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }

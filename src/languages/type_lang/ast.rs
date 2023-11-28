@@ -41,6 +41,9 @@ pub enum Expr {
     /// Definition scope
     Defs(Rc<(Vec<Def>, Self)>),
 
+    /// Sequence of statements
+    Sequence(Rc<(Self, Self)>),
+
     /// Placeholders for more general primitives
     Add(Rc<(Self, Self)>),
     Read(),
@@ -202,17 +205,19 @@ impl Expr {
             Expr::String(_) => Type::String,
             Expr::Show(_) => Type::Unit,
             Expr::Defs(defs) => defs.1.get_type(),
+            Expr::Sequence(xs) => xs.1.get_type(),
             Expr::Annotation(ann) => ann.0.clone(),
             _ => panic!("unannotated expression: {self:?}"),
         }
     }
 
-    pub fn sequence(exprs: Vec<Self>) -> Self {
-        exprs
-            .into_iter()
-            .rev()
-            .reduce(|acc, x| Self::apply(Self::lambda("_", acc), x))
-            .unwrap()
+    pub fn sequence(exprs: impl ListBuilder<Self>) -> Self {
+        let mut exprs = exprs.build().into_iter().rev();
+        let mut expr = exprs.next().expect("sequence can't be empty");
+        for x in exprs {
+            expr = Expr::Sequence(Rc::new((x, expr)));
+        }
+        expr
     }
 }
 

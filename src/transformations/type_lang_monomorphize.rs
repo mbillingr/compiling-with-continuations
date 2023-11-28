@@ -97,6 +97,10 @@ impl Context {
                 Expr::defs(defs_out, body_)
             }
 
+            Expr::Sequence(xs) => {
+                Expr::sequence([self.monomporphize(&xs.0), self.monomporphize(&xs.1)])
+            }
+
             Expr::Add(add) => Expr::add(self.monomporphize(&add.0), self.monomporphize(&add.1)),
             Expr::Read() => Expr::Read(),
             Expr::Show(x) => Expr::show(self.monomporphize(x)),
