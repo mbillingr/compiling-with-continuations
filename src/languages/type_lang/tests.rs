@@ -133,6 +133,12 @@ macro_rules! make_testsuite_for_type_lang {
             );
 
             assert_eq!(
+                $run("(define ((func () (foo x : Int -> Int) (begin (show x) 2)))
+                        (show (foo 4)))", ""),
+                "42"
+            );
+
+            assert_eq!(
                 $run("(define ((func (T) (foo x : T -> T) x))
                         (show (foo \"abc\")))", ""),
                 "abc"

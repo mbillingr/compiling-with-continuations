@@ -180,7 +180,7 @@ impl Context {
 
     fn make_show(&self, ty: &Type, x: LExp) -> LExp {
         match ty {
-            Type::Unit => LExp::apply(PrimOp::ShowStr, LExp::bind("_", x, LExp::string("()"))),
+            Type::Unit => LExp::apply(PrimOp::ShowStr, LExp::bind("_", x, LExp::string("()"))), // make sure we evaluate x because it may contain side effects
             Type::Int => LExp::apply(PrimOp::ShowInt, x),
             Type::Real => LExp::apply(PrimOp::ShowReal, x),
             Type::String => LExp::apply(PrimOp::ShowStr, x),
