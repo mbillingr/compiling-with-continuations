@@ -157,6 +157,12 @@ pub unsafe fn eval(
 
             Expr::Select(idx, rec) => return eval(rec, env, out, inp).get_item(*idx),
 
+            Expr::Let(var, val, body) => {
+                let val_ = eval(val, env, out, inp);
+                env = env.extend(*var, val_);
+                expr = body;
+            }
+
             Expr::ShowInt(value) => {
                 let v = eval(value, env, out, inp);
                 write!(out, "{}", v.as_int()).unwrap();

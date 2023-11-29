@@ -25,6 +25,7 @@ pub enum Expr<V: 'static> {
     Record(Ref<[Expr<V>]>),
     Select(isize, Ref<Expr<V>>),
     Prim(PrimOp),
+    Let(V, Ref<Expr<V>>, Ref<Expr<V>>),
     ShowInt(Ref<Expr<V>>),
     ShowReal(Ref<Expr<V>>),
     ShowStr(Ref<Expr<V>>),
@@ -122,7 +123,7 @@ impl<V> Expr<V> {
     }
 
     pub fn bind(name: impl Into<V>, value: impl Into<Self>, body: impl Into<Self>) -> Self {
-        Self::apply(Self::func(name, body.into()), value.into())
+        Self::Let(name.into(), value.into().into(), body.into().into())
     }
 }
 
@@ -190,6 +191,11 @@ impl Expr<Ref<str>> {
                 S::Int(*idx as i64),
                 rec.to_sexpr(),
             ]),
+            Expr::Let(var, val, body) => S::list(vec![
+                S::symbol("let"),
+                S::list(vec![S::Symbol(*var), val.to_sexpr()]),
+                body.to_sexpr(),
+            ]),
             Expr::ShowInt(value) => S::list(vec![S::symbol("show-int"), value.to_sexpr()]),
             Expr::ShowReal(value) => S::list(vec![S::symbol("show-real"), value.to_sexpr()]),
             Expr::ShowStr(value) => S::list(vec![S::symbol("show-string"), value.to_sexpr()]),
@@ -239,6 +245,12 @@ impl Expr<Ref<str>> {
             List(Ref([Symbol(Ref("select")), Int(idx), rec])) => Ok(Expr::Select(
                 *idx as isize,
                 Ref::new(Self::from_sexpr(rec)?),
+            )),
+
+            List(Ref([Symbol(Ref("let")), List(Ref([Symbol(var), val])), body])) => Ok(Expr::Let(
+                *var,
+                Ref::new(Self::from_sexpr(val)?),
+                Ref::new(Self::from_sexpr(body)?),
             )),
 
             List(Ref([Symbol(Ref("primitive")), Symbol(Ref(op))]))

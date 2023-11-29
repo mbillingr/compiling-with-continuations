@@ -4,7 +4,7 @@ use crate::languages::common_primops::PrimOp;
 use crate::languages::cps_lang::ast as cps;
 use crate::languages::cps_lang::ast::AccessPath;
 use crate::languages::mini_lambda::ast;
-use crate::languages::mini_lambda::ast::{Con, ConRep};
+use crate::languages::mini_lambda::ast::{Con, ConRep, Expr};
 use crate::list;
 use crate::transformations::GensymContext;
 
@@ -58,26 +58,12 @@ impl Context {
 
             LExpr::Record(fields) => {
                 let x = self.gs.gensym("r");
-                self.convert_sequence(*fields, move |a| {
-                    CExpr::Record(
-                        Ref::array(
-                            a.into_iter()
-                                .map(|v| (v.clone(), AccessPath::Ref(0)))
-                                .collect(),
-                        ),
-                        x,
-                        Ref::new(c(CVal::Var(x))),
-                    )
-                })
+                self.convert_record(fields, x, c(CVal::Var(x)))
             }
 
             LExpr::Select(idx, rec) => {
-                let idx = *idx;
-                let w = self.gs.gensym("w");
-                self.convert(
-                    rec,
-                    Box::new(move |v| CExpr::Select(idx, v, w, Ref::new(c(CVal::Var(w))))),
-                )
+                let var = self.gs.gensym("w");
+                self.convert_select(*idx, rec, var, c(CVal::Var(var)))
             }
 
             LExpr::App(Ref(LExpr::Prim(PrimOp::CallCC)), arg) => {
@@ -293,6 +279,17 @@ impl Context {
                 )
             }
 
+            LExpr::Let(var, val, body) => match &**val {
+                LExpr::Record(fields) => self.convert_record(fields, *var, self.convert(body, c)),
+                LExpr::Select(idx, rec) => {
+                    self.convert_select(*idx, rec, *var, self.convert(body, c))
+                }
+                _ => {
+                    let tmp = LExpr::apply(LExpr::func(*var, *body), *val);
+                    self.convert(&tmp, c)
+                }
+            },
+
             LExpr::Panic(msg) => CExpr::Panic(*msg),
 
             LExpr::ShowInt(value) => {
@@ -300,7 +297,12 @@ impl Context {
                 self.convert(
                     value,
                     Box::new(move |v| {
-                        CExpr::PrimOp(PrimOp::ShowInt, list![v], list![w], list![Ref::new(c(CVal::Var(w)))])
+                        CExpr::PrimOp(
+                            PrimOp::ShowInt,
+                            list![v],
+                            list![w],
+                            list![Ref::new(c(CVal::Var(w)))],
+                        )
                     }),
                 )
             }
@@ -310,7 +312,12 @@ impl Context {
                 self.convert(
                     value,
                     Box::new(move |v| {
-                        CExpr::PrimOp(PrimOp::ShowReal, list![v], list![w], list![Ref::new(c(CVal::Var(w)))])
+                        CExpr::PrimOp(
+                            PrimOp::ShowReal,
+                            list![v],
+                            list![w],
+                            list![Ref::new(c(CVal::Var(w)))],
+                        )
                     }),
                 )
             }
@@ -320,11 +327,42 @@ impl Context {
                 self.convert(
                     value,
                     Box::new(move |v| {
-                        CExpr::PrimOp(PrimOp::ShowStr, list![v], list![w], list![Ref::new(c(CVal::Var(w)))])
+                        CExpr::PrimOp(
+                            PrimOp::ShowStr,
+                            list![v],
+                            list![w],
+                            list![Ref::new(c(CVal::Var(w)))],
+                        )
                     }),
                 )
             }
         }
+    }
+
+    fn convert_record(
+        &'static self,
+        fields: &Ref<[Expr<Ref<str>>]>,
+        var: Ref<str>,
+        cnt: CExpr,
+    ) -> CExpr {
+        self.convert_sequence(*fields, move |a| {
+            CExpr::Record(
+                Ref::array(
+                    a.into_iter()
+                        .map(|v| (v.clone(), AccessPath::Ref(0)))
+                        .collect(),
+                ),
+                var,
+                Ref::new(cnt),
+            )
+        })
+    }
+
+    fn convert_select(&'static self, idx: isize, rec: &Ref<Expr<Ref<str>>>, var: Ref<str>, cnt: CExpr) -> CExpr {
+        self.convert(
+            rec,
+            Box::new(move |r| CExpr::Select(idx, r, var, Ref::new(cnt))),
+        )
     }
 
     fn convert_switch_const_table(
@@ -854,7 +892,11 @@ mod tests {
         );
     }
 
-    unsafe fn run_in_cps(mini_lambda_expr: &LExpr, out: &mut impl Write, inp: &mut impl BufRead) -> Answer {
+    unsafe fn run_in_cps(
+        mini_lambda_expr: &LExpr,
+        out: &mut impl Write,
+        inp: &mut impl BufRead,
+    ) -> Answer {
         let cps_expr = convert_program(mini_lambda_expr.clone());
         cps_lang::interpreter::exec(&cps_expr, out, inp)
     }

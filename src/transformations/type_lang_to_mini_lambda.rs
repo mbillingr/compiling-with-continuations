@@ -331,20 +331,14 @@ mod tests {
             LExp::from_str("(fn x x)").unwrap()
         );
 
-        // todo:
-        //   the idea is to have a let in the mini lambda language, that depending on the value expression,
-        //   translates to specialized CPS. I.e. in the default case it binds the name in a function, but
-        //   if the expression itself binds a variable in the CPS (e.g. select), it should transparently
-        //   compile to that expression...
-
         assert_eq!(
             Context::default().convert(&TExp::lambda(["x", "y", "z"], "y")),
             LExp::from_str(
                 "
-            (fn args_ 
-                (let (x (select 0 args_)) 
-                    (let (y (select 1 args_)) 
-                        (let (z (select 2 args_)) 
+            (fn args__0 
+                (let (x (select 0 args__0)) 
+                    (let (y (select 1 args__0)) 
+                        (let (z (select 2 args__0)) 
                             y))))"
             )
             .unwrap()

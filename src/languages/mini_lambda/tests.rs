@@ -232,6 +232,29 @@ macro_rules! make_testsuite_for_mini_lambda {
         }
 
         #[test]
+        fn let_binding() {
+            unsafe {
+                let expr = $crate::languages::mini_lambda::ast::Expr::from_str(
+                    "(let (x 42) x)"
+                ).unwrap();
+                assert_eq!(run_expr!(expr, int), 42);
+
+                let expr = $crate::languages::mini_lambda::ast::Expr::from_str(
+                    "(let (foo (record 1 2 3))
+                       (let (bar (select 1 foo)) 
+                         bar))"
+                ).unwrap();
+                assert_eq!(run_expr!(expr, int), 2);
+
+                let expr = $crate::languages::mini_lambda::ast::Expr::from_str(
+                    "(let (x ((primitive +) (record 7 5))) 
+                       x)"
+                ).unwrap();
+                assert_eq!(run_expr!(expr, int), 12);
+            }
+        }
+
+        #[test]
         fn fibonacci() {
             unsafe {
                 let expr = $crate::languages::mini_lambda::ast::Expr::from_str(
