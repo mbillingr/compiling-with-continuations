@@ -271,9 +271,19 @@ impl FnDef {
             ),
             S::list(vec![
                 S::Symbol(self.fname.clone().into()),
-                S::Symbol(self.param.clone().into()),
-                S::symbol(":"),
-                self.ptype.to_sexpr(),
+                S::list(
+                    self.params
+                        .iter()
+                        .zip(self.ptypes.iter())
+                        .map(|(p, t)| {
+                            S::list(vec![
+                                S::Symbol(p.clone().into()),
+                                S::symbol(":"),
+                                t.to_sexpr(),
+                            ])
+                        })
+                        .collect(),
+                ),
                 S::symbol("->"),
                 self.rtype.to_sexpr(),
             ]),
@@ -283,21 +293,30 @@ impl FnDef {
     fn from_sexpr(s: &S) -> Result<Self, Error> {
         match s {
             S::List(Ref(
-                [S::Symbol(Ref("func")), S::List(Ref(tvars)), S::List(Ref(
-                    [S::Symbol(Ref(fname)), S::Symbol(Ref(var)), S::Symbol(Ref(":")), ptype, S::Symbol(Ref("->")), rtype],
-                )), body],
+                [S::Symbol(Ref("func")), S::List(Ref(tvars)), S::List(Ref([S::Symbol(Ref(fname)), sig @ ..])), body],
             )) => {
+                let mut params = vec![];
+                let mut ptypes = vec![];
+                let mut sig = sig;
+                let rtype = loop {
+                    match sig {
+                        [S::Symbol(Ref("->")), rtype] => break TyExpr::from_sexpr(rtype)?,
+                        [S::List(Ref([S::Symbol(Ref(var)), S::Symbol(Ref(":")), ptype])), rest @ ..] =>
+                        {
+                            params.push(var.to_string());
+                            ptypes.push(TyExpr::from_sexpr(ptype)?);
+                            sig = rest;
+                        }
+                    }
+                };
                 let fname = fname.to_string();
                 let tvars = parse_symbol_list(tvars)?;
-                let param = var.to_string();
-                let ptype = TyExpr::from_sexpr(ptype)?;
-                let rtype = TyExpr::from_sexpr(rtype)?;
                 let body = Expr::from_sexpr(body)?;
                 Ok(FnDef {
                     fname,
                     tvars,
-                    param,
-                    ptype,
+                    params,
+                    ptypes,
                     rtype,
                     body,
                 })
@@ -476,11 +495,12 @@ mod tests {
 
     #[test]
     fn test_defs() {
-        let repr = "(define ((enum (Option T) None (Some T)) (func (T) (foo x : T -> Int) 42)) 0)";
+        let repr = "(define ((enum (Option T) None (Some T)) (func (T) (foo (x : T) -> Int) 42) (func (T) (bar (x : T) (y : T) -> Int) 123)) 0)";
         let expr = Expr::defs(
             vec![
                 Def::enum_("Option", ["T"], ("None", ("Some", "T"), ())),
-                Def::func("foo", ["T"], "T", TyExpr::Int, "x", 42),
+                Def::func("foo", ["T"], ["T"], TyExpr::Int, ["x"], 42),
+                Def::func("foo", ["T"], ["T", "T"], TyExpr::Int, ["x", "y"], 123),
             ],
             0,
         );
@@ -516,11 +536,11 @@ mod tests {
 
     #[test]
     fn impl_blocks() {
-        let repr = "(impl (T) (SomeType T) (func (T) (foo x : T -> Int) 42))";
+        let repr = "(impl (T) (SomeType T) (func (T) (foo (x : T) -> Int) 42))";
         let expr = Expr::impl_block(
             ["T"],
             ("SomeType", "T"),
-            [FnDef::new("foo", ["T"], "T", TyExpr::Int, "x", 42)],
+            [FnDef::new("foo", ["T"], ["T"], TyExpr::Int, ["x"], 42)],
         );
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));

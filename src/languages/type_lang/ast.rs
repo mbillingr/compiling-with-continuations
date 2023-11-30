@@ -96,8 +96,8 @@ pub enum Def {
 pub struct FnDef {
     pub fname: String,
     pub tvars: Vec<String>,
-    pub param: String,
-    pub ptype: TyExpr,
+    pub params: Vec<String>,
+    pub ptypes: Vec<TyExpr>,
     pub rtype: TyExpr,
     pub body: Expr,
 }
@@ -249,21 +249,15 @@ impl Expr {
 }
 
 impl Def {
-    pub fn func<V, P, R, B>(
+    pub fn func(
         fname: impl ToString,
-        tvars: impl IntoIterator<Item = V>,
-        ptype: P,
-        rtype: R,
-        param: impl ToString,
-        body: B,
-    ) -> Self
-    where
-        V: ToString,
-        TyExpr: From<P>,
-        TyExpr: From<R>,
-        Expr: From<B>,
-    {
-        Def::Func(FnDef::new(fname, tvars, ptype, rtype, param, body))
+        tvars: impl ListBuilder<String>,
+        ptypes: impl ListBuilder<TyExpr>,
+        rtype: impl Into<TyExpr>,
+        params: impl ListBuilder<String>,
+        body: impl Into<Expr>,
+    ) -> Self {
+        Def::Func(FnDef::new(fname, tvars, ptypes, rtype, params, body))
     }
 
     pub fn enum_<V: ToString>(
@@ -293,25 +287,19 @@ impl Def {
 }
 
 impl FnDef {
-    pub fn new<V, P, R, B>(
+    pub fn new(
         fname: impl ToString,
-        tvars: impl IntoIterator<Item = V>,
-        ptype: P,
-        rtype: R,
-        param: impl ToString,
-        body: B,
-    ) -> Self
-    where
-        V: ToString,
-        TyExpr: From<P>,
-        TyExpr: From<R>,
-        Expr: From<B>,
-    {
+        tvars: impl ListBuilder<String>,
+        ptypes: impl ListBuilder<TyExpr>,
+        rtype: impl Into<TyExpr>,
+        params: impl ListBuilder<String>,
+        body: impl Into<Expr>,
+    ) -> Self {
         FnDef {
             fname: fname.to_string(),
-            tvars: tvars.into_iter().map(|v| v.to_string()).collect(),
-            param: param.to_string(),
-            ptype: ptype.into(),
+            tvars: tvars.build(),
+            params: params.build(),
+            ptypes: ptypes.build(),
             rtype: rtype.into(),
             body: body.into(),
         }
@@ -549,6 +537,12 @@ impl<T> ListBuilder<T> for Vec<T> {
 
     fn build_into(self, buf: &mut Vec<T>) {
         buf.extend(self)
+    }
+}
+
+impl ListBuilder<String> for Vec<&str> {
+    fn build_into(self, buf: &mut Vec<String>) {
+        todo!()
     }
 }
 

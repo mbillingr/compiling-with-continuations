@@ -206,7 +206,7 @@ impl Checker {
                         Def::Func(def) => {
                             let signature = Type::Generic(Rc::new(GenericType::GenericFn {
                                 tvars: def.tvars.clone(),
-                                ptype: def.ptype.clone(),
+                                ptypes: def.ptypes.clone(),
                                 rtype: def.rtype.clone(),
                                 tenv: def_tenv.clone(),
                             }));
@@ -568,7 +568,7 @@ impl Checker {
 pub enum GenericType {
     GenericFn {
         tvars: Vec<String>,
-        ptype: TyExpr,
+        ptypes: Vec<TyExpr>,
         rtype: TyExpr,
         tenv: Rc<RefCell<HashMap<String, Type>>>,
     },
@@ -591,17 +591,17 @@ impl PartialEq for GenericType {
             (
                 GenericType::GenericFn {
                     tvars: atv,
-                    ptype: atp,
+                    ptypes: atps,
                     rtype: atr,
                     ..
                 },
                 GenericType::GenericFn {
                     tvars: btv,
-                    ptype: btp,
+                    ptypes: btps,
                     rtype: btr,
                     ..
                 },
-            ) => atv == btv && atp == btp && atr == btr,
+            ) => atv == btv && atps == btps && atr == btr,
 
             (GenericType::GenericEnum(a, _), GenericType::GenericEnum(b, _)) => a == b,
             _ => false,
@@ -652,7 +652,7 @@ impl GenericType {
         match &**self {
             GenericType::GenericFn {
                 tvars,
-                ptype,
+                ptypes,
                 rtype,
                 tenv,
             } => {
@@ -769,9 +769,9 @@ mod tests {
             [Def::func(
                 "fn",
                 vec![] as Vec<&str>,
+                [TyExpr::Int],
                 TyExpr::Int,
-                TyExpr::Int,
-                "x",
+                ["x"],
                 "x",
             )],
             Expr::apply("fn", 0),
@@ -781,7 +781,7 @@ mod tests {
             [Def::inferred_func(
                 Type::Generic(Rc::new(GenericType::GenericFn {
                     tvars: vec![],
-                    ptype: TyExpr::Int,
+                    ptypes: vec![TyExpr::Int],
                     rtype: TyExpr::Int,
                     tenv: Default::default(),
                 })),
@@ -830,7 +830,7 @@ mod tests {
     #[test]
     fn check_generic() {
         let x = Expr::defs(
-            [Def::func("fn", vec!["T"], "T", "T", "x", "x")],
+            [Def::func("fn", vec!["T"], ["T"], "T", ["x"], "x")],
             Expr::apply("fn", 0),
         );
         assert!(Checker::check_program(&x).is_ok());
@@ -839,7 +839,7 @@ mod tests {
     #[test]
     fn fail_generic_def() {
         let x = Expr::defs(
-            [Def::func("fn", vec!["T"], "T", "T", "x", 0)],
+            [Def::func("fn", vec!["T"], ["T"], "T", ["x"], 0)],
             Expr::apply("fn", 0),
         );
         assert!(Checker::check_program(&x).is_err());
@@ -849,7 +849,7 @@ mod tests {
     fn check_generic_different_uses() {
         // (let ((id (lambda (x) x))) ((id id) 42))
         let x = Expr::defs(
-            [Def::func("id", vec!["T"], "T", "T", "x", "x")],
+            [Def::func("id", vec!["T"], ["T"], "T", ["x"], "x")],
             Expr::apply(Expr::apply("id", "id"), 42),
         );
 
@@ -857,7 +857,7 @@ mod tests {
             [Def::inferred_func(
                 Type::Generic(Rc::new(GenericType::GenericFn {
                     tvars: vec!["T".into()],
-                    ptype: TyExpr::Named("T".into()),
+                    ptypes: vec![TyExpr::Named("T".into())],
                     rtype: TyExpr::Named("T".into()),
                     tenv: Default::default(),
                 })),
@@ -890,8 +890,8 @@ mod tests {
 
         let x = Expr::defs(
             [
-                Def::func("twice", vec!["T"], "T", "T", "x", Expr::add("x", "x")),
-                Def::func("swallow", vec!["T"], "T", TyExpr::Int, "x", 0),
+                Def::func("twice", vec!["T"], ["T"], "T", ["x"], Expr::add("x", "x")),
+                Def::func("swallow", vec!["T"], ["T"], TyExpr::Int, ["x"], 0),
             ],
             Expr::apply(
                 "swallow",
@@ -908,9 +908,9 @@ mod tests {
             [Def::func(
                 "f",
                 vec!["T", "S"],
-                "T",
+                ["T"],
                 TyExpr::func("S", "T"),
-                "x",
+                ["x"],
                 Expr::lambda(["y"], "x"),
             )],
             Expr::apply(Expr::apply("f", 42), 1.2),
@@ -954,9 +954,9 @@ mod tests {
                 [Def::func(
                     "f",
                     vec![] as Vec<&str>,
-                    ("Foo",),
+                    [("Foo",)],
                     TyExpr::Int,
-                    "x",
+                    ["x"],
                     Expr::Int(0),
                 )],
                 Expr::apply("f", Expr::apply(Expr::cons("Foo", "B"), 1)),
@@ -973,9 +973,9 @@ mod tests {
                 Def::func(
                     "f",
                     vec!["T"] as Vec<&str>,
-                    ("Foo", "T"),
+                    [("Foo", "T")],
                     TyExpr::Int,
-                    "x",
+                    ["x"],
                     Expr::Int(0),
                 ),
             ],
@@ -1004,7 +1004,7 @@ mod tests {
             [Def::inferred_func(
                 Type::Generic(Rc::new(GenericType::GenericFn {
                     tvars: vec!["T".into()],
-                    ptype: ("Foo", "T").into(),
+                    ptypes: vec![("Foo", "T").into()],
                     rtype: TyExpr::Int,
                     tenv: Default::default(),
                 })),
@@ -1072,9 +1072,9 @@ mod tests {
             [Def::func(
                 "double",
                 vec!["T"],
+                ["T"],
                 "T",
-                "T",
-                "x",
+                ["x"],
                 Expr::add("x", "x"),
             )],
             Expr::apply("double", 21),
@@ -1085,7 +1085,7 @@ mod tests {
     #[test]
     fn cant_infer() {
         let x = Expr::defs(
-            [Def::func("foo", vec!["T"], "T", TyExpr::Int, "x", 0)],
+            [Def::func("foo", vec!["T"], ["T"], TyExpr::Int, ["x"], 0)],
             Expr::apply("foo", Expr::Read()),
         );
         assert_eq!(
