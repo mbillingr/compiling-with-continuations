@@ -24,7 +24,7 @@ pub enum Expr {
     Ref(String),
 
     /// Function application
-    Apply(Rc<(Self, Self)>),
+    Apply(Rc<(Self, Vec<Self>)>),
 
     /// Tuple construction
     Record(Rc<Vec<Self>>),
@@ -68,7 +68,7 @@ pub enum TyExpr {
     Real,
     String,
     Named(String),
-    Fn(Rc<(TyExpr, TyExpr)>),
+    Fn(Rc<(Vec<TyExpr>, TyExpr)>),
     Record(Rc<Vec<TyExpr>>),
     Construct(Rc<(String, Vec<TyExpr>)>),
 }
@@ -107,7 +107,7 @@ pub struct FnDef {
 pub struct TFnDef {
     pub signature: Type,
     pub fname: String,
-    pub param: String,
+    pub params: Vec<String>,
     pub body: Expr,
 }
 
@@ -179,8 +179,8 @@ impl Expr {
         Expr::MatchEnum(Rc::new((value.into(), arms.build())))
     }
 
-    pub fn apply(f: impl Into<Expr>, a: impl Into<Expr>) -> Self {
-        Expr::Apply(Rc::new((f.into(), a.into())))
+    pub fn apply(f: impl Into<Expr>, a: impl ListBuilder<Expr>) -> Self {
+        Expr::Apply(Rc::new((f.into(), a.build())))
     }
 
     pub fn lambda<T>(p: impl ListBuilder<String>, body: T) -> Self
@@ -274,13 +274,13 @@ impl Def {
     pub fn inferred_func(
         sig: impl Into<Type>,
         fname: impl ToString,
-        param: impl ToString,
+        params: impl ListBuilder<String>,
         body: impl Into<Expr>,
     ) -> Self {
         Def::InferredFunc(TFnDef {
             signature: sig.into(),
             fname: fname.to_string(),
-            param: param.to_string(),
+            params: params.build(),
             body: body.into(),
         })
     }
@@ -307,12 +307,8 @@ impl FnDef {
 }
 
 impl TyExpr {
-    pub fn func<P, R>(p: P, r: R) -> Self
-    where
-        TyExpr: From<P>,
-        TyExpr: From<R>,
-    {
-        TyExpr::Fn(Rc::new((p.into(), r.into())))
+    pub fn func(p: impl ListBuilder<TyExpr>, r: impl Into<TyExpr>) -> Self {
+        TyExpr::Fn(Rc::new((p.build(), r.into())))
     }
 }
 
@@ -404,7 +400,7 @@ pub enum Type {
     String,
     Opaque(String),
     Var(usize),
-    Fn(Rc<(Type, Type)>),
+    Fn(Rc<(Vec<Type>, Type)>),
     Generic(Rc<GenericType>),
     Record(Rc<Vec<Type>>),
     Enum(Rc<EnumType>),
@@ -500,8 +496,8 @@ impl Debug for Type {
 }
 
 impl Type {
-    pub fn func(f: impl Into<Type>, p: impl Into<Type>) -> Self {
-        Self::Fn(Rc::new((f.into(), p.into())))
+    pub fn func(f: impl ListBuilder<Type>, p: impl Into<Type>) -> Self {
+        Self::Fn(Rc::new((f.build(), p.into())))
     }
 
     pub fn enum_(

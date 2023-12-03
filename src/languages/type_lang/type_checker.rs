@@ -97,7 +97,7 @@ impl Checker {
 
                         let t = match var.as_slice() {
                             [] => enum_t,
-                            [x] => Type::func(x.clone(), enum_t),
+                            [x] => Type::func(vec![x.clone()], enum_t),
                             _ => {
                                 return Err(format!(
                                     "Multiple enum variant values are not supported"
@@ -174,24 +174,31 @@ impl Checker {
             Expr::Apply(app) => {
                 let r_ = self.fresh();
                 let f_ = self.infer(&app.0, env, tenv)?;
-                let a_ = self.infer(&app.1, env, tenv)?;
-                let ty = Type::Fn(Rc::new((a_.get_type().clone(), r_.clone())));
+                let a_: Vec<_> = app
+                    .1
+                    .iter()
+                    .map(|a| self.infer(a, env, tenv))
+                    .collect::<Result<_, _>>()?;
+                let atys = a_.iter().map(Expr::get_type).collect();
+                let ty = Type::Fn(Rc::new((atys, r_.clone())));
                 self.unify(&f_.get_type(), &ty)?;
                 Ok(Expr::annotate(r_, Expr::apply(f_, a_)))
             }
 
             Expr::Lambda(lam) => {
-                let at = self.fresh();
                 let rt = self.fresh();
 
+                let mut ats = vec![];
                 let mut env_ = env.clone();
                 for p in &lam.params {
-                    env_.insert(p.clone(), at.clone());
+                    let at = self.fresh();
+                    ats.push(at.clone());
+                    env_.insert(p.clone(), at);
                 }
                 let body_ = self.check_expr(&lam.body, &rt, &env_, &tenv)?;
 
                 Ok(Expr::annotate(
-                    Type::Fn(Rc::new((at, rt))),
+                    Type::Fn(Rc::new((ats, rt))),
                     Expr::lambda(lam.params.clone(), body_),
                 ))
             }
@@ -239,20 +246,26 @@ impl Checker {
 
                             let tx = &def.rtype;
                             let rt = self.teval(tx, &tenv_);
-                            let tx = &def.ptype;
-                            let pt = self.teval(tx, &tenv_);
-                            let ft = Type::Fn(Rc::new((pt.clone(), rt.clone())));
+                            let pts: Vec<_> =
+                                def.ptypes.iter().map(|tx| self.teval(tx, &tenv_)).collect();
+                            let ft = Type::Fn(Rc::new((pts.clone(), rt.clone())));
 
                             let mut env_ = def_env.clone();
                             env_.insert(def.fname.clone(), ft);
-                            env_.insert(def.param.clone(), pt);
+                            for (pn, pt) in def.params.iter().zip(pts) {
+                                env_.insert(pn.clone(), pt);
+                            }
 
                             let body_ = self.check_expr(&def.body, &rt, &env_, &tenv_)?;
 
                             let signature = def_env[&def.fname].clone();
 
-                            defs_
-                                .push(Def::inferred_func(signature, &def.fname, &def.param, body_));
+                            defs_.push(Def::inferred_func(
+                                signature,
+                                &def.fname,
+                                def.params.clone(),
+                                body_,
+                            ));
                         }
                         Def::Enum(_) => {}
                         Def::InferredFunc(_) => unreachable!(),
@@ -303,7 +316,10 @@ impl Checker {
 
             Expr::Apply(app) => Ok(Expr::apply(
                 self.resolve_expr(&app.0)?,
-                self.resolve_expr(&app.1)?,
+                app.1
+                    .iter()
+                    .map(|f| self.resolve_expr(f))
+                    .collect::<Result<Vec<_>, _>>()?,
             )),
 
             Expr::Record(fields) => fields
@@ -342,7 +358,7 @@ impl Checker {
                         Def::InferredFunc(fun) => defs_.push(Def::inferred_func(
                             self.resolve_fully(&fun.signature)?,
                             &fun.fname,
-                            &fun.param,
+                            fun.params.clone(),
                             self.resolve_expr(&fun.body)?,
                         )),
                     }
@@ -389,9 +405,11 @@ impl Checker {
             }
 
             (Fn(a), Fn(b)) => {
-                let (pa, ra) = &*a;
-                let (pb, rb) = &*b;
-                self.unify(pa, pb)?;
+                let (psa, ra) = &*a;
+                let (psb, rb) = &*b;
+                for (pa, pb) in psa.iter().zip(psb) {
+                    self.unify(pa, pb)?;
+                }
                 self.unify(ra, rb)
             }
 
@@ -461,7 +479,10 @@ impl Checker {
             },
 
             Type::Fn(fun) => Ok(Type::func(
-                self.resolve_fully_(&fun.0, resolved_lazies)?,
+                fun.0
+                    .iter()
+                    .map(|f| self.resolve_fully_(f, resolved_lazies))
+                    .collect::<Result<Vec<_>, _>>()?,
                 self.resolve_fully_(&fun.1, resolved_lazies)?,
             )),
 
@@ -540,7 +561,7 @@ impl Checker {
                 }
             }
             TyExpr::Fn(sig) => Type::Fn(Rc::new((
-                self.teval(&sig.0, tenv),
+                sig.0.iter().map(|tx| self.teval(tx, tenv)).collect(),
                 self.teval(&sig.1, tenv),
             ))),
             TyExpr::Record(fts) => {
@@ -661,8 +682,8 @@ impl GenericType {
                 tenv.extend(tvars.iter().zip(args).map(|(tv, t)| (tv.to_string(), t)));
 
                 let rt = ctx.teval(rtype, &tenv);
-                let pt = ctx.teval(ptype, &tenv);
-                Type::Fn(Rc::new((pt.clone(), rt.clone())))
+                let pts = ptypes.iter().map(|pt| ctx.teval(pt, &tenv)).collect();
+                Type::Fn(Rc::new((pts, rt)))
             }
             GenericType::GenericEnum(ed, tenv) => {
                 assert_eq!(ed.tvars.len(), args.len());
@@ -774,7 +795,7 @@ mod tests {
                 ["x"],
                 "x",
             )],
-            Expr::apply("fn", 0),
+            Expr::apply("fn", [0]),
         );
 
         let y = Expr::defs(
@@ -786,12 +807,15 @@ mod tests {
                     tenv: Default::default(),
                 })),
                 "fn",
-                "x",
+                ["x"],
                 Expr::annotate(Type::Int, "x"),
             )],
             Expr::annotate(
                 Type::Int,
-                Expr::apply(Expr::annotate(Type::func(Type::Int, Type::Int), "fn"), 0),
+                Expr::apply(
+                    Expr::annotate(Type::func([Type::Int], Type::Int), "fn"),
+                    [0],
+                ),
             ),
         );
 
@@ -800,28 +824,28 @@ mod tests {
 
     #[test]
     fn check_lambdas() {
-        let x = Expr::apply(Expr::lambda(["x"], "x"), Expr::int(0));
+        let x = Expr::apply(Expr::lambda(["x"], "x"), [0]);
         let y = Expr::annotate(
             Type::Int,
             Expr::apply(
                 Expr::annotate(
-                    Type::func(Type::Int, Type::Int),
+                    Type::func([Type::Int], Type::Int),
                     Expr::lambda(["x"], Expr::annotate(Type::Int, "x")),
                 ),
-                Expr::int(0),
+                [0],
             ),
         );
         assert_eq!(Checker::check_program(&x), Ok(y));
 
-        let x = Expr::apply(Expr::lambda(["x"], "x"), Expr::Real(0.0));
+        let x = Expr::apply(Expr::lambda(["x"], "x"), [Expr::Real(0.0)]);
         let y = Expr::annotate(
             Type::Real,
             Expr::apply(
                 Expr::annotate(
-                    Type::func(Type::Real, Type::Real),
+                    Type::func([Type::Real], Type::Real),
                     Expr::lambda(["x"], Expr::annotate(Type::Real, "x")),
                 ),
-                Expr::real(0.0),
+                [Expr::real(0.0)],
             ),
         );
         assert_eq!(Checker::check_program(&x), Ok(y));
@@ -831,7 +855,7 @@ mod tests {
     fn check_generic() {
         let x = Expr::defs(
             [Def::func("fn", vec!["T"], ["T"], "T", ["x"], "x")],
-            Expr::apply("fn", 0),
+            Expr::apply("fn", [0]),
         );
         assert!(Checker::check_program(&x).is_ok());
     }
@@ -840,7 +864,7 @@ mod tests {
     fn fail_generic_def() {
         let x = Expr::defs(
             [Def::func("fn", vec!["T"], ["T"], "T", ["x"], 0)],
-            Expr::apply("fn", 0),
+            Expr::apply("fn", [0]),
         );
         assert!(Checker::check_program(&x).is_err());
     }
@@ -850,7 +874,7 @@ mod tests {
         // (let ((id (lambda (x) x))) ((id id) 42))
         let x = Expr::defs(
             [Def::func("id", vec!["T"], ["T"], "T", ["x"], "x")],
-            Expr::apply(Expr::apply("id", "id"), 42),
+            Expr::apply(Expr::apply("id", ["id"]), [42]),
         );
 
         let y = Expr::defs(
@@ -862,26 +886,26 @@ mod tests {
                     tenv: Default::default(),
                 })),
                 "id",
-                "x",
+                ["x"],
                 Expr::annotate(Type::Opaque("T".into()), "x"),
             )],
             Expr::annotate(
                 Type::Int,
                 Expr::apply(
                     Expr::annotate(
-                        Type::func(Type::Int, Type::Int),
+                        Type::func([Type::Int], Type::Int),
                         Expr::apply(
                             Expr::annotate(
                                 Type::func(
-                                    Type::func(Type::Int, Type::Int),
-                                    Type::func(Type::Int, Type::Int),
+                                    [Type::func([Type::Int], Type::Int)],
+                                    Type::func([Type::Int], Type::Int),
                                 ),
                                 "id",
                             ),
-                            Expr::annotate(Type::func(Type::Int, Type::Int), "id"),
+                            [Expr::annotate(Type::func([Type::Int], Type::Int), "id")],
                         ),
                     ),
-                    42,
+                    [42],
                 ),
             ),
         );
@@ -895,7 +919,10 @@ mod tests {
             ],
             Expr::apply(
                 "swallow",
-                Expr::record([Expr::apply("twice", 21), Expr::apply("twice", 1.23)]),
+                [Expr::record([
+                    Expr::apply("twice", [21]),
+                    Expr::apply("twice", [1.23]),
+                ])],
             ),
         );
 
@@ -909,11 +936,11 @@ mod tests {
                 "f",
                 vec!["T", "S"],
                 ["T"],
-                TyExpr::func("S", "T"),
+                TyExpr::func(["S"], "T"),
                 ["x"],
                 Expr::lambda(["y"], "x"),
             )],
-            Expr::apply(Expr::apply("f", 42), 1.2),
+            Expr::apply(Expr::apply("f", [42]), [1.2]),
         );
         assert!(Checker::check_program(&x).is_ok());
     }
@@ -959,7 +986,7 @@ mod tests {
                     ["x"],
                     Expr::Int(0),
                 )],
-                Expr::apply("f", Expr::apply(Expr::cons("Foo", "B"), 1)),
+                Expr::apply("f", [Expr::apply(Expr::cons("Foo", "B"), [1])]),
             ),
         );
         Checker::check_program(&x).unwrap();
@@ -979,7 +1006,7 @@ mod tests {
                     Expr::Int(0),
                 ),
             ],
-            Expr::apply("f", Expr::apply(Expr::cons("Foo", "B"), 1)),
+            Expr::apply("f", [Expr::apply(Expr::cons("Foo", "B"), [1])]),
         );
 
         let foo = Rc::new(GenericType::GenericEnum(
@@ -1009,23 +1036,23 @@ mod tests {
                     tenv: Default::default(),
                 })),
                 "f",
-                "x",
+                ["x"],
                 Expr::Int(0),
             )],
             Expr::annotate(
                 Type::Int,
                 Expr::apply(
-                    Expr::annotate(Type::func(foo_int.clone(), Type::Int), "f"),
-                    Expr::annotate(
+                    Expr::annotate(Type::func([foo_int.clone()], Type::Int), "f"),
+                    [Expr::annotate(
                         foo_int.clone(),
                         Expr::apply(
                             Expr::annotate(
-                                Type::func(Type::Int, foo_int.clone()),
+                                Type::func([Type::Int], foo_int.clone()),
                                 Expr::cons("Foo", "B"),
                             ),
-                            1,
+                            [1],
                         ),
-                    ),
+                    )],
                 ),
             ),
         );
@@ -1038,7 +1065,7 @@ mod tests {
         let x = Expr::defs(
             [Def::enum_::<&str>("Foo", [], ("A", ("B", TyExpr::Int), ()))],
             Expr::match_enum(
-                Expr::apply(Expr::cons("Foo", "B"), 1),
+                Expr::apply(Expr::cons("Foo", "B"), [1]),
                 [(
                     EnumVariantPattern::Constructor("B".to_string(), "x".to_string()),
                     Expr::var("x"),
@@ -1077,7 +1104,7 @@ mod tests {
                 ["x"],
                 Expr::add("x", "x"),
             )],
-            Expr::apply("double", 21),
+            Expr::apply("double", [21]),
         );
         assert!(Checker::check_program(&x).is_ok());
     }
@@ -1086,7 +1113,7 @@ mod tests {
     fn cant_infer() {
         let x = Expr::defs(
             [Def::func("foo", vec!["T"], ["T"], TyExpr::Int, ["x"], 0)],
-            Expr::apply("foo", Expr::Read()),
+            Expr::apply("foo", [Expr::Read()]),
         );
         assert_eq!(
             Checker::check_program(&x),

@@ -95,7 +95,12 @@ impl Expr {
 
             List(Ref([Symbol(Ref("show")), x])) => Ok(Self::show(Self::from_sexpr(x)?)),
 
-            List(Ref([f, a])) => Ok(Expr::apply(Self::from_sexpr(f)?, Self::from_sexpr(a)?)),
+            List(Ref([f, a @ ..])) => Ok(Expr::apply(
+                Self::from_sexpr(f)?,
+                a.iter()
+                    .map(Self::from_sexpr)
+                    .collect::<Result<Vec<_>, _>>()?,
+            )),
 
             _ => Err(Error::Syntax(s.clone())),
         }
@@ -189,7 +194,7 @@ impl Expr {
 
             Expr::Show(rand) => S::list(vec![S::symbol("show"), rand.to_sexpr()]),
 
-            Expr::Apply(app) => S::list(vec![app.0.to_sexpr(), app.1.to_sexpr()]),
+            Expr::Apply(app) => S::list(once(&app.0).chain(&app.1).map(Self::to_sexpr).collect()),
 
             _ => todo!("{:?}", self),
         }
@@ -346,7 +351,12 @@ impl TyExpr {
             TyExpr::Real => S::symbol("Real"),
             TyExpr::String => S::symbol("String"),
             TyExpr::Named(v) => S::Symbol(v.clone().into()),
-            TyExpr::Fn(f) => S::list(vec![f.0.to_sexpr(), S::symbol("->"), f.1.to_sexpr()]),
+            TyExpr::Fn(f) => S::list(
+                f.0.iter()
+                    .map(Self::to_sexpr)
+                    .chain(vec![S::symbol("->"), f.1.to_sexpr()])
+                    .collect(),
+            ),
             TyExpr::Record(fts) => S::list(fts.iter().map(|t| t.to_sexpr()).collect()),
             TyExpr::Construct(txs) => S::list(
                 once(S::Symbol(txs.0.clone().into()))
@@ -363,9 +373,12 @@ impl TyExpr {
             S::Symbol(Ref("Real")) => Ok(TyExpr::Real),
             S::Symbol(Ref("String")) => Ok(TyExpr::String),
             S::Symbol(Ref(v)) => Ok(TyExpr::Named(v.to_string())),
-            S::List(Ref([f, S::Symbol(Ref("->")), a])) => {
-                Ok(TyExpr::func(Self::from_sexpr(f)?, Self::from_sexpr(a)?))
-            }
+            S::List(Ref([f @ .., S::Symbol(Ref("->")), a])) => Ok(TyExpr::func(
+                f.iter()
+                    .map(|s| Self::from_sexpr(s))
+                    .collect::<Result<Vec<_>, _>>()?,
+                Self::from_sexpr(a)?,
+            )),
             S::List(Ref([S::Symbol(Ref("Record")), fts @ ..])) => fts
                 .iter()
                 .map(|s| Self::from_sexpr(s))
@@ -441,8 +454,8 @@ mod tests {
 
     #[test]
     fn test_application() {
-        let repr = "((foo bar) (f 42))";
-        let expr = Expr::apply(Expr::apply("foo", "bar"), Expr::apply("f", 42));
+        let repr = "((foo bar) (f 4 2))";
+        let expr = Expr::apply(Expr::apply("foo", ["bar"]), [Expr::apply("f", (4, 2, ()))]);
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }

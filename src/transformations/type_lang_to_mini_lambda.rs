@@ -33,11 +33,17 @@ impl Context {
             TExp::Real(x) => LExp::real(*x),
             TExp::String(x) => LExp::string(x),
             TExp::Ref(x) => LExp::var(x),
-            TExp::Apply(app) => LExp::apply(self.convert(&app.0), self.convert(&app.1)),
+            TExp::Apply(app) => match app.1.as_slice() {
+                [] => todo!(),
+                [arg] => LExp::apply(self.convert(&app.0), self.convert(arg)),
+                args => todo!(),
+            },
             TExp::Record(fields) => {
                 LExp::record(fields.iter().map(|f| self.convert(f)).collect::<Vec<_>>())
             }
             TExp::Select(sel) => LExp::select(sel.0 as isize, self.convert(&sel.1)),
+
+            TExp::Lambda(lam) => self.convert_func(&lam.params, &lam.body),
 
             TExp::Lambda(lam) if lam.params.len() == 1 => {
                 LExp::func(&lam.params[0], self.convert(&lam.body))
@@ -162,6 +168,24 @@ impl Context {
             },
 
             _ => todo!("{expr:?}"),
+        }
+    }
+
+    fn convert_func(&mut self, params: &[String], body: &TExp) -> LExp {
+        match params {
+            [p] => LExp::func(p, self.convert(body)),
+            [] => {
+                let args: String = self.gs.gensym("_");
+                LExp::func(args, self.convert(body))
+            }
+            _ => {
+                let args: String = self.gs.gensym("args");
+                let mut body_ = self.convert(body);
+                for (i, p) in params.iter().enumerate().rev() {
+                    body_ = LExp::bind(p, LExp::select(i as isize, LExp::var(&args)), body_)
+                }
+                LExp::func(args, body_)
+            }
         }
     }
 

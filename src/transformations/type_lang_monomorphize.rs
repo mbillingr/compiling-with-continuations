@@ -24,7 +24,13 @@ impl Context {
             Expr::Real(x) => Expr::Real(*x),
             Expr::String(x) => Expr::String(x.clone()),
             Expr::Ref(x) => Expr::Ref(x.clone()),
-            Expr::Apply(app) => Expr::apply(self.monomporphize(&app.0), self.monomporphize(&app.1)),
+            Expr::Apply(app) => Expr::apply(
+                self.monomporphize(&app.0),
+                app.1
+                    .iter()
+                    .map(|f| self.monomporphize(f))
+                    .collect::<Vec<_>>(),
+            ),
             Expr::Record(fields) => Expr::record(
                 fields
                     .iter()
@@ -73,7 +79,9 @@ impl Context {
 
                 let mut new_bodies = HashMap::new();
                 for fun in &fn_defs {
-                    self.push_nonfn_binding(fun.param.clone());
+                    for p in &fun.params {
+                        self.push_nonfn_binding(p.clone());
+                    }
                     let fn_body = self.monomporphize(&fun.body);
                     self.pop_binding();
 
@@ -89,7 +97,7 @@ impl Context {
                         defs_out.push(Def::inferred_func(
                             realized_signature.clone(),
                             new_name,
-                            &fun.param,
+                            fun.params.clone(),
                             fn_body.clone(),
                         ))
                     }
@@ -173,24 +181,27 @@ mod tests {
     fn non_generic_function() {
         let x = Expr::defs(
             [Def::inferred_func(
-                Type::func(Type::Int, Type::Int),
+                Type::func([Type::Int], Type::Int),
                 "fn",
-                "x",
+                ["x"],
                 "x",
             )],
-            Expr::apply(Expr::annotate(Type::func(Type::Int, Type::Int), "fn"), 123),
+            Expr::apply(
+                Expr::annotate(Type::func([Type::Int], Type::Int), "fn"),
+                [123],
+            ),
         );
 
         let y = Expr::defs(
             [Def::inferred_func(
-                Type::func(Type::Int, Type::Int),
+                Type::func([Type::Int], Type::Int),
                 "fn__0",
-                "x",
+                ["x"],
                 "x",
             )],
             Expr::apply(
-                Expr::annotate(Type::func(Type::Int, Type::Int), "fn__0"),
-                123,
+                Expr::annotate(Type::func([Type::Int], Type::Int), "fn__0"),
+                [123],
             ),
         );
 
@@ -201,9 +212,9 @@ mod tests {
     fn unused_function() {
         let x = Expr::defs(
             [Def::inferred_func(
-                Type::func(Type::Int, Type::Int),
+                Type::func([Type::Int], Type::Int),
                 "fn",
-                "x",
+                ["x"],
                 "x",
             )],
             0,
@@ -220,20 +231,20 @@ mod tests {
             [Def::inferred_func(
                 Type::Int, // this is bullshit, but should not matter
                 "fn",
-                "x",
+                ["x"],
                 "x",
             )],
-            Expr::annotate(Type::func(Type::Int, Type::Int), "fn"),
+            Expr::annotate(Type::func([Type::Int], Type::Int), "fn"),
         );
 
         let y = Expr::defs(
             [Def::inferred_func(
-                Type::func(Type::Int, Type::Int),
+                Type::func([Type::Int], Type::Int),
                 "fn__0",
-                "x",
+                ["x"],
                 "x",
             )],
-            Expr::annotate(Type::func(Type::Int, Type::Int), "fn__0"),
+            Expr::annotate(Type::func([Type::Int], Type::Int), "fn__0"),
         );
 
         assert_eq!(Context::default().monomporphize(&x), y);
@@ -245,25 +256,25 @@ mod tests {
             [Def::inferred_func(
                 Type::Unit, // this is bullshit, but should not matter
                 "fn",
-                "x",
+                ["x"],
                 "x",
             )],
             Expr::record([
-                Expr::annotate(Type::func(Type::Int, Type::Int), "fn"),
-                Expr::annotate(Type::func(Type::Real, Type::Real), "fn"),
-                Expr::annotate(Type::func(Type::Int, Type::Int), "fn"),
+                Expr::annotate(Type::func([Type::Int], Type::Int), "fn"),
+                Expr::annotate(Type::func([Type::Real], Type::Real), "fn"),
+                Expr::annotate(Type::func([Type::Int], Type::Int), "fn"),
             ]),
         );
 
         let y = Expr::defs(
             [
-                Def::inferred_func(Type::func(Type::Int, Type::Int), "fn__0", "x", "x"),
-                Def::inferred_func(Type::func(Type::Real, Type::Real), "fn__1", "x", "x"),
+                Def::inferred_func(Type::func([Type::Int], Type::Int), "fn__0", ["x"], "x"),
+                Def::inferred_func(Type::func([Type::Real], Type::Real), "fn__1", ["x"], "x"),
             ],
             Expr::record([
-                Expr::annotate(Type::func(Type::Int, Type::Int), "fn__0"),
-                Expr::annotate(Type::func(Type::Real, Type::Real), "fn__1"),
-                Expr::annotate(Type::func(Type::Int, Type::Int), "fn__0"),
+                Expr::annotate(Type::func([Type::Int], Type::Int), "fn__0"),
+                Expr::annotate(Type::func([Type::Real], Type::Real), "fn__1"),
+                Expr::annotate(Type::func([Type::Int], Type::Int), "fn__0"),
             ]),
         );
 
@@ -276,15 +287,21 @@ mod tests {
             [Def::inferred_func(
                 Type::Unit, // this is bullshit, but should not matter
                 "f",
-                "x",
+                ["x"],
                 "x",
             )],
-            Expr::lambda(["f"], Expr::annotate(Type::func(Type::Int, Type::Int), "f")),
+            Expr::lambda(
+                ["f"],
+                Expr::annotate(Type::func([Type::Int], Type::Int), "f"),
+            ),
         );
 
         let y = Expr::defs(
             [],
-            Expr::lambda(["f"], Expr::annotate(Type::func(Type::Int, Type::Int), "f")),
+            Expr::lambda(
+                ["f"],
+                Expr::annotate(Type::func([Type::Int], Type::Int), "f"),
+            ),
         );
 
         assert_eq!(Context::default().monomporphize(&x), y);
@@ -296,15 +313,15 @@ mod tests {
             [Def::inferred_func(
                 Type::Unit, // this is bullshit, but should not matter
                 "f",
-                "x",
+                ["x"],
                 "x",
             )],
             Expr::defs(
                 [Def::inferred_func(
                     Type::Unit, // this is bullshit, but should not matter
                     "g",
-                    "f",
-                    Expr::annotate(Type::func(Type::Int, Type::Int), "f"),
+                    ["f"],
+                    Expr::annotate(Type::func([Type::Int], Type::Int), "f"),
                 )],
                 0,
             ),
@@ -321,17 +338,17 @@ mod tests {
             [Def::inferred_func(
                 Type::Unit, // this is bullshit, but should not matter
                 "f",
-                "x",
+                ["x"],
                 "x",
             )],
             Expr::defs(
                 [Def::inferred_func(
                     Type::Unit, // this is bullshit, but should not matter
                     "f",
-                    "x",
+                    ["x"],
                     "x",
                 )],
-                Expr::annotate(Type::func(Type::Int, Type::Int), "f"),
+                Expr::annotate(Type::func([Type::Int], Type::Int), "f"),
             ),
         );
 
@@ -339,12 +356,12 @@ mod tests {
             [],
             Expr::defs(
                 [Def::inferred_func(
-                    Type::func(Type::Int, Type::Int),
+                    Type::func([Type::Int], Type::Int),
                     "f__0",
-                    "x",
+                    ["x"],
                     "x",
                 )],
-                Expr::annotate(Type::func(Type::Int, Type::Int), "f__0"),
+                Expr::annotate(Type::func([Type::Int], Type::Int), "f__0"),
             ),
         );
 
@@ -357,35 +374,35 @@ mod tests {
             [Def::inferred_func(
                 Type::Unit, // this is bullshit, but should not matter
                 "f",
-                "x",
+                ["x"],
                 "x",
             )],
             Expr::defs(
                 [Def::inferred_func(
                     Type::Unit, // this is bullshit, but should not matter
                     "g",
-                    "y",
-                    Expr::annotate(Type::func(Type::Int, Type::Int), "f"),
+                    ["y"],
+                    Expr::annotate(Type::func([Type::Int], Type::Int), "f"),
                 )],
-                Expr::annotate(Type::func(Type::Int, Type::Int), "g"),
+                Expr::annotate(Type::func([Type::Int], Type::Int), "g"),
             ),
         );
 
         let y = Expr::defs(
             [Def::inferred_func(
-                Type::func(Type::Int, Type::Int), // this is bullshit, but should not matter
+                Type::func([Type::Int], Type::Int), // this is bullshit, but should not matter
                 "f__1",
-                "x",
+                ["x"],
                 "x",
             )],
             Expr::defs(
                 [Def::inferred_func(
-                    Type::func(Type::Int, Type::Int), // this is bullshit, but should not matter
+                    Type::func([Type::Int], Type::Int), // this is bullshit, but should not matter
                     "g__0",
-                    "y",
-                    Expr::annotate(Type::func(Type::Int, Type::Int), "f__1"),
+                    ["y"],
+                    Expr::annotate(Type::func([Type::Int], Type::Int), "f__1"),
                 )],
-                Expr::annotate(Type::func(Type::Int, Type::Int), "g__0"),
+                Expr::annotate(Type::func([Type::Int], Type::Int), "g__0"),
             ),
         );
 
