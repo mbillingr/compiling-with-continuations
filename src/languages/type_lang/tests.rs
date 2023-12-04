@@ -124,6 +124,16 @@ macro_rules! make_testsuite_for_type_lang {
                             (C => 5.6))))", ""),
                 "3.4"
             );
+
+            assert_eq!(
+                $run("(define ((enum (Foo) A (B Int Int) C))
+                        (show 
+                          (match-enum ((Foo . B) 1 2)
+                            (A => 42)
+                            ((B x y) => y)
+                            (C => 123))))", ""),
+                "2"
+            );
         }
 
         #[test]
@@ -254,6 +264,7 @@ fn exec(src: &str, input: &str) -> String {
     let checked = Checker::check_program(&expr_in).unwrap();
     let mono = type_lang_monomorphize::Context::new(gs.clone()).monomporphize(&checked);
     let mini_la = type_lang_to_mini_lambda::Context::new(gs.clone()).convert(&mono);
+    println!("{}", mini_la.to_sexpr());
 
     let mut o = std::io::Cursor::new(Vec::<u8>::new());
     let mut i = std::io::Cursor::new(input);

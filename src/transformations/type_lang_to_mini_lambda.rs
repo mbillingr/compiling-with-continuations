@@ -1,9 +1,12 @@
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
-use crate::languages::type_lang::ast::{Def, EnumMatchArm, EnumType, EnumVariantPattern, Type};
+use crate::languages::type_lang::ast::{
+    Def, EnumMatchArm, EnumType, EnumVariantPattern, Expr, Type,
+};
 use crate::transformations::GensymContext;
 use std::collections::HashMap;
+use std::iter::once;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -84,17 +87,26 @@ impl Context {
                             let variant_rep = self.enum_variant_repr(&en, name);
                             arms_.push((Con::Data(variant_rep), self.convert(&arm.branch)))
                         }
-                        EnumVariantPattern { name, vars } => {
+                        EnumVariantPattern { name, vars } if vars.len() == 1 => {
                             let variant_rep = self.enum_variant_repr(&en, name);
-                            todo!()
-                            /*arms_.push((
-                                Con::Data(variant_rep),
-                                LExp::bind(
-                                    var,
-                                    LExp::decon(variant_rep, switch_val),
-                                    self.convert(&arm.branch),
-                                ),
-                            ))*/
+                            let mut branch = self.convert(&arm.branch);
+                            branch =
+                                LExp::bind(&vars[0], LExp::decon(variant_rep, switch_val), branch);
+                            arms_.push((Con::Data(variant_rep), branch));
+                        }
+                        EnumVariantPattern { name, vars } => {
+                            let rec: String = self.gs.gensym("rec");
+                            let variant_rep = self.enum_variant_repr(&en, name);
+                            let mut branch = self.convert(&arm.branch);
+                            for (i, v) in vars.iter().enumerate().rev() {
+                                branch = LExp::bind(
+                                    v,
+                                    LExp::select(i as isize, LExp::var(&rec)),
+                                    branch,
+                                );
+                            }
+                            branch = LExp::bind(rec, LExp::decon(variant_rep, switch_val), branch);
+                            arms_.push((Con::Data(variant_rep), branch));
                         }
                     }
                 }
@@ -181,18 +193,32 @@ impl Context {
             for (vname, tys) in &et.variants {
                 match tys.as_slice() {
                     [] => arms.push(EnumMatchArm {
-                        pattern: EnumVariantPattern::Constant(vname.clone()),
+                        pattern: EnumVariantPattern::constant(vname.clone()),
                         branch: TExp::show(TExp::string(vname)),
                     }),
-                    [tx] => arms.push(EnumMatchArm {
-                        pattern: EnumVariantPattern::Constructor(vname.clone(), "x".to_string()),
-                        branch: TExp::sequence(vec![
-                            TExp::show(TExp::string("(")),
-                            TExp::show(TExp::string(vname)),
-                            TExp::show(TExp::string(" ")),
-                            TExp::show(TExp::annotate(tx.clone(), TExp::var("x"))),
-                            TExp::show(TExp::string(")")),
-                        ]),
+                    tx => arms.push(EnumMatchArm {
+                        pattern: EnumVariantPattern::constructor(
+                            vname.clone(),
+                            tx.iter()
+                                .enumerate()
+                                .map(|(i, _)| format!("x{i}"))
+                                .collect::<Vec<_>>(),
+                        ),
+                        branch: {
+                            let mut seq = vec![
+                                TExp::show(TExp::string("(")),
+                                TExp::show(TExp::string(vname)),
+                            ];
+                            for (i, t) in tx.iter().enumerate() {
+                                seq.push(TExp::show(TExp::string(" ")));
+                                seq.push(TExp::show(TExp::annotate(
+                                    t.clone(),
+                                    TExp::var(format!("x{i}")),
+                                )));
+                            }
+                            seq.push(TExp::show(TExp::string(")")));
+                            TExp::sequence(seq)
+                        },
                     }),
                     _ => panic!("enum variants with more than one value not supported"),
                 }
@@ -557,7 +583,7 @@ mod tests {
             ],
         );
 
-        let x = TExp::match_enum(TExp::annotate(ety.clone(), "x"), [(("B", "y"), "y")]);
+        let x = TExp::match_enum(TExp::annotate(ety.clone(), "x"), [(("B", ["y"]), "y")]);
         let y = LExp::bind(
             "switch_val__0",
             "x",
@@ -589,7 +615,7 @@ mod tests {
             [("X".to_string(), vec![Type::Int])],
         );
 
-        let x = TExp::match_enum(TExp::annotate(ety.clone(), "x"), [(("X", "y"), "y")]);
+        let x = TExp::match_enum(TExp::annotate(ety.clone(), "x"), [(("X", ["y"]), "y")]);
         let y = LExp::bind(
             "switch_val__0",
             "x",

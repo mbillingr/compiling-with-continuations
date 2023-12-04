@@ -408,7 +408,7 @@ impl EnumVariantPattern {
             EnumVariantPattern { name, vars } if vars.is_empty() => S::Symbol(name.clone().into()),
             EnumVariantPattern { name, vars } => S::list(
                 once(S::Symbol(name.clone().into()))
-                    .chain(vars.iter().map(String::as_str).map(S::symbol))
+                    .chain(vars.iter().map(Ref::from).map(S::Symbol))
                     .collect(),
             ),
         }
@@ -516,7 +516,11 @@ mod tests {
         let repr = "(define ((enum (Option T) None (Some T Int)) (func (T) (foo (x : T) -> Int) 42) (func (T) (bar (x : T) (y : T) -> Int) 123)) 0)";
         let expr = Expr::defs(
             vec![
-                Def::enum_("Option", ["T"], ("None", ["Some", "T", "Int"])),
+                Def::enum_(
+                    "Option",
+                    ["T"],
+                    ("None", ("Some", ("T", TyExpr::Int, ())), ()),
+                ),
                 Def::func("foo", ["T"], ["T"], TyExpr::Int, ["x"], 42),
                 Def::func("bar", ["T"], ["T", "T"], TyExpr::Int, ["x", "y"], 123),
             ],
