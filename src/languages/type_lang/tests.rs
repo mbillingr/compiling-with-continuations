@@ -121,27 +121,32 @@ macro_rules! make_testsuite_for_type_lang {
         #[test]
         fn function_definitions() {
             assert_eq!(
-                $run("(define ((func () (foo x : Int -> Int) x))
+                $run("(define ((func () (foo (x : Int) -> Int) x))
                         (show (foo 5)))", ""),
                 "5"
             );
 
             assert_eq!(
-                $run("(define ((func () (foo x : Int -> ()) (show x)))
+                $run("(define ((func () (foo (x : Int) -> ()) (show x)))
                         (show (foo 5)))", ""),
                 "5()"
             );
 
             assert_eq!(
-                $run("(define ((func () (foo x : Int -> Int) (begin (show x) 2)))
+                $run("(define ((func () (foo (x : Int) -> Int) (begin (show x) 2)))
                         (show (foo 4)))", ""),
                 "42"
             );
 
             assert_eq!(
-                $run("(define ((func (T) (foo x : T -> T) x))
+                $run("(define ((func (T) (foo (x : T) -> T) x))
                         (show (foo \"abc\")))", ""),
                 "abc"
+            );
+            assert_eq!(
+                $run("(define ((func () (foo (x : Int) (y : Int) (z : Int) -> Int) y))
+                        (show (foo 1 2 3)))", ""),
+                "2"
             );
         }
 
@@ -156,7 +161,7 @@ macro_rules! make_testsuite_for_type_lang {
                 "2");
 
             assert_eq!(
-                $run("(define ((func (A B) (swap r : (Record A B) -> (Record B A))
+                $run("(define ((func (A B) (swap (r : (Record A B)) -> (Record B A))
                                  (record (select 1 r) (select 0 r))
                                )
                               )
@@ -167,16 +172,16 @@ macro_rules! make_testsuite_for_type_lang {
         #[test]
         fn recursion() {
             assert_eq!(
-                $run("(define ((func () (foo x : Int -> Int) (baz x))
-                               (func () (bar y : Int -> Int) y)
-                               (func () (baz x : Int -> Int) (bar x)))
+                $run("(define ((func () (foo (x : Int) -> Int) (baz x))
+                               (func () (bar (y : Int) -> Int) y)
+                               (func () (baz (x : Int) -> Int) (bar x)))
                         (show (foo 123)))", ""),
                 "123"
             );
 
             assert_eq!(
                 $run("(define ((enum (Recur) Yes No)
-                               (func () (foo x : Recur -> Int)
+                               (func () (foo (x : Recur) -> Int)
                                  (match-enum x
                                    (No => 1)
                                    (Yes => (foo (Recur . No))))))
@@ -187,9 +192,9 @@ macro_rules! make_testsuite_for_type_lang {
             // recursive function on recursive data type
             assert_eq!(
                 $run("(define ((enum (Peano) Z (S Peano))
-                               (func (T) (z _ : T -> Peano) (Peano . Z))
-                               (func (T) (s n : Peano -> Peano) ((Peano . S) n))
-                               (func () (peano->int n : Peano -> Int)
+                               (func (T) (z (_ : T) -> Peano) (Peano . Z))
+                               (func (T) (s (n : Peano) -> Peano) ((Peano . S) n))
+                               (func () (peano->int (n : Peano) -> Int)
                                  (match-enum n
                                    (Z => 0)
                                    ((S k) => (+ 1 (peano->int k))))))
@@ -204,12 +209,12 @@ macro_rules! make_testsuite_for_type_lang {
         fn a_list_implementation() {
             assert_eq!(
                 $run("(define ((enum (List T) Nil (Cons (Record T (List T))))
-                               (func (T) (nil _ : T -> (List T)) (List . Nil))
-                               (func (T) (cons x : (Record T (List T)) -> (List T)) ((List . Cons) x))
-                               (func (T) (car xs : (List T) -> T)
+                               (func (T) (nil (_ : T) -> (List T)) (List . Nil))
+                               (func (T) (cons (x : (Record T (List T))) -> (List T)) ((List . Cons) x))
+                               (func (T) (car (xs : (List T)) -> T)
                                  (match-enum xs
                                    ((Cons r) => (select 0 r))))
-                               (func (T) (cdr xs : (List T) -> (List T))
+                               (func (T) (cdr (xs : (List T)) -> (List T))
                                  (match-enum xs
                                    ((Cons r) => (select 1 r))))
                               )

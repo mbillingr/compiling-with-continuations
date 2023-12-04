@@ -538,7 +538,7 @@ impl<T> ListBuilder<T> for Vec<T> {
 
 impl ListBuilder<String> for Vec<&str> {
     fn build_into(self, buf: &mut Vec<String>) {
-        todo!()
+        buf.extend(self.into_iter().map(str::to_string))
     }
 }
 

@@ -1149,7 +1149,7 @@ mod tests {
     fn check_recursive_enum_usage() {
         let x = Expr::from_str(
             "(define ((enum (Peano) Z (S Peano))
-                               (func () (peano->int n : Peano -> Int)
+                               (func () (peano->int (n : Peano) -> Int)
                                  0))
                     (peano->int (Peano . Z)))",
         )

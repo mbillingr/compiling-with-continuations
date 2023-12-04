@@ -34,9 +34,12 @@ impl Context {
             TExp::String(x) => LExp::string(x),
             TExp::Ref(x) => LExp::var(x),
             TExp::Apply(app) => match app.1.as_slice() {
-                [] => todo!(),
+                [] => LExp::apply(self.convert(&app.0), 0),
                 [arg] => LExp::apply(self.convert(&app.0), self.convert(arg)),
-                args => todo!(),
+                args => LExp::apply(
+                    self.convert(&app.0),
+                    LExp::record(args.iter().map(|a| self.convert(a)).collect::<Vec<_>>()),
+                ),
             },
             TExp::Record(fields) => {
                 LExp::record(fields.iter().map(|f| self.convert(f)).collect::<Vec<_>>())
@@ -44,24 +47,6 @@ impl Context {
             TExp::Select(sel) => LExp::select(sel.0 as isize, self.convert(&sel.1)),
 
             TExp::Lambda(lam) => self.convert_func(&lam.params, &lam.body),
-
-            TExp::Lambda(lam) if lam.params.len() == 1 => {
-                LExp::func(&lam.params[0], self.convert(&lam.body))
-            }
-
-            TExp::Lambda(lam) if lam.params.len() == 0 => {
-                let args: String = self.gs.gensym("_");
-                LExp::func(args, self.convert(&lam.body))
-            }
-
-            TExp::Lambda(lam) => {
-                let args: String = self.gs.gensym("args");
-                let mut body = self.convert(&lam.body);
-                for (i, p) in lam.params.iter().enumerate().rev() {
-                    body = LExp::bind(p, LExp::select(i as isize, LExp::var(&args)), body)
-                }
-                LExp::func(args, body)
-            }
 
             TExp::Defs(dfs) => {
                 let (defs, body) = &**dfs;
