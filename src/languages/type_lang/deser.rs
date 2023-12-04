@@ -274,24 +274,18 @@ impl FnDef {
                     .map(|v| S::Symbol(v.clone().into()))
                     .collect(),
             ),
-            S::list(vec![
-                S::Symbol(self.fname.clone().into()),
-                S::list(
-                    self.params
-                        .iter()
-                        .zip(self.ptypes.iter())
-                        .map(|(p, t)| {
-                            S::list(vec![
-                                S::Symbol(p.clone().into()),
-                                S::symbol(":"),
-                                t.to_sexpr(),
-                            ])
-                        })
-                        .collect(),
-                ),
-                S::symbol("->"),
-                self.rtype.to_sexpr(),
-            ]),
+            S::list(
+                once(S::Symbol(self.fname.clone().into()))
+                    .chain(self.params.iter().zip(self.ptypes.iter()).map(|(p, t)| {
+                        S::list(vec![
+                            S::Symbol(p.clone().into()),
+                            S::symbol(":"),
+                            t.to_sexpr(),
+                        ])
+                    }))
+                    .chain(vec![S::symbol("->"), self.rtype.to_sexpr()])
+                    .collect(),
+            ),
             self.body.to_sexpr(),
         ])
     }
@@ -312,6 +306,7 @@ impl FnDef {
                             ptypes.push(TyExpr::from_sexpr(ptype)?);
                             sig = rest;
                         }
+                        _ => return Err(Error::Syntax(s.clone())),
                     }
                 };
                 let fname = fname.to_string();
@@ -513,7 +508,7 @@ mod tests {
             vec![
                 Def::enum_("Option", ["T"], ("None", ("Some", "T"), ())),
                 Def::func("foo", ["T"], ["T"], TyExpr::Int, ["x"], 42),
-                Def::func("foo", ["T"], ["T", "T"], TyExpr::Int, ["x", "y"], 123),
+                Def::func("bar", ["T"], ["T", "T"], TyExpr::Int, ["x", "y"], 123),
             ],
             0,
         );

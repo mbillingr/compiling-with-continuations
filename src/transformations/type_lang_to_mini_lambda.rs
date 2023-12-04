@@ -74,7 +74,7 @@ impl Context {
                         Def::Enum(_) => {}
                         Def::InferredFunc(d) => {
                             names.push(d.fname.clone());
-                            fns.push(LExp::func(&d.param, self.convert(&d.body)));
+                            fns.push(self.convert_func(&d.params, &d.body));
                         }
                     }
                 }
@@ -343,8 +343,18 @@ mod tests {
     #[test]
     fn convert_application() {
         assert_eq!(
-            Context::default().convert(&TExp::apply("f", "x")),
+            Context::default().convert(&TExp::apply("f", ["x"])),
             LExp::from_str("(f x)").unwrap()
+        );
+
+        assert_eq!(
+            Context::default().convert(&TExp::apply("f", [] as [&str; 0])),
+            LExp::from_str("(f 0)").unwrap()
+        );
+
+        assert_eq!(
+            Context::default().convert(&TExp::apply("f", ["x", "y"])),
+            LExp::from_str("(f (record x y))").unwrap()
         );
     }
 
@@ -460,8 +470,8 @@ mod tests {
         let x = TExp::annotate(
             ety.clone(),
             TExp::apply(
-                TExp::annotate(Type::func(Type::Int, ety.clone()), TExp::cons("ABC", "B")),
-                1,
+                TExp::annotate(Type::func([Type::Int], ety.clone()), TExp::cons("ABC", "B")),
+                [1],
             ),
         );
         let y = LExp::apply(LExp::func("x", LExp::con(ConRep::Tagged(0), "x")), 1);
@@ -485,10 +495,10 @@ mod tests {
             enum_t.clone(),
             TExp::apply(
                 TExp::annotate(
-                    Type::func(Type::Int, enum_t.clone()),
+                    Type::func([Type::Int], enum_t.clone()),
                     TExp::cons("Foo", "X"),
                 ),
-                42,
+                [42],
             ),
         );
 
@@ -615,12 +625,12 @@ mod tests {
         assert_eq!(
             Context::default().convert(&TExp::defs(
                 [Def::inferred_func(
-                    Type::func(Type::Int, Type::Int),
+                    Type::func([Type::Int], Type::Int),
                     "fn",
-                    "x",
+                    ["x"],
                     "x"
                 )],
-                TExp::apply("fn", 123)
+                TExp::apply("fn", [123])
             )),
             LExp::from_str("(fix ((fn x x)) (fn 123))").unwrap()
         );
