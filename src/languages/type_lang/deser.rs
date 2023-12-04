@@ -48,14 +48,15 @@ impl Expr {
             List(Ref([Symbol(Ref("match-enum")), val, arms @ ..])) => arms
                 .iter()
                 .map(|arm| match arm {
-                    List(Ref([Symbol(v), Symbol(Ref("=>")), branch])) => Ok((
-                        EnumVariantPattern::Constant(v.to_string()),
-                        Self::from_sexpr(branch)?,
-                    )),
-                    List(Ref([List(Ref([Symbol(v), x])), Symbol(Ref("=>")), branch])) => Ok((
-                        EnumVariantPattern::Constructor(v.to_string(), x.to_string()),
-                        Self::from_sexpr(branch)?,
-                    )),
+                    List(Ref([Symbol(v), Symbol(Ref("=>")), branch])) => {
+                        Ok((EnumVariantPattern::constant(v), Self::from_sexpr(branch)?))
+                    }
+                    List(Ref([List(Ref([Symbol(v), xs @ ..])), Symbol(Ref("=>")), branch])) => {
+                        Ok((
+                            EnumVariantPattern::constructor(v, parse_symbol_list(xs)?),
+                            Self::from_sexpr(branch)?,
+                        ))
+                    }
                     _ => Err(Error::Syntax(arm.clone())),
                 })
                 .map(|arm| arm.map(|(pattern, branch)| EnumMatchArm { pattern, branch }))
@@ -219,10 +220,16 @@ impl Def {
                     ),
                 ]
                 .into_iter()
-                .chain(variants.iter().map(|va| match va {
-                    EnumVariant::Constant(c) => S::Symbol(c.clone().into()),
-                    EnumVariant::Constructor(c, x) => {
-                        S::list(vec![S::Symbol(c.clone().into()), x.to_sexpr()])
+                .chain(variants.iter().map(|va| {
+                    match va {
+                        EnumVariant { name: c, tyxs: xs } if xs.is_empty() => {
+                            S::Symbol(c.clone().into())
+                        }
+                        EnumVariant { name: c, tyxs: xs } => S::list(
+                            once(S::Symbol(c.clone().into()))
+                                .chain(xs.iter().map(TyExpr::to_sexpr))
+                                .collect(),
+                        ),
                     }
                 }))
                 .collect(),
@@ -242,10 +249,12 @@ impl Def {
                 let variants = variants
                     .iter()
                     .map(|v| match v {
-                        S::Symbol(name) => Ok(EnumVariant::Constant(name.to_string())),
-                        S::List(Ref([S::Symbol(name), tyx])) => Ok(EnumVariant::Constructor(
+                        S::Symbol(name) => Ok(EnumVariant::constant(name.to_string())),
+                        S::List(Ref([S::Symbol(name), tyxs @ ..])) => Ok(EnumVariant::constructor(
                             name.to_string(),
-                            TyExpr::from_sexpr(tyx)?,
+                            tyxs.iter()
+                                .map(TyExpr::from_sexpr)
+                                .collect::<Result<Vec<_>, _>>()?,
                         )),
                         _ => Err(Error::Syntax(v.clone())),
                     })
@@ -396,11 +405,12 @@ impl TyExpr {
 impl EnumVariantPattern {
     pub fn to_sexpr(&self) -> S {
         match self {
-            EnumVariantPattern::Constant(name) => S::Symbol(name.clone().into()),
-            EnumVariantPattern::Constructor(name, var) => S::list(vec![
-                S::Symbol(name.clone().into()),
-                S::Symbol(var.clone().into()),
-            ]),
+            EnumVariantPattern { name, vars } if vars.is_empty() => S::Symbol(name.clone().into()),
+            EnumVariantPattern { name, vars } => S::list(
+                once(S::Symbol(name.clone().into()))
+                    .chain(vars.iter().map(String::as_str).map(S::symbol))
+                    .collect(),
+            ),
         }
     }
 }
@@ -478,10 +488,10 @@ mod tests {
             "foo",
             [
                 (
-                    EnumVariantPattern::Constructor("Bar".into(), "x".into()),
+                    EnumVariantPattern::constructor("Bar", ["x"]),
                     Expr::var("x"),
                 ),
-                (EnumVariantPattern::Constant("Baz".into()), Expr::int(42)),
+                (EnumVariantPattern::constant("Baz"), Expr::int(42)),
             ],
         );
         assert_eq!(expr.to_string(), repr);
@@ -503,10 +513,10 @@ mod tests {
 
     #[test]
     fn test_defs() {
-        let repr = "(define ((enum (Option T) None (Some T)) (func (T) (foo (x : T) -> Int) 42) (func (T) (bar (x : T) (y : T) -> Int) 123)) 0)";
+        let repr = "(define ((enum (Option T) None (Some T Int)) (func (T) (foo (x : T) -> Int) 42) (func (T) (bar (x : T) (y : T) -> Int) 123)) 0)";
         let expr = Expr::defs(
             vec![
-                Def::enum_("Option", ["T"], ("None", ("Some", "T"), ())),
+                Def::enum_("Option", ["T"], ("None", ["Some", "T", "Int"])),
                 Def::func("foo", ["T"], ["T"], TyExpr::Int, ["x"], 42),
                 Def::func("bar", ["T"], ["T", "T"], TyExpr::Int, ["x", "y"], 123),
             ],

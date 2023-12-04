@@ -80,20 +80,21 @@ impl Context {
                 let mut arms_ = vec![];
                 for arm in arms {
                     match &arm.pattern {
-                        EnumVariantPattern::Constant(name) => {
+                        EnumVariantPattern { name, vars } if vars.is_empty() => {
                             let variant_rep = self.enum_variant_repr(&en, name);
                             arms_.push((Con::Data(variant_rep), self.convert(&arm.branch)))
                         }
-                        EnumVariantPattern::Constructor(name, var) => {
+                        EnumVariantPattern { name, vars } => {
                             let variant_rep = self.enum_variant_repr(&en, name);
-                            arms_.push((
+                            todo!()
+                            /*arms_.push((
                                 Con::Data(variant_rep),
                                 LExp::bind(
                                     var,
                                     LExp::decon(variant_rep, switch_val),
                                     self.convert(&arm.branch),
                                 ),
-                            ))
+                            ))*/
                         }
                     }
                 }

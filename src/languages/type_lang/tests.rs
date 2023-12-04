@@ -52,6 +52,14 @@ macro_rules! make_testsuite_for_type_lang {
                 ),
                 "(B 42)"
             );
+
+            assert_eq!(
+                $run(
+                    "(define ((enum (Foo) (B Int Int Int))) (show ((Foo . B) 1 2 3)))",
+                    ""
+                ),
+                "(B 1 2 3)"
+            );
         }
 
         #[test]

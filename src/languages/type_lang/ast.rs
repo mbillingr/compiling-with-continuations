@@ -121,9 +121,9 @@ pub struct EnumDef {
 
 /// Possible enum variants
 #[derive(Debug, PartialEq)]
-pub enum EnumVariant {
-    Constant(String),
-    Constructor(String, TyExpr),
+pub struct EnumVariant {
+    pub name: String,
+    pub tyxs: Vec<TyExpr>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -133,9 +133,9 @@ pub struct EnumMatchArm {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum EnumVariantPattern {
-    Constant(String),
-    Constructor(String, String),
+pub struct EnumVariantPattern {
+    pub name: String,
+    pub vars: Vec<String>,
 }
 
 /// Implementation block
@@ -312,13 +312,35 @@ impl TyExpr {
     }
 }
 
-impl EnumVariantPattern {
+impl EnumVariant {
     pub fn constant(name: impl ToString) -> Self {
-        EnumVariantPattern::Constant(name.to_string())
+        EnumVariant {
+            name: name.to_string(),
+            tyxs: vec![],
+        }
     }
 
-    pub fn constructor(name: impl ToString, var: impl ToString) -> Self {
-        EnumVariantPattern::Constructor(name.to_string(), var.to_string())
+    pub fn constructor(name: impl ToString, tyxs: impl ListBuilder<TyExpr>) -> Self {
+        EnumVariant {
+            name: name.to_string(),
+            tyxs: tyxs.build(),
+        }
+    }
+}
+
+impl EnumVariantPattern {
+    pub fn constant(name: impl ToString) -> Self {
+        EnumVariantPattern {
+            name: name.to_string(),
+            vars: vec![],
+        }
+    }
+
+    pub fn constructor(name: impl ToString, vars: impl ListBuilder<String>) -> Self {
+        EnumVariantPattern {
+            name: name.to_string(),
+            vars: vars.build(),
+        }
     }
 }
 
@@ -360,25 +382,37 @@ impl<A: Into<String>, B: Into<TyExpr>> From<(A, B)> for TyExpr {
 
 impl From<&str> for EnumVariant {
     fn from(name: &str) -> Self {
-        EnumVariant::Constant(name.into())
+        EnumVariant {
+            name: name.into(),
+            tyxs: vec![],
+        }
     }
 }
 
-impl<T: Into<TyExpr>> From<(&str, T)> for EnumVariant {
-    fn from((name, ty): (&str, T)) -> Self {
-        EnumVariant::Constructor(name.into(), ty.into())
+impl<T: ListBuilder<TyExpr>> From<(&str, T)> for EnumVariant {
+    fn from((name, tys): (&str, T)) -> Self {
+        EnumVariant {
+            name: name.into(),
+            tyxs: tys.build(),
+        }
     }
 }
 
 impl From<&str> for EnumVariantPattern {
     fn from(name: &str) -> Self {
-        EnumVariantPattern::Constant(name.to_string())
+        EnumVariantPattern {
+            name: name.to_string(),
+            vars: vec![],
+        }
     }
 }
 
-impl<N: ToString, V: ToString> From<(N, V)> for EnumVariantPattern {
-    fn from((name, var): (N, V)) -> Self {
-        EnumVariantPattern::Constructor(name.to_string(), var.to_string())
+impl<N: ToString, V: ListBuilder<String>> From<(N, V)> for EnumVariantPattern {
+    fn from((name, vars): (N, V)) -> Self {
+        EnumVariantPattern {
+            name: name.to_string(),
+            vars: vars.build(),
+        }
     }
 }
 

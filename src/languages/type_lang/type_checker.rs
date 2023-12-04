@@ -122,50 +122,33 @@ impl Checker {
 
                 let mut arms_ = vec![];
                 for arm in arms {
-                    match &arm.pattern {
-                        EnumVariantPattern::Constant(name) => {
-                            let constructor = enum_.variants.get(name).ok_or_else(|| {
-                                format!("Unknown variant: {} {name}", enum_.template.get_name())
-                            })?;
+                    let constructor = enum_.variants.get(&arm.pattern.name).ok_or_else(|| {
+                        format!(
+                            "Unknown variant: {} {}",
+                            enum_.template.get_name(),
+                            arm.pattern.name
+                        )
+                    })?;
 
-                            if constructor.len() > 0 {
-                                return Err(format!(
-                                    "Variant Pattern {} {name} must bind a value",
-                                    enum_.template.get_name()
-                                ));
-                            }
-
-                            let branch_ = self.infer(&arm.branch, env, tenv)?;
-                            self.unify(&ty, &branch_.get_type())?;
-                            arms_.push(EnumMatchArm {
-                                pattern: arm.pattern.clone(),
-                                branch: branch_,
-                            });
-                        }
-
-                        EnumVariantPattern::Constructor(name, var) => {
-                            let constructor = enum_.variants.get(name).ok_or_else(|| {
-                                format!("Unknown variant: {} {name}", enum_.template.get_name())
-                            })?;
-
-                            if constructor.len() != 1 {
-                                return Err(format!(
-                                    "Variant Pattern {} {name} cannot bind a value",
-                                    enum_.template.get_name()
-                                ));
-                            }
-
-                            let mut branch_env = env.clone();
-                            branch_env.insert(var.clone(), constructor[0].clone());
-
-                            let branch_ = self.infer(&arm.branch, &branch_env, tenv)?;
-                            self.unify(&ty, &branch_.get_type())?;
-                            arms_.push(EnumMatchArm {
-                                pattern: arm.pattern.clone(),
-                                branch: branch_,
-                            });
-                        }
+                    if constructor.len() != arm.pattern.vars.len() {
+                        return Err(format!(
+                            "Length of Variant pattern {} {} does not match constructor",
+                            enum_.template.get_name(),
+                            arm.pattern.name,
+                        ));
                     }
+
+                    let mut branch_env = env.clone();
+                    for (var, t) in arm.pattern.vars.iter().zip(constructor) {
+                        branch_env.insert(var.clone(), t.clone());
+                    }
+
+                    let branch_ = self.infer(&arm.branch, &branch_env, tenv)?;
+                    self.unify(&ty, &branch_.get_type())?;
+                    arms_.push(EnumMatchArm {
+                        pattern: arm.pattern.clone(),
+                        branch: branch_,
+                    });
                 }
 
                 Ok(Expr::annotate(ty, Expr::match_enum(val_, arms_)))
@@ -692,14 +675,10 @@ impl GenericType {
 
                 let mut variants = HashMap::new();
                 for v in &**ed.variants {
-                    match v {
-                        EnumVariant::Constant(vn) => {
-                            variants.insert(vn.clone(), vec![]);
-                        }
-                        EnumVariant::Constructor(vn, tx) => {
-                            variants.insert(vn.clone(), vec![ctx.teval(tx, &tenv)]);
-                        }
-                    }
+                    variants.insert(
+                        v.name.clone(),
+                        v.tyxs.iter().map(|tx| ctx.teval(tx, &tenv)).collect(),
+                    );
                 }
 
                 Type::Enum(Rc::new(EnumType {
@@ -975,7 +954,7 @@ mod tests {
             [Def::enum_(
                 "Foo",
                 [] as [&str; 0],
-                ("A", ("B", TyExpr::Int), ()),
+                ("A", ("B", [TyExpr::Int]), ()),
             )],
             Expr::defs(
                 [Def::func(
@@ -996,7 +975,7 @@ mod tests {
     fn check_generic_enum() {
         let x = Expr::defs(
             [
-                Def::enum_("Foo", ["T"], ("A", ("B", "T"), ())),
+                Def::enum_("Foo", ["T"], ("A", ("B", ["T"]), ())),
                 Def::func(
                     "f",
                     vec!["T"] as Vec<&str>,
@@ -1014,8 +993,8 @@ mod tests {
                 tname: "Foo".to_string(),
                 tvars: vec!["T".into()],
                 variants: Rc::new(vec![
-                    EnumVariant::Constant("A".into()),
-                    EnumVariant::Constructor("B".into(), "T".into()),
+                    EnumVariant::constant("A"),
+                    EnumVariant::constructor("B", ["T"]),
                 ]),
             },
             Default::default(),
@@ -1063,13 +1042,14 @@ mod tests {
     #[test]
     fn check_enum_deconstruction() {
         let x = Expr::defs(
-            [Def::enum_::<&str>("Foo", [], ("A", ("B", TyExpr::Int), ()))],
+            [Def::enum_::<&str>(
+                "Foo",
+                [],
+                ("A", ("B", [TyExpr::Int]), ()),
+            )],
             Expr::match_enum(
                 Expr::apply(Expr::cons("Foo", "B"), [1]),
-                [(
-                    EnumVariantPattern::Constructor("B".to_string(), "x".to_string()),
-                    Expr::var("x"),
-                )],
+                [(EnumVariantPattern::constructor("B", ["x"]), Expr::var("x"))],
             ),
         );
         assert!(Checker::check_program(&x).is_ok());
