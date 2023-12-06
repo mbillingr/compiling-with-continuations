@@ -28,7 +28,7 @@ impl Context {
                 self.monomporphize(&app.0),
                 app.1
                     .iter()
-                    .map(|f| self.monomporphize(f))
+                    .map(|a| self.monomporphize(a))
                     .collect::<Vec<_>>(),
             ),
             Expr::Record(fields) => Expr::record(
@@ -83,7 +83,9 @@ impl Context {
                         self.push_nonfn_binding(p.clone());
                     }
                     let fn_body = self.monomporphize(&fun.body);
-                    self.pop_binding();
+                    for _ in &fun.params {
+                        self.pop_binding();
+                    }
 
                     new_bodies.insert(&fun.fname, fn_body);
                 }

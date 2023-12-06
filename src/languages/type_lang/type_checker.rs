@@ -46,7 +46,7 @@ impl Checker {
         env: &HashMap<String, Type>,
         tenv: &HashMap<String, Type>,
     ) -> Result<Expr, String> {
-        println!("infer {expr:?}");
+        //println!("infer {expr:?}");
         match expr {
             Expr::Unit => Ok(Expr::Unit),
             Expr::Int(x) => Ok(Expr::Int(*x)),
@@ -372,7 +372,7 @@ impl Checker {
         use crate::languages::type_lang::ast::Type::*;
         let t1_ = self.resolve(t1);
         let t2_ = self.resolve(t2);
-        println!("unify {t1:?} = {t2:?} : {t1_:?} = {t2_:?}");
+        //println!("unify {t1:?} = {t2:?} : {t1_:?} = {t2_:?}");
         match (t1_, t2_) {
             (Generic(g), _) | (_, Generic(g)) => Err(format!("Uninstantiated generic: {g:?}")),
 
@@ -515,7 +515,7 @@ impl Checker {
     }
 
     fn teval(&mut self, tx: &TyExpr, tenv: &HashMap<String, Type>) -> Type {
-        println!("teval {tx:?}");
+        //println!("teval {tx:?}");
         match tx {
             TyExpr::Unit => Type::Unit,
             TyExpr::Int => Type::Int,
@@ -647,7 +647,7 @@ impl GenericType {
     }
 
     fn instantiate_with(self: &Rc<Self>, args: Vec<Type>, ctx: &mut Checker) -> Type {
-        println!("instantiate {self:?} {args:?}");
+        //println!("instantiate {self:?} {args:?}");
         match &**self {
             GenericType::GenericFn {
                 tvars,
