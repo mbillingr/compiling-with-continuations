@@ -226,17 +226,17 @@ macro_rules! make_testsuite_for_type_lang {
         #[test]
         fn a_list_implementation() {
             assert_eq!(
-                $run("(define ((enum (List T) Nil (Cons (Record T (List T))))
-                               (func (T) (nil (_ : T) -> (List T)) (List . Nil))
-                               (func (T) (cons (x : (Record T (List T))) -> (List T)) ((List . Cons) x))
+                $run("(define ((enum (List T) Nil (Cons T (List T)))
+                               (func (T) (nil -> (List T)) (List . Nil))
+                               (func (T) (cons (x : T) (y : (List T)) -> (List T)) ((List . Cons) x y))
                                (func (T) (car (xs : (List T)) -> T)
                                  (match-enum xs
-                                   ((Cons r) => (select 0 r))))
+                                   ((Cons x y) => x)))
                                (func (T) (cdr (xs : (List T)) -> (List T))
                                  (match-enum xs
-                                   ((Cons r) => (select 1 r))))
+                                   ((Cons x y) => y)))
                               )
-                        (show (car (cons (record 42 (nil 0))))))", ""),
+                        (show (car (cdr (cons 42 (cons 42 (nil)))))))", ""),
                 "42"
             );
         }
