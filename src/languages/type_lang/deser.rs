@@ -528,4 +528,10 @@ mod tests {
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }
+
+    #[test]
+    fn define_interface() {
+        let repr = "(define ((interface (Foo T) (func () (bar (x : T) -> T))) 0)";
+        todo!()
+    }
 }
