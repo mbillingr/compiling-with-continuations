@@ -97,12 +97,7 @@ impl Checker {
 
                         let t = match var.as_slice() {
                             [] => enum_t,
-                            [x] => Type::func(vec![x.clone()], enum_t),
-                            _ => {
-                                return Err(format!(
-                                    "Multiple enum variant values are not supported"
-                                ))
-                            }
+                            _ => Type::func(var.clone(), enum_t),
                         };
                         Ok(Expr::annotate(t, Expr::cons(cons.0.clone(), &cons.1)))
                     }

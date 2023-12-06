@@ -1,12 +1,9 @@
 use crate::core::reference::Ref;
 use crate::languages::common_primops::PrimOp;
 use crate::languages::mini_lambda::ast::{Con, ConRep};
-use crate::languages::type_lang::ast::{
-    Def, EnumMatchArm, EnumType, EnumVariantPattern, Expr, Type,
-};
+use crate::languages::type_lang::ast::{Def, EnumMatchArm, EnumType, EnumVariantPattern, Type};
 use crate::transformations::GensymContext;
 use std::collections::HashMap;
-use std::iter::once;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -220,7 +217,6 @@ impl Context {
                             TExp::sequence(seq)
                         },
                     }),
-                    _ => panic!("enum variants with more than one value not supported"),
                 }
             }
             self.convert(&TExp::match_enum(x.clone(), arms))
