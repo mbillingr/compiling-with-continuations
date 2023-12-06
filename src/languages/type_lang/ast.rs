@@ -44,9 +44,6 @@ pub enum Expr {
     /// Definition scope
     Defs(Rc<(Vec<Def>, Self)>),
 
-    /// Implement functions on types
-    Impl(Rc<Impl>),
-
     /// Sequence of statements
     Sequence(Rc<(Self, Self)>),
 
@@ -233,18 +230,6 @@ impl Expr {
             expr = Expr::Sequence(Rc::new((x, expr)));
         }
         expr
-    }
-
-    pub fn impl_block<V: ToString>(
-        tvars: impl IntoIterator<Item = V>,
-        tyx: impl Into<TyExpr>,
-        defs: impl ListBuilder<FnDef>,
-    ) -> Self {
-        Expr::Impl(Rc::new(Impl {
-            tvars: tvars.into_iter().map(|v| v.to_string()).collect(),
-            impl_type: tyx.into(),
-            defs: defs.build(),
-        }))
     }
 }
 

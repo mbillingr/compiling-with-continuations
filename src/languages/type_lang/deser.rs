@@ -72,16 +72,6 @@ impl Expr {
                 .collect::<Result<Vec<_>, _>>()
                 .and_then(|defs| Ok(Expr::defs(defs, Self::from_sexpr(body)?))),
 
-            List(Ref([Symbol(Ref("impl")), List(Ref(tvars)), tyx, defs @ ..])) => defs
-                .iter()
-                .map(FnDef::from_sexpr)
-                .collect::<Result<Vec<_>, _>>()
-                .and_then(|defs| {
-                    parse_symbol_list(tvars).and_then(|tv| {
-                        TyExpr::from_sexpr(tyx).map(|ty| Self::impl_block(tv, ty, defs))
-                    })
-                }),
-
             List(Ref([Symbol(Ref("begin")), seq @ ..])) => seq
                 .iter()
                 .map(Self::from_sexpr)
@@ -158,23 +148,6 @@ impl Expr {
                 S::list(defs.0.iter().map(|d| d.to_sexpr()).collect()),
                 defs.1.to_sexpr(),
             ]),
-
-            Expr::Impl(impls) => S::list(
-                vec![
-                    S::symbol("impl"),
-                    S::list(
-                        impls
-                            .tvars
-                            .iter()
-                            .map(|v| S::Symbol(v.clone().into()))
-                            .collect(),
-                    ),
-                    impls.impl_type.to_sexpr(),
-                ]
-                .into_iter()
-                .chain(impls.defs.iter().map(FnDef::to_sexpr))
-                .collect(),
-            ),
 
             Expr::Sequence(_) => {
                 let mut tail = self;
@@ -552,18 +525,6 @@ mod tests {
     fn sequence() {
         let repr = "(begin 1 2 3)";
         let expr = Expr::sequence(vec![1.into(), 2.into(), 3.into()]);
-        assert_eq!(expr.to_string(), repr);
-        assert_eq!(Expr::from_str(repr), Ok(expr));
-    }
-
-    #[test]
-    fn impl_blocks() {
-        let repr = "(impl (T) (SomeType T) (func (T) (foo (x : T) -> Int) 42))";
-        let expr = Expr::impl_block(
-            ["T"],
-            ("SomeType", "T"),
-            [FnDef::new("foo", ["T"], ["T"], TyExpr::Int, ["x"], 42)],
-        );
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }
