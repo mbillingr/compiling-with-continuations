@@ -249,6 +249,22 @@ impl Def {
                 FnDecl::from_sexpr_with_body(s).map(|(decl, body)| Def::Func(decl, body))
             }
 
+            S::List(Ref(
+                [S::Symbol(Ref("interface")), S::List(Ref([S::Symbol(Ref(iname)), tvars @ ..])), funcs @ ..],
+            )) => {
+                let iname = iname.to_string();
+                let tvars = parse_symbol_list(tvars)?;
+                let funcs = funcs
+                    .iter()
+                    .map(FnDecl::from_sexpr_without_body)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Def::Interface(IntDef {
+                    iname,
+                    tvars,
+                    funcs: Rc::new(funcs),
+                }))
+            }
+
             _ => Err(Error::Syntax(s.clone())),
         }
     }
@@ -283,10 +299,25 @@ impl FnDecl {
             .collect(),
         )
     }
+
     fn from_sexpr_with_body(s: &S) -> Result<(Self, Expr), Error> {
         match s {
+            S::List(Ref([_, _, _, body])) => Ok((Self::from_sexpr(s)?, Expr::from_sexpr(body)?)),
+            _ => Err(Error::Syntax(s.clone())),
+        }
+    }
+
+    fn from_sexpr_without_body(s: &S) -> Result<Self, Error> {
+        match s {
+            S::List(Ref([_, _, _])) => Self::from_sexpr(s),
+            _ => Err(Error::Syntax(s.clone())),
+        }
+    }
+
+    fn from_sexpr(s: &S) -> Result<Self, Error> {
+        match s {
             S::List(Ref(
-                [S::Symbol(Ref("func")), S::List(Ref(tvars)), S::List(Ref([S::Symbol(Ref(fname)), sig @ ..])), body],
+                [S::Symbol(Ref("func")), S::List(Ref(tvars)), S::List(Ref([S::Symbol(Ref(fname)), sig @ ..])), ..],
             )) => {
                 let mut params = vec![];
                 let mut ptypes = vec![];
@@ -305,17 +336,13 @@ impl FnDecl {
                 };
                 let fname = fname.to_string();
                 let tvars = parse_symbol_list(tvars)?;
-                let body = Expr::from_sexpr(body)?;
-                Ok((
-                    FnDecl {
-                        fname,
-                        tvars,
-                        params,
-                        ptypes,
-                        rtype,
-                    },
-                    body,
-                ))
+                Ok(FnDecl {
+                    fname,
+                    tvars,
+                    params,
+                    ptypes,
+                    rtype,
+                })
             }
             _ => Err(Error::Syntax(s.clone())),
         }
@@ -416,10 +443,6 @@ impl<'i> From<sexpr_parser::Error<'i>> for Error<'i> {
 
 fn cons<T>(x: T, xs: impl IntoIterator<Item = T>) -> impl Iterator<Item = T> {
     once(x).chain(xs.into_iter())
-}
-
-fn cons_final<T, C: FromIterator<T>>(x: T, xs: impl IntoIterator<Item = T>) -> C {
-    once(x).chain(xs.into_iter()).collect()
 }
 
 #[cfg(test)]
