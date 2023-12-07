@@ -1,7 +1,7 @@
 use crate::core::reference::Ref;
 use crate::core::sexpr::{S, SF};
 use crate::languages::type_lang::ast::{
-    Def, EnumDef, EnumMatchArm, EnumVariant, EnumVariantPattern, Expr, FnDef, TyExpr,
+    Def, EnumDef, EnumMatchArm, EnumVariant, EnumVariantPattern, Expr, FnDecl, TyExpr,
 };
 use sexpr_parser::Parser;
 use std::iter::once;
@@ -207,7 +207,7 @@ impl Def {
                 }))
                 .collect(),
             ),
-            Def::Func(fndef) => fndef.to_sexpr(),
+            Def::Func(fndecl, body) => fndecl.to_sexpr(Some(body)),
             Def::InferredFunc(_) => unimplemented!(),
         }
     }
@@ -239,39 +239,45 @@ impl Def {
                 }))
             }
 
-            S::List(Ref([S::Symbol(Ref("func")), ..])) => FnDef::from_sexpr(s).map(Def::Func),
+            S::List(Ref([S::Symbol(Ref("func")), ..])) => {
+                FnDecl::from_sexpr_with_body(s).map(|(decl, body)| Def::Func(decl, body))
+            }
 
             _ => Err(Error::Syntax(s.clone())),
         }
     }
 }
 
-impl FnDef {
-    fn to_sexpr(&self) -> S {
-        S::list(vec![
-            S::symbol("func"),
-            S::list(
-                self.tvars
-                    .iter()
-                    .map(|v| S::Symbol(v.clone().into()))
-                    .collect(),
-            ),
-            S::list(
-                once(S::Symbol(self.fname.clone().into()))
-                    .chain(self.params.iter().zip(self.ptypes.iter()).map(|(p, t)| {
-                        S::list(vec![
-                            S::Symbol(p.clone().into()),
-                            S::symbol(":"),
-                            t.to_sexpr(),
-                        ])
-                    }))
-                    .chain(vec![S::symbol("->"), self.rtype.to_sexpr()])
-                    .collect(),
-            ),
-            self.body.to_sexpr(),
-        ])
+impl FnDecl {
+    fn to_sexpr(&self, body: Option<&Expr>) -> S {
+        S::list(
+            vec![
+                S::symbol("func"),
+                S::list(
+                    self.tvars
+                        .iter()
+                        .map(|v| S::Symbol(v.clone().into()))
+                        .collect(),
+                ),
+                S::list(
+                    once(S::Symbol(self.fname.clone().into()))
+                        .chain(self.params.iter().zip(self.ptypes.iter()).map(|(p, t)| {
+                            S::list(vec![
+                                S::Symbol(p.clone().into()),
+                                S::symbol(":"),
+                                t.to_sexpr(),
+                            ])
+                        }))
+                        .chain(vec![S::symbol("->"), self.rtype.to_sexpr()])
+                        .collect(),
+                ),
+            ]
+            .into_iter()
+            .chain(body.into_iter().map(Expr::to_sexpr))
+            .collect(),
+        )
     }
-    fn from_sexpr(s: &S) -> Result<Self, Error> {
+    fn from_sexpr_with_body(s: &S) -> Result<(Self, Expr), Error> {
         match s {
             S::List(Ref(
                 [S::Symbol(Ref("func")), S::List(Ref(tvars)), S::List(Ref([S::Symbol(Ref(fname)), sig @ ..])), body],
@@ -294,14 +300,16 @@ impl FnDef {
                 let fname = fname.to_string();
                 let tvars = parse_symbol_list(tvars)?;
                 let body = Expr::from_sexpr(body)?;
-                Ok(FnDef {
-                    fname,
-                    tvars,
-                    params,
-                    ptypes,
-                    rtype,
+                Ok((
+                    FnDecl {
+                        fname,
+                        tvars,
+                        params,
+                        ptypes,
+                        rtype,
+                    },
                     body,
-                })
+                ))
             }
             _ => Err(Error::Syntax(s.clone())),
         }
@@ -532,6 +540,8 @@ mod tests {
     #[test]
     fn define_interface() {
         let repr = "(define ((interface (Foo T) (func () (bar (x : T) -> T))) 0)";
-        todo!()
+        let expr = Expr::defs(vec![Def::interface("Foo", ["T"], vec![todo!()])], 0);
+        assert_eq!(expr.to_string(), repr);
+        assert_eq!(Expr::from_str(repr), Ok(expr));
     }
 }

@@ -67,7 +67,7 @@ impl Context {
                 for def in defs {
                     match def {
                         Def::Enum(_) => {} //ignore
-                        Def::Func(_) => panic!("uninferred function"),
+                        Def::Func(_, _) => panic!("uninferred function"),
                         Def::InferredFunc(fun) => {
                             fn_defs.push(fun);
                             self.push_fndef(fun.fname.to_string());

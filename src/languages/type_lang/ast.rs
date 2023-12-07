@@ -81,22 +81,21 @@ pub struct Lambda<E> {
 #[derive(Debug, PartialEq)]
 pub enum Def {
     /// Function definition
-    Func(FnDef),
+    Func(FnDecl, Expr),
     /// Enum definition
     Enum(EnumDef),
     /// Function definition
     InferredFunc(TFnDef),
 }
 
-/// Function Definition with explicit types
+/// Function Declaration with explicit types
 #[derive(Debug, PartialEq)]
-pub struct FnDef {
+pub struct FnDecl {
     pub fname: String,
     pub tvars: Vec<String>,
     pub params: Vec<String>,
     pub ptypes: Vec<TyExpr>,
     pub rtype: TyExpr,
-    pub body: Expr,
 }
 
 /// Function Definition with inferred signature
@@ -133,14 +132,6 @@ pub struct EnumMatchArm {
 pub struct EnumVariantPattern {
     pub name: String,
     pub vars: Vec<String>,
-}
-
-/// Implementation block
-#[derive(Debug, PartialEq)]
-pub struct Impl {
-    pub tvars: Vec<String>,
-    pub impl_type: TyExpr,
-    pub defs: Vec<FnDef>,
 }
 
 impl Expr {
@@ -242,7 +233,10 @@ impl Def {
         params: impl ListBuilder<String>,
         body: impl Into<Expr>,
     ) -> Self {
-        Def::Func(FnDef::new(fname, tvars, ptypes, rtype, params, body))
+        Def::Func(
+            FnDecl::new(fname, tvars, ptypes, rtype, params),
+            body.into(),
+        )
     }
 
     pub fn enum_<V: ToString>(
@@ -269,24 +263,30 @@ impl Def {
             body: body.into(),
         })
     }
+
+    pub fn interface(
+        iname: impl ToString,
+        tvars: impl ListBuilder<String>,
+        funcs: impl ListBuilder<()>,
+    ) -> Self {
+        todo!()
+    }
 }
 
-impl FnDef {
+impl FnDecl {
     pub fn new(
         fname: impl ToString,
         tvars: impl ListBuilder<String>,
         ptypes: impl ListBuilder<TyExpr>,
         rtype: impl Into<TyExpr>,
         params: impl ListBuilder<String>,
-        body: impl Into<Expr>,
     ) -> Self {
-        FnDef {
+        FnDecl {
             fname: fname.to_string(),
             tvars: tvars.build(),
             params: params.build(),
             ptypes: ptypes.build(),
             rtype: rtype.into(),
-            body: body.into(),
         }
     }
 }

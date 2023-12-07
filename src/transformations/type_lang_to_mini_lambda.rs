@@ -55,7 +55,7 @@ impl Context {
                 let mut fns = vec![];
                 for def in defs {
                     match def {
-                        Def::Func(_) => panic!("Uninferred func: {def:?}"),
+                        Def::Func(_, _) => panic!("Uninferred func: {def:?}"),
                         Def::Enum(_) => {}
                         Def::InferredFunc(d) => {
                             names.push(d.fname.clone());

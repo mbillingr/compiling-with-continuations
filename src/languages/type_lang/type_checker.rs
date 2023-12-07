@@ -188,14 +188,14 @@ impl Checker {
 
                 for def in defs {
                     match def {
-                        Def::Func(def) => {
+                        Def::Func(decl, _) => {
                             let signature = Type::Generic(Rc::new(GenericType::GenericFn {
-                                tvars: def.tvars.clone(),
-                                ptypes: def.ptypes.clone(),
-                                rtype: def.rtype.clone(),
+                                tvars: decl.tvars.clone(),
+                                ptypes: decl.ptypes.clone(),
+                                rtype: decl.rtype.clone(),
                                 tenv: def_tenv.clone(),
                             }));
-                            def_env.insert(def.fname.clone(), signature);
+                            def_env.insert(decl.fname.clone(), signature);
                         }
                         Def::Enum(def) => {
                             let type_constructor = Type::Generic(Rc::new(
@@ -214,34 +214,37 @@ impl Checker {
 
                 for def in defs {
                     match def {
-                        Def::Func(def) => {
+                        Def::Func(decl, body) => {
                             let mut tenv_ = def_tenv.borrow().clone();
                             tenv_.extend(
-                                def.tvars
+                                decl.tvars
                                     .iter()
                                     .map(|tv| (tv.to_string(), Type::Opaque(tv.to_string()))),
                             );
 
-                            let tx = &def.rtype;
+                            let tx = &decl.rtype;
                             let rt = self.teval(tx, &tenv_);
-                            let pts: Vec<_> =
-                                def.ptypes.iter().map(|tx| self.teval(tx, &tenv_)).collect();
+                            let pts: Vec<_> = decl
+                                .ptypes
+                                .iter()
+                                .map(|tx| self.teval(tx, &tenv_))
+                                .collect();
                             let ft = Type::Fn(Rc::new((pts.clone(), rt.clone())));
 
                             let mut env_ = def_env.clone();
-                            env_.insert(def.fname.clone(), ft);
-                            for (pn, pt) in def.params.iter().zip(pts) {
+                            env_.insert(decl.fname.clone(), ft);
+                            for (pn, pt) in decl.params.iter().zip(pts) {
                                 env_.insert(pn.clone(), pt);
                             }
 
-                            let body_ = self.check_expr(&def.body, &rt, &env_, &tenv_)?;
+                            let body_ = self.check_expr(body, &rt, &env_, &tenv_)?;
 
-                            let signature = def_env[&def.fname].clone();
+                            let signature = def_env[&decl.fname].clone();
 
                             defs_.push(Def::inferred_func(
                                 signature,
-                                &def.fname,
-                                def.params.clone(),
+                                &decl.fname,
+                                decl.params.clone(),
                                 body_,
                             ));
                         }
@@ -329,7 +332,7 @@ impl Checker {
 
                 for d in &defs.0 {
                     match d {
-                        Def::Func(_) => unreachable!(),
+                        Def::Func(_, _) => unreachable!(),
                         Def::Enum(_) => unreachable!(),
                         Def::InferredFunc(fun) => defs_.push(Def::inferred_func(
                             self.resolve_fully(&fun.signature)?,
