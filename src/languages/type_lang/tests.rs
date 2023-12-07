@@ -242,7 +242,21 @@ macro_rules! make_testsuite_for_type_lang {
         }
 
         #[test]
+        fn interface_and_impl() {
+            // should the impl be scoped, or treated as a side effect on the interface or the type?
+            assert_eq!(
+                $run("(define ( (interface (TNum T) (func () (tnum (x : T) -> Int))) )
+                        (impl (TNum Int)
+                              (func () (tnum (x : Int) -> Int) 42)
+
+                            (show (tnum 0))))", ""),
+                "42"
+            );
+        }
+
+        #[test]
         fn escaping_type() {
+            // does it make sense to allow values to escape the scope of their type?
             assert_eq!(
                 $run("(show (define ((enum (Foo) A B)) (Foo . A)))", ""),
                 "A"

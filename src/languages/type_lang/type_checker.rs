@@ -208,7 +208,7 @@ impl Checker {
                                 .insert(def.tname.clone(), type_constructor);
                         }
 
-                        Def::Interface(_) => todo!(),
+                        Def::Interface(_) => {}
 
                         Def::InferredFunc(_) => unreachable!(),
                     }
@@ -255,7 +255,7 @@ impl Checker {
 
                         Def::Enum(_) => {}
 
-                        Def::Interface(_) => todo!(),
+                        Def::Interface(_) => {}
 
                         Def::InferredFunc(_) => unreachable!(),
                     }
