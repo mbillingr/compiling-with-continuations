@@ -84,6 +84,8 @@ pub enum Def {
     Func(FnDecl, Expr),
     /// Enum definition
     Enum(EnumDef),
+    /// Interface definition
+    Interface(IntDef),
     /// Function definition
     InferredFunc(TFnDef),
 }
@@ -105,6 +107,14 @@ pub struct TFnDef {
     pub fname: String,
     pub params: Vec<String>,
     pub body: Expr,
+}
+
+/// Interface definition
+#[derive(Clone, Debug, PartialEq)]
+pub struct IntDef {
+    pub iname: String,
+    pub tvars: Vec<String>,
+    pub funcs: Rc<Vec<FnDecl>>,
 }
 
 /// Enum definition
@@ -267,9 +277,13 @@ impl Def {
     pub fn interface(
         iname: impl ToString,
         tvars: impl ListBuilder<String>,
-        funcs: impl ListBuilder<()>,
+        funcs: impl ListBuilder<FnDecl>,
     ) -> Self {
-        todo!()
+        Def::Interface(IntDef {
+            iname: iname.to_string(),
+            tvars: tvars.build(),
+            funcs: Rc::new(funcs.build()),
+        })
     }
 }
 

@@ -50,6 +50,14 @@ impl S {
         S::List(Ref::array(elems))
     }
 
+    pub fn symbol_list<T: ToString>(elems: impl IntoIterator<Item = T>) -> Self {
+        elems
+            .into_iter()
+            .map(|s| s.to_string().into())
+            .map(S::Symbol)
+            .collect()
+    }
+
     pub fn replace_head(&self, new_head: S) -> Self {
         match self {
             S::List(elems) => {
@@ -82,6 +90,12 @@ impl From<Ref<str>> for S {
 impl From<usize> for S {
     fn from(value: usize) -> Self {
         S::Int(value as i64)
+    }
+}
+
+impl FromIterator<S> for S {
+    fn from_iter<T: IntoIterator<Item = S>>(iter: T) -> Self {
+        S::list(iter.into_iter().collect())
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::core::reference::Ref;
 use crate::core::sexpr::{S, SF};
 use crate::languages::type_lang::ast::{
-    Def, EnumDef, EnumMatchArm, EnumVariant, EnumVariantPattern, Expr, FnDecl, TyExpr,
+    Def, EnumDef, EnumMatchArm, EnumVariant, EnumVariantPattern, Expr, FnDecl, IntDef, TyExpr,
 };
 use sexpr_parser::Parser;
 use std::iter::once;
@@ -182,32 +182,38 @@ impl Def {
                 tname,
                 tvars,
                 variants,
-            }) => S::list(
-                vec![
-                    S::symbol("enum"),
-                    S::list(
-                        vec![S::Symbol(tname.clone().into())]
-                            .into_iter()
-                            .chain(tvars.iter().map(|v| S::Symbol(v.clone().into())))
-                            .collect(),
-                    ),
-                ]
-                .into_iter()
-                .chain(variants.iter().map(|va| {
-                    match va {
+            }) => cons(
+                S::symbol("enum"),
+                cons(
+                    S::symbol_list(cons(tname, tvars)),
+                    variants.iter().map(|va| match va {
                         EnumVariant { name: c, tyxs: xs } if xs.is_empty() => {
                             S::Symbol(c.clone().into())
                         }
-                        EnumVariant { name: c, tyxs: xs } => S::list(
-                            once(S::Symbol(c.clone().into()))
-                                .chain(xs.iter().map(TyExpr::to_sexpr))
-                                .collect(),
-                        ),
-                    }
-                }))
-                .collect(),
-            ),
+                        EnumVariant { name: c, tyxs: xs } => {
+                            cons(S::Symbol(c.clone().into()), xs.iter().map(TyExpr::to_sexpr))
+                                .collect()
+                        }
+                    }),
+                ),
+            )
+            .collect(),
+
             Def::Func(fndecl, body) => fndecl.to_sexpr(Some(body)),
+
+            Def::Interface(IntDef {
+                iname,
+                tvars,
+                funcs,
+            }) => cons(
+                S::symbol("interface"),
+                cons(
+                    S::symbol_list(cons(iname, tvars)),
+                    funcs.iter().map(|decl| decl.to_sexpr(None)),
+                ),
+            )
+            .collect(),
+
             Def::InferredFunc(_) => unimplemented!(),
         }
     }
@@ -408,6 +414,14 @@ impl<'i> From<sexpr_parser::Error<'i>> for Error<'i> {
     }
 }
 
+fn cons<T>(x: T, xs: impl IntoIterator<Item = T>) -> impl Iterator<Item = T> {
+    once(x).chain(xs.into_iter())
+}
+
+fn cons_final<T, C: FromIterator<T>>(x: T, xs: impl IntoIterator<Item = T>) -> C {
+    once(x).chain(xs.into_iter()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,8 +553,15 @@ mod tests {
 
     #[test]
     fn define_interface() {
-        let repr = "(define ((interface (Foo T) (func () (bar (x : T) -> T))) 0)";
-        let expr = Expr::defs(vec![Def::interface("Foo", ["T"], vec![todo!()])], 0);
+        let repr = "(define ((interface (Foo T) (func () (bar (x : T) -> T)))) 0)";
+        let expr = Expr::defs(
+            vec![Def::interface(
+                "Foo",
+                ["T"],
+                vec![FnDecl::new("bar", [] as [&str; 0], ["T"], "T", ["x"])],
+            )],
+            0,
+        );
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }

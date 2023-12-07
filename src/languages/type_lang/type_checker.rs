@@ -197,6 +197,7 @@ impl Checker {
                             }));
                             def_env.insert(decl.fname.clone(), signature);
                         }
+
                         Def::Enum(def) => {
                             let type_constructor = Type::Generic(Rc::new(
                                 GenericType::GenericEnum(def.clone(), def_tenv.clone()),
@@ -206,6 +207,9 @@ impl Checker {
                                 .borrow_mut()
                                 .insert(def.tname.clone(), type_constructor);
                         }
+
+                        Def::Interface(_) => todo!(),
+
                         Def::InferredFunc(_) => unreachable!(),
                     }
                 }
@@ -248,7 +252,11 @@ impl Checker {
                                 body_,
                             ));
                         }
+
                         Def::Enum(_) => {}
+
+                        Def::Interface(_) => todo!(),
+
                         Def::InferredFunc(_) => unreachable!(),
                     }
                 }
@@ -334,6 +342,7 @@ impl Checker {
                     match d {
                         Def::Func(_, _) => unreachable!(),
                         Def::Enum(_) => unreachable!(),
+                        Def::Interface(_) => unreachable!(),
                         Def::InferredFunc(fun) => defs_.push(Def::inferred_func(
                             self.resolve_fully(&fun.signature)?,
                             &fun.fname,
