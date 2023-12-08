@@ -1,6 +1,6 @@
 use crate::languages::type_lang::type_checker::GenericType;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -68,6 +68,11 @@ pub enum TyExpr {
     Fn(Rc<(Vec<TyExpr>, TyExpr)>),
     Record(Rc<Vec<TyExpr>>),
     Construct(Rc<(String, Vec<TyExpr>)>),
+}
+
+/// Syntax for declaring (optionally constrained) type variables
+pub struct TVarExpr {
+    name: String,
 }
 
 /// The AST of an anonymous function
@@ -441,7 +446,7 @@ pub enum Type {
     Int,
     Real,
     String,
-    Opaque(String),
+    Opaque(Rc<OpaqueType>),
     Var(usize),
     Fn(Rc<(Vec<Type>, Type)>),
     Generic(Rc<GenericType>),
@@ -450,6 +455,12 @@ pub enum Type {
 
     /// a generic type applied to type arguments
     GenericInstance(Rc<GenericInstance>),
+}
+
+#[derive(PartialEq)]
+pub struct OpaqueType {
+    name: String,
+    interfaces: HashSet<String>,
 }
 
 #[derive(PartialEq)]
@@ -490,7 +501,7 @@ impl Hash for Type {
             Type::Int => 1.hash(state),
             Type::Real => 2.hash(state),
             Type::String => 3.hash(state),
-            Type::Opaque(name) => name.hash(state),
+            Type::Opaque(rc) => Rc::as_ptr(rc).hash(state),
             Type::Var(v) => v.hash(state),
             Type::Fn(rc) => Rc::as_ptr(rc).hash(state),
             Type::Generic(rc) => Rc::as_ptr(rc).hash(state),
@@ -513,7 +524,17 @@ impl Debug for Type {
             Type::Int => write!(f, "Int"),
             Type::Real => write!(f, "Real"),
             Type::String => write!(f, "String"),
-            Type::Opaque(name) => write!(f, "{name}"),
+            Type::Opaque(o) if o.interfaces.is_empty() => write!(f, "{}", o.name),
+            Type::Opaque(o) => write!(
+                f,
+                "({} : {})",
+                o.name,
+                o.interfaces
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
             Type::Var(nr) => write!(f, "'{nr}"),
             Type::Fn(sig) => write!(f, "({:?} -> {:?})", sig.0, sig.1),
             Type::Generic(g) => write!(f, "{g:?}"),
@@ -550,6 +571,13 @@ impl Type {
         Self::Enum(Rc::new(EnumType {
             template,
             variants: variants.build().into_iter().collect(),
+        }))
+    }
+
+    pub fn unconstrained(name: impl Into<String>) -> Self {
+        Self::Opaque(Rc::new(OpaqueType {
+            name: name.into(),
+            interfaces: Default::default(),
         }))
     }
 }

@@ -240,9 +240,9 @@ impl Checker {
                         Def::Func(decl, body) => {
                             let mut tenv_ = def_tenv.borrow().clone();
                             tenv_.extend(
-                                decl.tvars
-                                    .iter()
-                                    .map(|tv| (tv.to_string(), Type::Opaque(tv.to_string()))),
+                                decl.tvars.iter().map(|tv| {
+                                    (tv.to_string(), Type::unconstrained(tv.to_string()))
+                                }),
                             );
 
                             let tx = &decl.rtype;
@@ -891,7 +891,7 @@ mod tests {
                 })),
                 "id",
                 ["x"],
-                Expr::annotate(Type::Opaque("T".into()), "x"),
+                Expr::annotate(Type::unconstrained("T"), "x"),
             )],
             Expr::annotate(
                 Type::Int,
