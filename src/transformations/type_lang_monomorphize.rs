@@ -68,6 +68,7 @@ impl Context {
                     match def {
                         Def::Enum(_) => {} //ignore
                         Def::Interface(_) => todo!(),
+                        Def::Impl(_) => todo!(),
                         Def::Func(_, _) => panic!("uninferred function"),
                         Def::InferredFunc(fun) => {
                             fn_defs.push(fun);

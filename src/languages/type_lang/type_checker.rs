@@ -208,7 +208,26 @@ impl Checker {
                                 .insert(def.tname.clone(), type_constructor);
                         }
 
-                        Def::Interface(_) => {}
+                        Def::Interface(idef) => {
+                            for decl in &**idef.funcs {
+                                if decl.tvars.iter().any(|tv| idef.tvars.contains(tv)) {
+                                    return Err(format!(
+                                        "interface ype variable redeclared in function"
+                                    ));
+                                }
+
+                                let signature = Type::Generic(Rc::new(GenericType::GenericFn {
+                                    tvars: idef.tvars.iter().chain(&decl.tvars).cloned().collect(),
+                                    ptypes: decl.ptypes.clone(),
+                                    rtype: decl.rtype.clone(),
+                                    tenv: def_tenv.clone(),
+                                }));
+
+                                def_env.insert(decl.fname.clone(), signature);
+                            }
+                        }
+
+                        Def::Impl(_) => {}
 
                         Def::InferredFunc(_) => unreachable!(),
                     }
@@ -256,6 +275,8 @@ impl Checker {
                         Def::Enum(_) => {}
 
                         Def::Interface(_) => {}
+
+                        Def::Impl(_) => {}
 
                         Def::InferredFunc(_) => unreachable!(),
                     }
@@ -343,6 +364,7 @@ impl Checker {
                         Def::Func(_, _) => unreachable!(),
                         Def::Enum(_) => unreachable!(),
                         Def::Interface(_) => unreachable!(),
+                        Def::Impl(_) => unreachable!(),
                         Def::InferredFunc(fun) => defs_.push(Def::inferred_func(
                             self.resolve_fully(&fun.signature)?,
                             &fun.fname,

@@ -86,6 +86,8 @@ pub enum Def {
     Enum(EnumDef),
     /// Interface definition
     Interface(IntDef),
+    /// Interface implementation
+    Impl(ImplDef),
     /// Function definition
     InferredFunc(TFnDef),
 }
@@ -114,6 +116,14 @@ pub struct TFnDef {
 pub struct IntDef {
     pub iname: String,
     pub tvars: Vec<String>,
+    pub funcs: Rc<Vec<FnDecl>>,
+}
+
+/// Interface implementation
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImplDef {
+    pub iname: String,
+    pub targs: Vec<TyExpr>,
     pub funcs: Rc<Vec<FnDecl>>,
 }
 

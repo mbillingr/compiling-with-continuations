@@ -214,6 +214,8 @@ impl Def {
             )
             .collect(),
 
+            Def::Impl(_) => todo!(),
+
             Def::InferredFunc(_) => unimplemented!(),
         }
     }

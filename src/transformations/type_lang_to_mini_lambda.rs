@@ -58,6 +58,7 @@ impl Context {
                         Def::Func(_, _) => panic!("Uninferred func: {def:?}"),
                         Def::Enum(_) => {}
                         Def::Interface(_) => todo!(),
+                        Def::Impl(_) => todo!(),
                         Def::InferredFunc(d) => {
                             names.push(d.fname.clone());
                             fns.push(self.convert_func(&d.params, &d.body));

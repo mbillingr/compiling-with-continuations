@@ -243,13 +243,17 @@ macro_rules! make_testsuite_for_type_lang {
 
         #[test]
         fn interface_and_impl() {
-            // should the impl be scoped, or treated as a side effect on the interface or the type?
+            /*assert_eq!(
+                $run("(define ( (interface (TNum T) (func () (tnum (x : T) -> Int)))
+                                (impl (TNum Int) (func () (tnum (x : Int) -> Int) 42)) )
+                         (show (tnum 0)))", ""),
+                "42"
+            );*/
+
+            // should cause an error because TNum is not implemented for int
             assert_eq!(
                 $run("(define ( (interface (TNum T) (func () (tnum (x : T) -> Int))) )
-                        (impl (TNum Int)
-                              (func () (tnum (x : Int) -> Int) 42)
-
-                            (show (tnum 0))))", ""),
+                         (show (tnum 0)))", ""),
                 "42"
             );
         }
