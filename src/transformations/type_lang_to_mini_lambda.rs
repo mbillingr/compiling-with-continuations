@@ -123,6 +123,8 @@ impl Context {
             }
 
             TExp::Annotation(ann) => match &**ann {
+                (Type::Var(_), _) => panic!("unresolved type variable"),
+
                 (Type::Fn(tf), TExp::Cons(con)) => {
                     let en = tf.1.expect_enum().unwrap();
                     let variant = &con.1;

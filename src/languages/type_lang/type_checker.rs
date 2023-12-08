@@ -23,6 +23,8 @@ impl Checker {
         let mut checker = Checker::new();
         let expr_ = checker.infer(expr, &HashMap::new(), &HashMap::new())?;
 
+        //checker.resolve_all();
+
         checker.resolve_expr(&expr_)
     }
 
@@ -45,8 +47,8 @@ impl Checker {
     fn infer(
         &mut self,
         expr: &Expr,
-        env: &HashMap<String, Type>,
-        tenv: &HashMap<String, Type>,
+        env: &HashMap<String, Type>,  // associates variables with types
+        tenv: &HashMap<String, Type>, // associates names with types, interfaces, etc.
     ) -> Result<Expr, String> {
         //println!("infer {expr:?}");
         match expr {
@@ -460,6 +462,17 @@ impl Checker {
         }
     }
 
+    /// Remove as many type variables as possible from the right hand side of substitutions
+    fn resolve_all(&mut self) -> Result<(), String> {
+        for i in 0..self.substitutions.len() {
+            match self.resolve_fully(&Type::Var(i)) {
+                Ok(_) => todo!(),
+                Err(_) => todo!(),
+            }
+        }
+        Ok(())
+    }
+
     fn resolve<'a>(&'a self, mut t: &'a Type) -> Type {
         while let Type::Var(nr) = t {
             match &self.substitutions[*nr] {
@@ -590,6 +603,11 @@ impl Checker {
             },
         }
     }
+}
+
+struct Env {
+    vars: HashMap<String, Type>,
+    types: HashMap<String, Type>,
 }
 
 pub enum GenericType {
