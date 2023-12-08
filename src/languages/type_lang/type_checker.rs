@@ -9,12 +9,14 @@ use std::rc::Rc;
 
 pub struct Checker {
     substitutions: Vec<Option<Type>>,
+    constraints: Vec<Vec<String>>,
 }
 
 impl Checker {
     fn new() -> Self {
         Checker {
             substitutions: vec![],
+            constraints: vec![],
         }
     }
     pub fn check_program(expr: &Expr) -> Result<Expr, String> {
@@ -469,36 +471,31 @@ impl Checker {
     }
 
     fn resolve_fully<'a>(&'a self, t: &'a Type) -> Result<Type, String> {
-        let mut resolved_lazies = HashMap::new();
-        self.resolve_fully_(t, &mut resolved_lazies)
+        self.resolve_fully_(t)
     }
 
-    fn resolve_fully_<'a>(
-        &'a self,
-        t: &'a Type,
-        resolved_lazies: &mut HashMap<*const RefCell<Option<Type>>, Rc<RefCell<Option<Type>>>>,
-    ) -> Result<Type, String> {
+    fn resolve_fully_<'a>(&'a self, t: &'a Type) -> Result<Type, String> {
         match t {
             Type::Unit | Type::Int | Type::Real | Type::String | Type::Opaque(_) => Ok(t.clone()),
 
             Type::Var(_) => match self.resolve(t) {
                 t_ @ Type::Var(_) => Err(format!("{t:?} resolves to {t_:?}")),
-                t_ => self.resolve_fully_(&t_, resolved_lazies),
+                t_ => self.resolve_fully_(&t_),
             },
 
             Type::Fn(fun) => Ok(Type::func(
                 fun.0
                     .iter()
-                    .map(|f| self.resolve_fully_(f, resolved_lazies))
+                    .map(|f| self.resolve_fully_(f))
                     .collect::<Result<Vec<_>, _>>()?,
-                self.resolve_fully_(&fun.1, resolved_lazies)?,
+                self.resolve_fully_(&fun.1)?,
             )),
 
             Type::Generic(_) => Ok(t.clone()),
 
             Type::Record(fields) => fields
                 .iter()
-                .map(|f| self.resolve_fully_(f, resolved_lazies))
+                .map(|f| self.resolve_fully_(f))
                 .collect::<Result<Vec<_>, _>>()
                 .map(Rc::new)
                 .map(Type::Record),
@@ -508,7 +505,7 @@ impl Checker {
                 .iter()
                 .map(|(v, args)| {
                     args.iter()
-                        .map(|a| self.resolve_fully_(a, resolved_lazies))
+                        .map(|a| self.resolve_fully_(a))
                         .collect::<Result<Vec<_>, _>>()
                         .map(|r| (v.clone(), r))
                 })
@@ -525,13 +522,13 @@ impl Checker {
                 targs: gi
                     .targs
                     .iter()
-                    .map(|t| self.resolve_fully_(t, resolved_lazies))
+                    .map(|t| self.resolve_fully_(t))
                     .collect::<Result<_, _>>()?,
                 actual_t: gi
                     .actual_t
                     .borrow()
                     .as_ref()
-                    .map(|t| self.resolve_fully_(&t, resolved_lazies))
+                    .map(|t| self.resolve_fully_(&t))
                     .transpose()
                     .map(RefCell::new)?,
             }))),
@@ -541,6 +538,7 @@ impl Checker {
     fn fresh(&mut self) -> Type {
         let nr = self.substitutions.len();
         self.substitutions.push(None);
+        self.constraints.push(vec![]);
         Type::Var(nr)
     }
 
@@ -757,6 +755,7 @@ mod tests {
         assert_eq!(
             Checker {
                 substitutions: vec![],
+                constraints: vec![],
             }
             .resolve(&Type::Real),
             Type::Real
@@ -765,6 +764,7 @@ mod tests {
         assert_eq!(
             Checker {
                 substitutions: vec![Some(Type::Int)],
+                constraints: vec![],
             }
             .resolve(&Type::Var(0)),
             Type::Int
@@ -773,6 +773,7 @@ mod tests {
         assert_eq!(
             Checker {
                 substitutions: vec![Some(Type::Var(1)), Some(Type::Int)],
+                constraints: vec![],
             }
             .resolve(&Type::Var(0)),
             Type::Int
