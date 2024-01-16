@@ -2,7 +2,7 @@ use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 #[macro_export]
 macro_rules! list {
-    () => { $crate::lists::List::Nil };
+    () => { $crate::core::lists::List::Nil };
 
     ($x:expr $(, $r:expr)*) => {
         list![$($r),*].cons($x)

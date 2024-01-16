@@ -1,7 +1,7 @@
 use super::substitutions::{Subst, Types};
 use super::types::{Type, Tyvar};
 use super::unification::{matches, mgu};
-use super::{Id, Result};
+use crate::languages::thih_lang::{Id, Result};
 
 /// A predicate imposes constraints on types
 #[derive(Clone, Debug, PartialEq)]

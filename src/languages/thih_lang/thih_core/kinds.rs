@@ -3,6 +3,7 @@ Defines the possible kinds of types.
 Kinds play the same role for types, as types do for values.
 !*/
 
+use crate::languages::thih_lang::Result;
 use std::fmt::Formatter;
 use std::rc::Rc;
 
@@ -38,5 +39,5 @@ impl Kind {
 }
 
 pub trait HasKind {
-    fn kind(&self) -> super::Result<&Kind>;
+    fn kind(&self) -> Result<&Kind>;
 }

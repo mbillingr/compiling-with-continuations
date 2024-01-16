@@ -2,8 +2,8 @@ use super::kinds::{HasKind, Kind};
 use super::qualified::Qual;
 use super::substitutions::{Subst, Types};
 use super::types::{Type, Tyvar};
-use super::Int;
 use crate::core::lists::List;
+use crate::languages::thih_lang::{Id, Int, Result};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Scheme {

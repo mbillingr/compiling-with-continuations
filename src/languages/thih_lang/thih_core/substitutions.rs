@@ -3,9 +3,9 @@ Substitutions associate type variables with types.
 !*/
 
 use super::types::{Type, Tyvar};
-use super::{Id, Result};
 use crate::core::lists::{eq_intersect, eq_union, List};
 use crate::core::persistent::PersistentMap;
+use crate::languages::thih_lang::{Id, Int, Result};
 
 /// A substitution that associates type variables with types.
 #[derive(Debug, PartialEq)]

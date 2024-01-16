@@ -2,7 +2,7 @@
 Types
 !*/
 use super::kinds::{HasKind, Kind};
-use super::{Id, Int, Result};
+use crate::languages::thih_lang::{Id, Int, Result};
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 

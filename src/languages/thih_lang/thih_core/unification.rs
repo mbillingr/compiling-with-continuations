@@ -1,7 +1,7 @@
 use super::kinds::HasKind;
 use super::substitutions::{Subst, Types};
 use super::types::{Type, Tyvar};
-use super::Result;
+use crate::languages::thih_lang::{Id, Int, Result};
 
 pub fn mgu(a: &Type, b: &Type) -> Result<Subst> {
     use Type::*;
