@@ -7,28 +7,63 @@ use std::fmt::Formatter;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr<V: 'static> {
+    /// variable reference
     Var(V),
+
+    /// anonymous function
     Fn(V, Ref<Expr<V>>),
+
+    /// mutually recursive function definitions
     Fix(Ref<[V]>, Ref<[Expr<V>]>, Ref<Expr<V>>),
+
+    /// function application
     App(Ref<Expr<V>>, Ref<Expr<V>>),
+
+    /// integer constant
     Int(i64),
+
+    /// floating point constant
     Real(f64),
+
+    /// string constant
     String(Ref<String>),
+
+    /// generic branching
     Switch(
         Ref<Expr<V>>,
         Ref<[ConRep]>,
         Ref<[(Con, Expr<V>)]>,
         Option<Ref<Expr<V>>>,
     ),
+
+    /// variant type construction
     Con(ConRep, Ref<Expr<V>>),
+
+    /// variant type deconstruction
     DeCon(ConRep, Ref<Expr<V>>),
+
+    /// record construction
     Record(Ref<[Expr<V>]>),
+
+    /// record field access
     Select(isize, Ref<Expr<V>>),
+
+    /// primitive
     Prim(PrimOp),
+
+    /// variable binding
     Let(V, Ref<Expr<V>>, Ref<Expr<V>>),
+
+    /// print an integer
     ShowInt(Ref<Expr<V>>),
+
+    /// print a real number
     ShowReal(Ref<Expr<V>>),
+
+    /// print a string
     ShowStr(Ref<Expr<V>>),
+
+    /// abort with a message
     Panic(Ref<str>),
 }
 

@@ -24,7 +24,7 @@ fn mangle_type(t: &Type) -> String {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct Context {
+pub struct Context {
     functions: PersistentMap<Id, Function>,
     usage: PersistentSet<(Id, Type)>,
 }
@@ -57,7 +57,7 @@ impl Context {
     }
 
     /// A program consists of an expression and some definitions in form of a module
-    fn monomorphize_standalone(expr: &Expr, module: &Module) -> Expr {
+    pub fn monomorphize_standalone(expr: &Expr, module: &Module) -> Expr {
         let ctx = Context::new(&module);
         let (ctx, expr_) = ctx.monomorphize_expr(expr);
 
