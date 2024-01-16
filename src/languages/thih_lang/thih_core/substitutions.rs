@@ -8,11 +8,11 @@ use crate::core::lists::{eq_intersect, eq_union, List};
 use crate::core::persistent::PersistentMap;
 
 /// A substitution that associates type variables with types.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Subst(SubstImpl);
 
 /// Implementation of substitution as association list
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct SubstImpl(PersistentMap<Tyvar, Type>);
 
 impl Subst {

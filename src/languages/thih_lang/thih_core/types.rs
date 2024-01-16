@@ -51,6 +51,16 @@ impl Type {
     pub fn tcon(tcon: impl Into<Id>) -> Self {
         Type::TCon(Tycon(tcon.into(), Kind::Star))
     }
+
+    pub fn tvar(name: impl Into<Id>, kind: impl Into<Kind>) -> Self {
+        Type::TVar(Tyvar::new(name, kind))
+    }
+}
+
+impl Tyvar {
+    pub fn new(name: impl Into<Id>, kind: impl Into<Kind>) -> Self {
+        Tyvar(name.into(), kind.into())
+    }
 }
 
 impl HasKind for Tyvar {
