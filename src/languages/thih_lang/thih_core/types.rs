@@ -7,7 +7,7 @@ use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 /// The type of a value
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub enum Type {
     /// A type variable
     TVar(Tyvar),
@@ -39,7 +39,7 @@ impl Debug for Type {
 pub struct Tyvar(pub Id, pub Kind);
 
 /// A type constant
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Tycon(pub Id, pub Kind);
 
 impl Type {

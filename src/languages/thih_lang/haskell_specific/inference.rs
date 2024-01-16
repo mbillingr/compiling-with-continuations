@@ -14,7 +14,7 @@ use crate::languages::thih_lang::haskell_specific::types::{func, t_char, t_strin
 use std::iter::once;
 use std::rc::Rc;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Int(i64),
     Char(char),
@@ -37,7 +37,7 @@ fn ti_lit(ti: &mut TI, l: &Literal) -> Result<(Vec<Pred>, Type)> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Pat {
     PVar(Id),
     PWildcard,
@@ -113,14 +113,14 @@ fn ti_pats(ti: &mut TI, pats: &[Pat]) -> Result<(Vec<Pred>, Assumptions, Vec<Typ
 
     for (ps_, as__, t) in psats {
         ps.extend(ps_);
-        as_.extend(&as__);
+        as_ = as_.extend(&as__);
         ts.push(t);
     }
 
     Ok((ps, as_, ts))
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Var(Id),
     Lit(Literal),
@@ -150,7 +150,7 @@ impl Types for Expr {
     }
 }
 
-fn ti_expr(
+pub fn ti_expr(
     ti: &mut TI,
     ce: &ClassEnv,
     ass: &Assumptions,
@@ -206,7 +206,7 @@ fn ti_expr(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Alt(pub Vec<Pat>, pub Expr);
 
 impl Types for Alt {
@@ -267,7 +267,7 @@ fn split(ce: &ClassEnv, fs: &[Tyvar], gs: &[Tyvar], ps: &[Pred]) -> Result<(Vec<
 }
 
 /// Explicitly typed binding
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Expl(pub Id, pub Scheme, pub Vec<Alt>);
 
 impl Types for Expl {
@@ -324,7 +324,7 @@ pub fn ti_expl(
 }
 
 /// Implicitly typed binding
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Impl(pub Id, pub Vec<Alt>);
 
 impl Types for Impl {
@@ -400,7 +400,7 @@ fn ti_impls(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BindGroup(pub Vec<Expl>, pub Vec<Vec<Impl>>);
 
 impl Types for BindGroup {
@@ -485,11 +485,8 @@ pub fn ti_program(
 ) -> Result<(Program, Assumptions)> {
     let mut ti = TI::new();
     let (bgs_, ps, as_) = ti_seq(ti_bindgroup, &mut ti, ce, ass, bgs)?;
-    //println!("{:#?}", ps);
-    //println!("{:#?}", as_);
     let s = &ti.get_subst();
     let rs = ce.reduce(&s.apply(&ps))?;
     let s_ = default_subst(ce, vec![], &rs)?;
-    println!("{:?}", ti);
     Ok((Program(bgs_), s_.compose(s).apply(&as_)))
 }

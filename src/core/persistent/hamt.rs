@@ -190,6 +190,7 @@ impl<K: Eq + Hash, T> Hamt<K, T> {
             Trie::Node(child) => child.get(key, k >> NODE_ARRAY_BITS),
         }
     }
+
     #[inline]
     pub fn insert(&self, key: K, val: T, k: u64) -> Self {
         self._insert(Rc::new((key, val)), k, NODE_ARRAY_BITS, true)

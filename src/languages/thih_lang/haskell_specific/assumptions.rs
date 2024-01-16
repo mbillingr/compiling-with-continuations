@@ -6,7 +6,7 @@ use crate::core::persistent::PersistentMap;
 
 /// Represent assumptions about the type of a variables by pairing
 /// a variable name with a type scheme.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Assumptions(PersistentMap<Id, Scheme>);
 
 impl Assumptions {

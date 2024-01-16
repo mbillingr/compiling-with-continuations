@@ -125,6 +125,32 @@ impl<K: Hash + Eq, T> PersistentMap<K, T> {
         self.0.remove_from_root(key, k).map(Self)
     }
 
+    #[inline]
+    pub fn update<Q: ?Sized>(&self, key: &Q, upd: impl Fn(&T) -> T) -> Option<Self>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+        K: Clone,
+    {
+        // this could be implemented more efficiently. See comment in upsert, below.
+        self.get_key_value(key)
+            .map(|(k, v)| self.insert(k.clone(), upd(v)))
+    }
+
+    #[inline]
+    pub fn upsert(&self, key: K, upd: impl Fn(&T) -> T, default: impl FnOnce() -> T) -> Self
+    where
+        K: Clone,
+    {
+        // this could be implemented more efficiently by creating a Hamt.upsert function.
+        // to avoid growth in code complexity, insert, update, and maybe remove could be
+        // written as special cases of this upsert.
+        match self.get(&key) {
+            None => self.insert(key, default()),
+            Some(v) => self.insert(key, upd(v)),
+        }
+    }
+
     /// Merge two maps.
     /// Returns a new map that contains all entries from two maps.
     /// If a key is present in both maps, the value is taken from `other`.

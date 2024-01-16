@@ -46,6 +46,11 @@ pub fn eq_intersect<T: PartialEq>(a: impl IntoIterator<Item = T>, b: Vec<T>) -> 
     a.into_iter().filter(|x| b.contains(x)).collect()
 }
 
+pub fn snoc_vec<T>(mut xs: Vec<T>, x: T) -> Vec<T> {
+    xs.push(x);
+    xs
+}
+
 #[derive(PartialEq)]
 pub enum List<T> {
     Nil,

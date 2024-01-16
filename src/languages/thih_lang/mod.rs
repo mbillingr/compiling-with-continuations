@@ -1,3 +1,4 @@
+mod custom;
 mod haskell_specific;
 mod thih_core;
 
