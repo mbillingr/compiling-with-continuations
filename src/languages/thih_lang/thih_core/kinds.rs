@@ -7,7 +7,7 @@ use std::fmt::Formatter;
 use std::rc::Rc;
 
 /// The kind of a type
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub enum Kind {
     /// The kind of simple (nullary) types such as `Int` or `Int -> Bool`.
     Star,

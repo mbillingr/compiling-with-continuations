@@ -2,10 +2,10 @@
 Substitutions associate type variables with types.
 !*/
 
-use crate::core::lists::{eq_intersect, eq_union, List};
 use super::types::{Type, Tyvar};
 use super::{Id, Result};
-use std::rc::Rc;
+use crate::core::lists::{eq_intersect, eq_union, List};
+use crate::core::persistent::PersistentMap;
 
 /// A substitution that associates type variables with types.
 #[derive(Debug)]
@@ -13,10 +13,7 @@ pub struct Subst(SubstImpl);
 
 /// Implementation of substitution as association list
 #[derive(Clone, Debug)]
-enum SubstImpl {
-    Empty,
-    Assoc(Rc<(Tyvar, Type, Self)>),
-}
+struct SubstImpl(PersistentMap<Tyvar, Type>);
 
 impl Subst {
     pub fn null_subst() -> Self {
@@ -51,16 +48,7 @@ impl Subst {
     }
 
     pub fn keys(&self) -> Vec<Tyvar> {
-        let mut out = vec![];
-
-        let mut cursor = &self.0;
-        while let SubstImpl::Assoc(ass) = cursor {
-            let (u, _, nxt) = &**ass;
-            cursor = nxt;
-            out.push(u.clone());
-        }
-
-        out
+        self.0.keys()
     }
 
     /// @@ operator
@@ -83,28 +71,28 @@ impl Subst {
 
 impl SubstImpl {
     fn empty() -> Self {
-        Self::Empty
+        SubstImpl(PersistentMap::new())
+    }
+
+    pub fn keys(&self) -> Vec<Tyvar> {
+        self.0.keys().cloned().collect()
     }
 
     fn assoc(self, v: Tyvar, t: Type) -> Self {
-        Self::Assoc(Rc::new((v, t, self)))
+        SubstImpl(self.0.insert(v, t))
     }
 
     pub fn lookup(&self, u: &Tyvar) -> Option<&Type> {
-        match self {
-            Self::Empty => None,
-            Self::Assoc(ass) if &ass.0 == u => Some(&ass.1),
-            Self::Assoc(ass) => ass.2.lookup(u),
-        }
+        self.0.get(u)
     }
 
     /// like lookup but ignores kind
     pub fn lookup_by_name(&self, name: &Id) -> Option<&Type> {
-        match self {
-            Self::Empty => None,
-            Self::Assoc(ass) if &ass.0 .0 == name => Some(&ass.1),
-            Self::Assoc(ass) => ass.2.lookup_by_name(name),
-        }
+        self.0
+            .iter()
+            .filter(|(tv, _)| &tv.0 == name)
+            .map(|(_, ty)| ty)
+            .next()
     }
 
     pub fn append(&self, other: Self) -> Self {
@@ -112,16 +100,7 @@ impl SubstImpl {
     }
 
     pub fn append_map(&self, other: Self, f: impl Fn(&Type) -> Type) -> Self {
-        let mut out = other;
-
-        let mut cursor = self;
-        while let SubstImpl::Assoc(ass) = cursor {
-            let (u, t, nxt) = &**ass;
-            cursor = nxt;
-            out = out.assoc(u.clone(), f(t));
-        }
-
-        out
+        SubstImpl(other.0.merge(&self.0.map(&|_, t| f(t))))
     }
 }
 
@@ -211,8 +190,8 @@ impl<T: Types> Types for List<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::kinds::Kind;
+    use super::*;
 
     #[test]
     fn lookup_in_subst() {

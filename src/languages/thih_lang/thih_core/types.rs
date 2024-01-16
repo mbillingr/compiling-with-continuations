@@ -35,7 +35,7 @@ impl Debug for Type {
 }
 
 /// A type variable
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Tyvar(pub Id, pub Kind);
 
 /// A type constant
