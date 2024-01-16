@@ -9,3 +9,6 @@ pub mod sexpr;
 pub mod sets;
 pub mod clicker;
 pub mod either;
+#[macro_use]
+pub mod lists;
+pub mod persistent;

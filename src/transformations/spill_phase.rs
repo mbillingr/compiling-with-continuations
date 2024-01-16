@@ -208,13 +208,13 @@ impl<'a, V: Eq + Hash + Clone + GenSym + Ord + Debug + Display> SpillStep<'a, V>
             0 => self.continue_without_fetch(),
             1 => {
                 let new_spill_record = self.s_after.clone();
-                let v = must_fetch.pop().unwrap();
-                self.make_fetch(&v, new_spill_record)
+                let v = must_fetch.get_any().unwrap();
+                self.make_fetch(v, new_spill_record)
             }
             _ => {
                 let new_spill_record = self.s_before.clone();
-                let v = must_fetch.pop().unwrap();
-                self.make_fetch(&v, new_spill_record)
+                let v = must_fetch.get_any().unwrap();
+                self.make_fetch(v, new_spill_record)
             }
         }
     }
@@ -320,7 +320,7 @@ fn remove_n_next_used_vars_from<V: Eq + Hash + Clone>(
         let expr = exprs_to_visit.pop_front().unwrap();
 
         for var in expr.operand_vars() {
-            vars = vars.remove(var);
+            vars = vars.sub(var);
             if vars.len() <= n_to_remove {
                 return vars;
             }
@@ -376,7 +376,7 @@ impl<V: Eq + Hash + Clone + Ord + std::fmt::Debug> SpillRecord<V> {
                 indices.insert(new_var.clone(), idx);
                 SpillRecord::Spilled {
                     bound_var,
-                    contained_vars: contained_vars.remove(old_var).add(new_var),
+                    contained_vars: contained_vars.sub(old_var).add(new_var),
                     indices,
                 }
             }

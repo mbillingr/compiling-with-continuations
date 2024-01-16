@@ -1,104 +1,50 @@
+pub use crate::core::persistent::PersistentSet as Set;
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::hash::Hash;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Set<T: Eq + Hash>(HashSet<T>);
-
 impl<T: Clone + Eq + Hash> Set<T> {
     pub fn empty() -> Self {
-        Set(HashSet::new())
+        Set::new()
     }
 
     pub fn singleton(elem: T) -> Self {
         Self::empty().add(elem)
     }
 
-    pub fn contains<Q: Hash + Eq>(&self, elem: &Q) -> bool
-    where
-        T: Borrow<Q>,
-    {
-        self.0.contains(elem)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
-        self.0.iter()
-    }
-
-    pub fn pop(self) -> Option<T> {
-        self.0.into_iter().next()
+    pub fn get_any(&self) -> Option<&T> {
+        self.iter().next()
     }
 
     pub fn add(&self, elem: T) -> Self {
-        let mut set = self.0.clone();
-        set.insert(elem);
-        Set(set)
+        self.insert(elem)
     }
 
-    pub fn remove<Q: Hash + Eq>(&self, elem: &Q) -> Self
+    pub fn sub<Q: Hash + Eq>(&self, elem: &Q) -> Self
     where
         T: Borrow<Q>,
+        T: Clone,
     {
-        let mut set = self.0.clone();
-        set.remove(elem);
-        Set(set)
-    }
-
-    pub fn union(&self, other: &Self) -> Self {
-        Set(HashSet::union(&self.0, &other.0).cloned().collect())
-    }
-
-    pub fn intersection(&self, other: &Self) -> Self {
-        Set(HashSet::intersection(&self.0, &other.0).cloned().collect())
-    }
-
-    pub fn difference(&self, other: &Self) -> Self {
-        Set(HashSet::difference(&self.0, &other.0).cloned().collect())
+        self.remove(elem).unwrap_or_else(|| self.clone())
     }
 }
 
 impl<V: Eq + Hash> From<HashSet<V>> for Set<V> {
     fn from(elems: HashSet<V>) -> Self {
-        Set(elems)
+        Self::from_iter(elems.into_iter())
     }
 }
 
 impl<V: Eq + Hash> From<Vec<V>> for Set<V> {
     fn from(elems: Vec<V>) -> Self {
-        Set(elems.into_iter().collect())
+        Self::from_iter(elems.into_iter())
     }
-}
-
-impl<V: Eq + Hash> FromIterator<V> for Set<V> {
-    fn from_iter<T: IntoIterator<Item = V>>(iter: T) -> Self {
-        Set(FromIterator::<V>::from_iter(iter))
-    }
-}
-
-#[macro_export]
-macro_rules! set {
-    () => {{
-        $crate::core::sets::Set::empty()
-    }};
-
-    ($($x:expr),* $(,)?) => {{
-        let mut set = std::collections::HashSet::new();
-        $(set.insert($x);)*
-        $crate::core::sets::Set::from(set)
-    }};
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::set;
 
     #[test]
     fn sets() {

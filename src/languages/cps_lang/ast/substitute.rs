@@ -126,7 +126,7 @@ mod tests {
     use super::*;
     use crate::languages::common_primops::PrimOp;
     use crate::{
-        cps_expr, cps_expr_list, cps_field, cps_field_list, cps_ident_list, cps_value, list,
+        cps_expr, cps_expr_list, cps_field, cps_field_list, cps_ident_list, cps_value, array,
     };
 
     #[test]
@@ -219,35 +219,35 @@ mod tests {
     fn substitute_primop() {
         let x: Expr<&str> = Expr::PrimOp(
             PrimOp::IAdd,
-            list![Value::Var("x"), Value::Var("x")],
-            list![],
-            list![Expr::App(Value::Var("x"), list![]).into()],
+            array![Value::Var("x"), Value::Var("x")],
+            array![],
+            array![Expr::App(Value::Var("x"), array![]).into()],
         );
         let y = x.substitute_var(&"x", &Value::Var("a"));
         assert_eq!(
             y,
             Expr::PrimOp(
                 PrimOp::IAdd,
-                list![Value::Var("a"), Value::Var("a")],
-                list![],
-                list![Expr::App(Value::Var("a"), list![]).into()]
+                array![Value::Var("a"), Value::Var("a")],
+                array![],
+                array![Expr::App(Value::Var("a"), array![]).into()]
             )
         );
 
         let x: Expr<&str> = Expr::PrimOp(
             PrimOp::IAdd,
-            list![],
-            list!["x"],
-            list![Expr::App(Value::Var("x"), list![]).into()],
+            array![],
+            array!["x"],
+            array![Expr::App(Value::Var("x"), array![]).into()],
         );
         let y = x.substitute_var(&"x", &Value::Var("a"));
         assert_eq!(
             y,
             Expr::PrimOp(
                 PrimOp::IAdd,
-                list![],
-                list!["x"],
-                list![Expr::App(Value::Var("x"), list![]).into()]
+                array![],
+                array!["x"],
+                array![Expr::App(Value::Var("x"), array![]).into()]
             )
         );
     }

@@ -5,7 +5,7 @@ use crate::languages::cps_lang::ast as cps;
 use crate::languages::cps_lang::ast::AccessPath;
 use crate::languages::mini_lambda::ast;
 use crate::languages::mini_lambda::ast::{Con, ConRep, Expr};
-use crate::list;
+use crate::array;
 use crate::transformations::GensymContext;
 
 type LExpr = ast::Expr<Ref<str>>;
@@ -36,13 +36,13 @@ impl Context {
                 let f = self.gs.gensym("lambda");
                 let k = self.gs.gensym("k");
                 CExpr::Fix(
-                    list![(
+                    array![(
                         f,
-                        list![k, *var],
+                        array![k, *var],
                         Ref::new(
                             self.convert(
                                 body,
-                                Box::new(move |z| CExpr::App(CVal::Var(k), list![z]))
+                                Box::new(move |z| CExpr::App(CVal::Var(k), array![z]))
                             )
                         )
                     )],
@@ -70,17 +70,17 @@ impl Context {
                 let k = self.gs.gensym("k");
                 let x = self.gs.gensym("x");
                 CExpr::Fix(
-                    list![(k, list![x], Ref::new(c(CVal::Var(x))))],
+                    array![(k, array![x], Ref::new(c(CVal::Var(x))))],
                     Ref::new(self.convert(
                         arg,
-                        Box::new(move |f| CExpr::App(f, list![CVal::Var(k), CVal::Var(k)])),
+                        Box::new(move |f| CExpr::App(f, array![CVal::Var(k), CVal::Var(k)])),
                     )),
                 )
             }
 
             LExpr::App(Ref(LExpr::Prim(PrimOp::Throw)), Ref(LExpr::Record(args))) => self.convert(
                 &args[0],
-                Box::new(|k| self.convert(&args[1], Box::new(|v| CExpr::App(k, list![v])))),
+                Box::new(|k| self.convert(&args[1], Box::new(|v| CExpr::App(k, array![v])))),
             ),
 
             LExpr::App(Ref(LExpr::Prim(op)), arg) if op.n_args() == 1 && op.is_branching() => {
@@ -90,14 +90,14 @@ impl Context {
                     arg,
                     Box::new(move |v| {
                         CExpr::Fix(
-                            list![(k, list![x], Ref::new(c(CVal::Var(x))))],
+                            array![(k, array![x], Ref::new(c(CVal::Var(x))))],
                             Ref::new(CExpr::PrimOp(
                                 *op,
-                                list![v],
-                                list![],
-                                list![
-                                    Ref::new(CExpr::App(CVal::Var(k), list![CVal::Int(0)],)),
-                                    Ref::new(CExpr::App(CVal::Var(k), list![CVal::Int(1)],)),
+                                array![v],
+                                array![],
+                                array![
+                                    Ref::new(CExpr::App(CVal::Var(k), array![CVal::Int(0)],)),
+                                    Ref::new(CExpr::App(CVal::Var(k), array![CVal::Int(1)],)),
                                 ],
                             )),
                         )
@@ -109,7 +109,7 @@ impl Context {
                 self.convert(
                     arg,
                     Box::new(move |v| {
-                        CExpr::PrimOp(*op, list![v], list![], list![Ref::new(c(CVal::Int(0)))])
+                        CExpr::PrimOp(*op, array![v], array![], array![Ref::new(c(CVal::Int(0)))])
                     }),
                 )
             }
@@ -119,7 +119,7 @@ impl Context {
                 self.convert(
                     arg,
                     Box::new(move |v| {
-                        CExpr::PrimOp(*op, list![v], list![w], list![Ref::new(c(CVal::Var(w)))])
+                        CExpr::PrimOp(*op, array![v], array![w], array![Ref::new(c(CVal::Var(w)))])
                     }),
                 )
             }
@@ -131,14 +131,14 @@ impl Context {
                 let x = self.gs.gensym("x");
                 self.convert_sequence(*arg, move |a| {
                     CExpr::Fix(
-                        list![(k, list![x], Ref::new(c(CVal::Var(x))))],
+                        array![(k, array![x], Ref::new(c(CVal::Var(x))))],
                         Ref::new(CExpr::PrimOp(
                             *op,
                             a,
-                            list![],
-                            list![
-                                Ref::new(CExpr::App(CVal::Var(k), list![CVal::Int(0)])),
-                                Ref::new(CExpr::App(CVal::Var(k), list![CVal::Int(1)])),
+                            array![],
+                            array![
+                                Ref::new(CExpr::App(CVal::Var(k), array![CVal::Int(0)])),
+                                Ref::new(CExpr::App(CVal::Var(k), array![CVal::Int(1)])),
                             ],
                         )),
                     )
@@ -149,14 +149,14 @@ impl Context {
                 if op.n_args() > 1 && op.n_results() == 0 =>
             {
                 self.convert_sequence(*arg, move |a| {
-                    CExpr::PrimOp(*op, a, list![], list![Ref::new(c(CVal::Int(0)))])
+                    CExpr::PrimOp(*op, a, array![], array![Ref::new(c(CVal::Int(0)))])
                 })
             }
 
             LExpr::App(Ref(LExpr::Prim(op)), Ref(LExpr::Record(arg))) if op.n_args() > 1 => {
                 let w = self.gs.gensym("w");
                 self.convert_sequence(*arg, move |a| {
-                    CExpr::PrimOp(*op, a, list![w], list![Ref::new(c(CVal::Var(w)))])
+                    CExpr::PrimOp(*op, a, array![w], array![Ref::new(c(CVal::Var(w)))])
                 })
             }
 
@@ -165,13 +165,13 @@ impl Context {
                 let r = self.gs.gensym("ret");
                 let x = self.gs.gensym("val");
                 CExpr::Fix(
-                    list![(r, list![x], Ref::new(c(CVal::Var(x))))],
+                    array![(r, array![x], Ref::new(c(CVal::Var(x))))],
                     Ref::new(self.convert(
                         f,
                         Box::new(move |fv| {
                             self.convert(
                                 &e,
-                                Box::new(move |ev| CExpr::App(fv, list![CVal::Var(r), ev])),
+                                Box::new(move |ev| CExpr::App(fv, array![CVal::Var(r), ev])),
                             )
                         }),
                     )),
@@ -210,7 +210,7 @@ impl Context {
                 self.convert(&LExpr::Int(make_tag(*ctag) as i64), c)
             }
             LExpr::Con(ConRep::Tagged(tag), x) => self.convert(
-                &LExpr::Record(list![(**x).clone(), LExpr::Int(*tag as i64)]),
+                &LExpr::Record(array![(**x).clone(), LExpr::Int(*tag as i64)]),
                 c,
             ),
             LExpr::Con(ConRep::Transparent, x) => self.convert(&*x, c),
@@ -245,16 +245,16 @@ impl Context {
                 let z = self.gs.gensym("z");
                 let default_cont = self.convert(
                     &default,
-                    Box::new(move |z| CExpr::App(CVal::Var(k), list![z])),
+                    Box::new(move |z| CExpr::App(CVal::Var(k), array![z])),
                 );
 
                 let actual_switch = if matches_constant && matches_tagged {
                     let default_cont = Ref::new(default_cont);
                     CExpr::PrimOp(
                         PrimOp::CorP,
-                        list![CVal::Var(z)],
-                        list![],
-                        list![
+                        array![CVal::Var(z)],
+                        array![],
+                        array![
                             self.convert_switch_const_table(conreps, arms, k, z, default_cont)
                                 .into(),
                             self.convert_switch_tag_table(conreps, arms, k, z, default_cont)
@@ -269,12 +269,12 @@ impl Context {
                     self.convert_switch_linear(CVal::Var(z), arms, default_cont, CVal::Var(k))
                 };
                 CExpr::Fix(
-                    list![
-                        (k, list![x], Ref::new(c(CVal::Var(x)))),
-                        (f, list![z], Ref::new(actual_switch))
+                    array![
+                        (k, array![x], Ref::new(c(CVal::Var(x)))),
+                        (f, array![z], Ref::new(actual_switch))
                     ],
                     Ref::new(
-                        self.convert(cond, Box::new(move |z| CExpr::App(CVal::Var(f), list![z]))),
+                        self.convert(cond, Box::new(move |z| CExpr::App(CVal::Var(f), array![z]))),
                     ),
                 )
             }
@@ -299,9 +299,9 @@ impl Context {
                     Box::new(move |v| {
                         CExpr::PrimOp(
                             PrimOp::ShowInt,
-                            list![v],
-                            list![w],
-                            list![Ref::new(c(CVal::Var(w)))],
+                            array![v],
+                            array![w],
+                            array![Ref::new(c(CVal::Var(w)))],
                         )
                     }),
                 )
@@ -314,9 +314,9 @@ impl Context {
                     Box::new(move |v| {
                         CExpr::PrimOp(
                             PrimOp::ShowReal,
-                            list![v],
-                            list![w],
-                            list![Ref::new(c(CVal::Var(w)))],
+                            array![v],
+                            array![w],
+                            array![Ref::new(c(CVal::Var(w)))],
                         )
                     }),
                 )
@@ -329,9 +329,9 @@ impl Context {
                     Box::new(move |v| {
                         CExpr::PrimOp(
                             PrimOp::ShowStr,
-                            list![v],
-                            list![w],
-                            list![Ref::new(c(CVal::Var(w)))],
+                            array![v],
+                            array![w],
+                            array![Ref::new(c(CVal::Var(w)))],
                         )
                     }),
                 )
@@ -376,9 +376,9 @@ impl Context {
         let t = self.gs.gensym("t");
         CExpr::PrimOp(
             PrimOp::Untag,
-            list![CVal::Var(z)],
-            list![t],
-            list![Ref::new(self.convert_switch_table(
+            array![CVal::Var(z)],
+            array![t],
+            array![Ref::new(self.convert_switch_table(
                 CVal::Var(t),
                 Self::max_const_idx(conreps),
                 arms,
@@ -460,7 +460,7 @@ impl Context {
                 _ => continue,
             };
             let rc = return_cont.clone();
-            branches[idx] = Ref::new(self.convert(br, Box::new(move |z| CExpr::App(rc, list![z]))));
+            branches[idx] = Ref::new(self.convert(br, Box::new(move |z| CExpr::App(rc, array![z]))));
         }
         CExpr::Switch(condval, Ref::array(branches))
     }
@@ -484,14 +484,14 @@ impl Context {
             return_cont.clone(),
         );
 
-        let then_cont = self.convert(branch, Box::new(move |z| CExpr::App(return_cont, list![z])));
+        let then_cont = self.convert(branch, Box::new(move |z| CExpr::App(return_cont, array![z])));
         match test {
             Con::Data(ConRep::Transparent) => then_cont,
             Con::Data(ConRep::Constant(ctag)) => CExpr::PrimOp(
                 PrimOp::ISame,
-                list![condval, CVal::Int(make_tag(*ctag) as i64)],
-                list![],
-                list![Ref::new(else_cont), Ref::new(then_cont)],
+                array![condval, CVal::Int(make_tag(*ctag) as i64)],
+                array![],
+                array![Ref::new(else_cont), Ref::new(then_cont)],
             ),
             Con::Data(ConRep::Tagged(tag)) => {
                 let t = self.gs.gensym("t");
@@ -501,29 +501,29 @@ impl Context {
                     t,
                     Ref::new(CExpr::PrimOp(
                         PrimOp::ISame,
-                        list![CVal::Var(t), CVal::Int(*tag as i64)],
-                        list![],
-                        list![Ref::new(else_cont), Ref::new(then_cont)],
+                        array![CVal::Var(t), CVal::Int(*tag as i64)],
+                        array![],
+                        array![Ref::new(else_cont), Ref::new(then_cont)],
                     )),
                 )
             }
             Con::Int(i) => CExpr::PrimOp(
                 PrimOp::ISame,
-                list![condval, CVal::Int(*i)],
-                list![],
-                list![Ref::new(else_cont), Ref::new(then_cont)],
+                array![condval, CVal::Int(*i)],
+                array![],
+                array![Ref::new(else_cont), Ref::new(then_cont)],
             ),
             Con::Real(f) => CExpr::PrimOp(
                 PrimOp::FSame,
-                list![condval, CVal::Real(*f)],
-                list![],
-                list![Ref::new(else_cont), Ref::new(then_cont)],
+                array![condval, CVal::Real(*f)],
+                array![],
+                array![Ref::new(else_cont), Ref::new(then_cont)],
             ),
             Con::String(s) => CExpr::PrimOp(
                 PrimOp::SSame,
-                list![condval, CVal::String(s.to_string().into())],
-                list![],
-                list![Ref::new(else_cont), Ref::new(then_cont)],
+                array![condval, CVal::String(s.to_string().into())],
+                array![],
+                array![Ref::new(else_cont), Ref::new(then_cont)],
             ),
         }
     }
@@ -569,11 +569,11 @@ impl Context {
                         let w = self.gs.gensym("w");
                         (
                             *h1,
-                            list![w, *v],
+                            array![w, *v],
                             Ref::new(
                                 self.convert(
                                     b,
-                                    Box::new(move |z| CExpr::App(CVal::Var(w), list![z])),
+                                    Box::new(move |z| CExpr::App(CVal::Var(w), array![z])),
                                 ),
                             ),
                         )

@@ -284,13 +284,13 @@ impl<'i> From<sexpr_parser::Error<'i>> for Error<'i> {
 mod tests {
     use super::*;
     use crate::languages::common_primops::PrimOp;
-    use crate::list;
+    use crate::array;
 
     #[test]
     fn record() {
         let repr = "(record ((11 (ref 1)) (22 (ref 2))) r (halt r))";
         let expr: Expr<Ref<str>> = Expr::Record(
-            list![(Value::Int(11), AP::Ref(1)), (Value::Int(22), AP::Ref(2))],
+            array![(Value::Int(11), AP::Ref(1)), (Value::Int(22), AP::Ref(2))],
             "r".into(),
             Expr::Halt(Value::Var("r".into())).into(),
         );
@@ -299,7 +299,7 @@ mod tests {
 
         let repr = "(record (11 22) r (halt r))";
         let expr: Expr<Ref<str>> = Expr::Record(
-            list![(Value::Int(11), AP::Ref(0)), (Value::Int(22), AP::Ref(0))],
+            array![(Value::Int(11), AP::Ref(0)), (Value::Int(22), AP::Ref(0))],
             "r".into(),
             Expr::Halt(Value::Var("r".into())).into(),
         );
@@ -338,7 +338,7 @@ mod tests {
         let repr = "(f x 1)";
         let expr: Expr<Ref<str>> = Expr::App(
             Value::Var("f".into()),
-            list![Value::Var("x".into()), Value::Int(1)],
+            array![Value::Var("x".into()), Value::Int(1)],
         );
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
@@ -348,9 +348,9 @@ mod tests {
     fn fix() {
         let repr = "(fix ((foo (x y) (halt 1))) (halt 0))";
         let expr: Expr<Ref<str>> = Expr::Fix(
-            list![(
+            array![(
                 "foo".into(),
-                list!["x".into(), "y".into()],
+                array!["x".into(), "y".into()],
                 Expr::Halt(Value::Int(1)).into()
             )],
             Expr::Halt(Value::Int(0)).into(),
@@ -364,7 +364,7 @@ mod tests {
         let repr = "(switch 0 (halt 1) (halt 0))";
         let expr: Expr<Ref<str>> = Expr::Switch(
             Value::Int(0),
-            list![
+            array![
                 Expr::Halt(Value::Int(1)).into(),
                 Expr::Halt(Value::Int(0)).into()
             ],
@@ -378,9 +378,9 @@ mod tests {
         let repr = "(primop + (1 2) (res) ((halt res)))";
         let expr: Expr<Ref<str>> = Expr::PrimOp(
             PrimOp::IAdd,
-            list![Value::Int(1), Value::Int(2)],
-            list!["res".into()],
-            list![Ref::new(Expr::Halt(Value::Var("res".into())))],
+            array![Value::Int(1), Value::Int(2)],
+            array!["res".into()],
+            array![Ref::new(Expr::Halt(Value::Var("res".into())))],
         );
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));

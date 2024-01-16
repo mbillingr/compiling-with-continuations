@@ -462,7 +462,7 @@ impl From<Ref<str>> for Expr<Ref<str>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::list;
+    use crate::array;
 
     #[test]
     fn serialize_int() {
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn serialize_switch() {
         let repr = "(switch 42 () ())";
-        let expr = Expr::Switch(Expr::Int(42).into(), list![], list![], None);
+        let expr = Expr::Switch(Expr::Int(42).into(), array![], array![], None);
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }
@@ -541,8 +541,8 @@ mod tests {
         let repr = "(switch 42 () () 123)";
         let expr = Expr::Switch(
             Expr::Int(42).into(),
-            list![],
-            list![],
+            array![],
+            array![],
             Some(Expr::Int(123).into()),
         );
         assert_eq!(expr.to_string(), repr);
@@ -554,8 +554,8 @@ mod tests {
         let repr = "(switch 42 ((const 1) (tag 2) transparent) ())";
         let expr = Expr::Switch(
             Expr::Int(42).into(),
-            list![ConRep::Constant(1), ConRep::Tagged(2), ConRep::Transparent],
-            list![],
+            array![ConRep::Constant(1), ConRep::Tagged(2), ConRep::Transparent],
+            array![],
             None,
         );
         assert_eq!(expr.to_string(), repr);
@@ -567,8 +567,8 @@ mod tests {
         let repr = "(switch 42 () ((transparent 0) ((tag 4) 0) (7 1)))";
         let expr = Expr::Switch(
             Expr::Int(42).into(),
-            list![],
-            list![
+            array![],
+            array![
                 (Con::Data(ConRep::Transparent), Expr::Int(0).into()),
                 (Con::Data(ConRep::Tagged(4)), Expr::Int(0).into()),
                 (Con::Int(7), Expr::Int(1).into())
@@ -598,7 +598,7 @@ mod tests {
     #[test]
     fn serialize_record() {
         let repr = "(record 1 2)";
-        let expr = Expr::Record(list![Expr::Int(1), Expr::Int(2)]);
+        let expr = Expr::Record(array![Expr::Int(1), Expr::Int(2)]);
         assert_eq!(expr.to_string(), repr);
         assert_eq!(Expr::from_str(repr), Ok(expr));
     }

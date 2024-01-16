@@ -1,6 +1,6 @@
 use crate::core::reference::Ref;
 use crate::languages::cps_lang::ast::{Expr, Value};
-use crate::list;
+use crate::array;
 use crate::transformations::{GenSym, GensymContext};
 use std::fmt::Display;
 use std::ops::Deref;
@@ -74,12 +74,12 @@ impl Context {
                             f_args.push(Value::Var(b_.clone()));
 
                             let fbody_out = Expr::Fix(
-                                list![(
+                                array![(
                                     g_.clone(),
-                                    list![k_, b_],
+                                    array![k_, b_],
                                     Expr::App(Value::Var(f_.clone()), Ref::array(f_args)).into()
                                 )],
-                                Expr::App(Value::Var(c_), list![Value::Var(g_)]).into(),
+                                Expr::App(Value::Var(c_), array![Value::Var(g_)]).into(),
                             );
 
                             defs_out.push((f.clone(), Ref::array(fparams), fbody_out.into()));

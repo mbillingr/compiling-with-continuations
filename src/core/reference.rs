@@ -55,7 +55,7 @@ impl<T: Clone> Ref<[T]> {
 }
 
 #[macro_export]
-macro_rules! list {
+macro_rules! array {
     ($($item:expr),*$(,)?) => { $crate::core::reference::Ref::array(vec![$($item),*]) };
 }
 
